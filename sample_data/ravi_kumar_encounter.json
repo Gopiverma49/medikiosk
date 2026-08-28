@@ -1,0 +1,18 @@
+{
+  "chief_complaint": "chest pain",
+  "duration": {"value": 2, "unit": "days"},
+  "location": "left chest",
+  "character": "pressure",
+  "severity": 7,
+  "radiation": "left arm",
+  "associated_symptoms": ["breathlessness", "sweating"],
+  "past_medical_history": ["diabetes", "hypertension"],
+  "medications": [
+    {"name": "Metformin", "dose": "500 mg", "frequency": "twice_daily"},
+    {"name": "Amlodipine", "dose": "5 mg", "frequency": "once_daily"}
+  ],
+  "allergies": ["Penicillin"],
+  "previous_investigations": [
+    {"test": "HbA1c", "value": 8.2, "unit": "%"}
+  ]
+}

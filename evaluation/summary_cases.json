@@ -1,0 +1,3 @@
+[
+  {"input": "Ravi Kumar chest pain encounter", "expected": {"sections": ["chief_complaint", "history", "medications", "allergies", "investigations"]}}
+]

@@ -1,0 +1,4 @@
+[
+  {"input": "Allergies: Penicillin (rash)", "expected": {"name": "Penicillin"}},
+  {"input": "No known drug allergies", "expected": {"name": null}}
+]

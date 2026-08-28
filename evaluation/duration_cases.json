@@ -1,0 +1,5 @@
+[
+  {"input": "chest pain for two days", "expected": {"value": 2, "unit": "days"}},
+  {"input": "pain since yesterday", "expected": {"value": 1, "unit": "days"}},
+  {"input": "pain for one week", "expected": {"value": 7, "unit": "days"}}
+]

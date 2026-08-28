@@ -1,0 +1,35 @@
+import logging
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
+
+from .config import get_settings
+
+settings = get_settings()
+
+db_url = settings.DATABASE_URL
+connect_args = {}
+engine_kwargs = {}
+
+if db_url.startswith("sqlite"):
+    connect_args = {"check_same_thread": False}
+else:
+    engine_kwargs["pool_pre_ping"] = True
+
+try:
+    engine = create_engine(db_url, connect_args=connect_args, **engine_kwargs)
+except Exception as e:
+    logging.warning(f"Could not initialize database with {db_url}: {e}. Falling back to SQLite.")
+    engine = create_engine("sqlite:///./medikiosk.db", connect_args={"check_same_thread": False})
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+Base = declarative_base()
+
+
+def get_db():
+    """FastAPI dependency: yields a scoped DB session per request."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

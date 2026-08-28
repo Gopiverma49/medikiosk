@@ -1,0 +1,5 @@
+[
+  {"input": {"reported": "no_medication", "document": "Metformin 500mg"}, "expected": {"type": "MEDICATION_CONFLICT"}},
+  {"input": {"reported": "no_allergy", "document": "Penicillin"}, "expected": {"type": "ALLERGY_CONFLICT"}},
+  {"input": {"reported": "onset_today", "later": "onset_3w"}, "expected": {"type": "TEMPORAL_CONFLICT"}}
+]

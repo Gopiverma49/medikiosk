@@ -1,0 +1,5 @@
+[
+  {"input": "Tab. Metformin 500mg BD", "expected": {"name": "Metformin", "dose": "500 mg"}},
+  {"input": "Tab. Amlodipine 5mg OD", "expected": {"name": "Amlodipine", "dose": "5 mg"}},
+  {"input": "Cap. Omeprazole 20mg OD", "expected": {"name": "Omeprazole", "dose": "20 mg"}}
+]

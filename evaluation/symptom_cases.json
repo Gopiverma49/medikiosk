@@ -1,0 +1,8 @@
+[
+  {"input": "I have had chest pain for two days.", "language": "en", "expected": {"concept": "chest_pain"}},
+  {"input": "ನನಗೆ ಎರಡು ದಿನಗಳಿಂದ ಎದೆ ನೋವು ಇದೆ.", "language": "kn", "expected": {"concept": "chest_pain"}},
+  {"input": "मुझे दो दिनों से सीने में दर्द है।", "language": "hi", "expected": {"concept": "chest_pain"}},
+  {"input": "I feel breathless when I climb stairs.", "language": "en", "expected": {"concept": "dyspnea"}},
+  {"input": "I have been sweating a lot today.", "language": "en", "expected": {"concept": "sweating"}},
+  {"input": "My legs feel swollen.", "language": "en", "expected": {"concept": "edema"}}
+]

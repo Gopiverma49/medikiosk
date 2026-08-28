@@ -1,0 +1,11 @@
+[
+  {
+    "name": "Ravi Kumar",
+    "age": 52,
+    "gender": "Male",
+    "preferred_language": "kn",
+    "department": "General Medicine",
+    "is_synthetic": true,
+    "note": "Primary demo patient. All data below is synthetic and created for this prototype only."
+  }
+]

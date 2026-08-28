@@ -1,0 +1,4 @@
+[
+  {"input": "HbA1c: 8.2 %", "expected": {"test": "HbA1c", "value": 8.2}},
+  {"input": "Fasting Glucose: 162 mg/dL", "expected": {"test": "Fasting Glucose", "value": 162}}
+]

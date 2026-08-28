@@ -1,0 +1,5 @@
+[
+  {"input": {"chest_pain": true, "dyspnea": true, "radiation_to_arm": true, "sweating": true}, "expected": {"fires": true}},
+  {"input": {"chest_pain": true, "dyspnea": false, "radiation_to_arm": false, "sweating": false}, "expected": {"fires": false}},
+  {"input": {"chest_pain": false, "dyspnea": true, "radiation_to_arm": false, "sweating": false}, "expected": {"fires": false}}
+]
