@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -12,14 +13,16 @@ from ..services.audit import log_event
 router = APIRouter(prefix="/api", tags=["patients"])
 
 
+def _get_patient(db: Session, identifier: str) -> Optional[Patient]:
+    """Helper to find patient by UUID id or 10-digit patient_id."""
+    clean_id = identifier.strip()
+    return db.query(Patient).filter((Patient.id == clean_id) | (Patient.patient_id == clean_id)).first()
+
+
 @router.post("/patients/lookup", response_model=dict)
 def lookup_patient(payload: PatientLookupIn, db: Session = Depends(get_db)):
     """Search for a patient by 10-digit Patient ID."""
-    pid = payload.patient_id.strip()
-    patient = db.query(Patient).filter(
-        (Patient.patient_id == pid) | (Patient.id == pid)
-    ).first()
-    
+    patient = _get_patient(db, payload.patient_id)
     if not patient:
         return {"found": False, "patient": None}
     
@@ -35,9 +38,7 @@ def lookup_patient(payload: PatientLookupIn, db: Session = Depends(get_db)):
 @router.get("/patients/{patient_id}/treatments", response_model=list[TreatmentRecordOut])
 def get_patient_treatments(patient_id: str, db: Session = Depends(get_db)):
     """Retrieve past treatment records for a patient."""
-    patient = db.query(Patient).filter(
-        (Patient.id == patient_id) | (Patient.patient_id == patient_id)
-    ).first()
+    patient = _get_patient(db, patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
     
@@ -62,7 +63,7 @@ def create_patient(payload: PatientCreate, db: Session = Depends(get_db)):
 
 @router.get("/patients/{patient_id}", response_model=PatientOut)
 def get_patient(patient_id: str, db: Session = Depends(get_db)):
-    patient = db.query(Patient).filter((Patient.id == patient_id) | (Patient.patient_id == patient_id)).first()
+    patient = _get_patient(db, patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
     return patient
@@ -75,7 +76,7 @@ def list_patients(db: Session = Depends(get_db)):
 
 @router.get("/patients/{patient_id}/encounters", response_model=list[EncounterOut])
 def list_patient_encounters(patient_id: str, db: Session = Depends(get_db)):
-    patient = db.query(Patient).filter((Patient.id == patient_id) | (Patient.patient_id == patient_id)).first()
+    patient = _get_patient(db, patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
     return db.query(Encounter).filter(Encounter.patient_id == patient.id).order_by(Encounter.created_at.desc()).all()
@@ -83,7 +84,7 @@ def list_patient_encounters(patient_id: str, db: Session = Depends(get_db)):
 
 @router.post("/encounters", response_model=EncounterOut)
 def create_encounter(payload: EncounterCreate, db: Session = Depends(get_db)):
-    patient = db.query(Patient).filter((Patient.id == payload.patient_id) | (Patient.patient_id == payload.patient_id)).first()
+    patient = _get_patient(db, payload.patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
     encounter = Encounter(

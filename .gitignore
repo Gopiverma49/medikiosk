@@ -5,6 +5,9 @@ venv/
 node_modules/
 .next/
 *.log
+*.db
+*.sqlite3
 .DS_Store
 evaluation/results.json
 evaluation/report.html
+

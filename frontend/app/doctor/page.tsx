@@ -53,13 +53,14 @@ export default function DoctorPage() {
     }
   }
 
-  async function selectPatient(pId: string) {
+  async function selectPatient(pId: string, listOverride?: Patient[]) {
     setSelectedPatientId(pId);
-    const p = patients.find((x) => x.id === pId || x.patient_id === pId);
+    const sourceList = listOverride || patients;
+    const p = sourceList.find((x) => x.id === pId || x.patient_id === pId);
     if (!p) return;
     setPatient(p);
     try {
-      const encounters: any[] = await fetch(`/api/patients/${p.id}/encounters`).then((r) => r.json());
+      const encounters = await api.listPatientEncounters(p.id);
       if (encounters.length > 0) {
         setEncounterId(encounters[0].id);
         await loadEncounterData(encounters[0].id);
@@ -79,17 +80,10 @@ export default function DoctorPage() {
   useEffect(() => {
     (async () => {
       try {
-        const pList: Patient[] = await fetch("/api/patients").then((r) => r.json());
+        const pList = await api.listPatients();
         setPatients(pList);
         if (pList.length > 0) {
-          const first = pList[0];
-          setPatient(first);
-          setSelectedPatientId(first.id);
-          const encounters: any[] = await fetch(`/api/patients/${first.id}/encounters`).then((r) => r.json());
-          if (encounters.length > 0) {
-            setEncounterId(encounters[0].id);
-            await loadEncounterData(encounters[0].id);
-          }
+          await selectPatient(pList[0].id, pList);
         }
       } catch (err) {
         console.error("Failed to load doctor dashboard:", err);

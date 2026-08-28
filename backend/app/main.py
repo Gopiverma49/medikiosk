@@ -7,6 +7,7 @@ Run locally:
 Run via Docker Compose (recommended — see repository root docker-compose.yml):
     docker compose up --build
 """
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -21,6 +22,16 @@ from .routers import (
 
 settings = get_settings()
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # In production, use `alembic upgrade head` instead of create_all().
+    # create_all() is kept here too so `docker compose up` works out of the box
+    # even before migrations have been run.
+    Base.metadata.create_all(bind=engine)
+    yield
+
+
 app = FastAPI(
     title="MediKiosk API",
     description=(
@@ -30,6 +41,7 @@ app = FastAPI(
         "Synthetic data only."
     ),
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -39,14 +51,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-def on_startup():
-    # In production, use `alembic upgrade head` instead of create_all().
-    # create_all() is kept here too so `docker compose up` works out of the box
-    # even before migrations have been run.
-    Base.metadata.create_all(bind=engine)
 
 
 @app.get("/api/health")

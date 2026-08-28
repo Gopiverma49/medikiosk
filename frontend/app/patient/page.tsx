@@ -25,28 +25,61 @@ type FlowStep =
   | "documents_upload" // Step 5: Optional Document Scan
   | "completed"; // Final Done Screen
 
-const ADAPTIVE_QUESTIONS_EN = [
-  { concept: "symptom_onset", prompt: "When did the symptoms begin?", options: ["Today", "Yesterday", "2–7 days ago", "More than a week"] },
-  { concept: "location", prompt: "Where is the discomfort located?", options: ["Left chest", "Centre of chest", "Right chest", "Abdomen / Stomach"] },
-  { concept: "character", prompt: "How would you describe the sensation?", options: ["Pressure / tightness", "Sharp / stabbing", "Burning / Acidity", "Dull ache"] },
-  { concept: "severity", prompt: "How severe is the discomfort (1–10)?", options: ["Mild (1–3)", "Moderate (4–6)", "Severe (7–10)"] },
-  { concept: "radiation_to_arm", prompt: "Does it spread to your arm, jaw, or back?", options: ["Yes", "No"] },
-  { concept: "dyspnea", prompt: "Do you feel breathless or short of breath?", options: ["Yes", "No"] },
-  { concept: "sweating", prompt: "Have you been sweating more than usual?", options: ["Yes", "No"] },
-  { concept: "medication_reported_none", prompt: "Are you currently taking any daily medicines?", options: ["Yes", "No"], inverse: true },
-  { concept: "allergy_reported_none", prompt: "Do you have any known drug allergies?", options: ["Yes", "No"], inverse: true },
-];
+type QuestionConfig = {
+  concept: string;
+  prompt: { en: string; hi: string };
+  options: { en: string[]; hi: string[] };
+  inverse?: boolean;
+};
 
-const ADAPTIVE_QUESTIONS_HI = [
-  { concept: "symptom_onset", prompt: "तकलीफ कब शुरू हुई थी?", options: ["आज", "कल", "2–7 दिन पहले", "एक सप्ताह से अधिक"] },
-  { concept: "location", prompt: "तकलीफ शरीर के किस हिस्से में है?", options: ["सीने के बाईं तरफ", "सीने के बीच में", "सीने के दाईं तरफ", "पेट में"] },
-  { concept: "character", prompt: "यह दर्द या तकलीफ किस प्रकार की है?", options: ["दबाव या भारीपन", "तेज़ चुभन", "जलन या एसिडिटी", "हल्का मीठा दर्द"] },
-  { concept: "severity", prompt: "तकलीफ की तीव्रता कितनी है (1–10)?", options: ["हल्की (1–3)", "मध्यम (4–6)", "अत्यधिक तीव्र (7–10)"] },
-  { concept: "radiation_to_arm", prompt: "क्या दर्द हाथ, जबड़े या पीठ की तरफ फैलता है?", options: ["हाँ", "नहीं"] },
-  { concept: "dyspnea", prompt: "क्या सांस लेने में कठिनाई हो रही है?", options: ["हाँ", "नहीं"] },
-  { concept: "sweating", prompt: "क्या सामान्य से अधिक पसीना आ रहा है?", options: ["हाँ", "नहीं"] },
-  { concept: "medication_reported_none", prompt: "क्या आप वर्तमान में कोई नियमित दवा ले रहे हैं?", options: ["हाँ", "नहीं"], inverse: true },
-  { concept: "allergy_reported_none", prompt: "क्या आपको किसी दवा से कोई एलर्जी है?", options: ["हाँ", "नहीं"], inverse: true },
+const ADAPTIVE_QUESTIONS: QuestionConfig[] = [
+  {
+    concept: "symptom_onset",
+    prompt: { en: "When did the symptoms begin?", hi: "तकलीफ कब शुरू हुई थी?" },
+    options: { en: ["Today", "Yesterday", "2–7 days ago", "More than a week"], hi: ["आज", "कल", "2–7 दिन पहले", "एक सप्ताह से अधिक"] },
+  },
+  {
+    concept: "location",
+    prompt: { en: "Where is the discomfort located?", hi: "तकलीफ शरीर के किस हिस्से में है?" },
+    options: { en: ["Left chest", "Centre of chest", "Right chest", "Abdomen / Stomach"], hi: ["सीने के बाईं तरफ", "सीने के बीच में", "सीने के दाईं तरफ", "पेट में"] },
+  },
+  {
+    concept: "character",
+    prompt: { en: "How would you describe the sensation?", hi: "यह दर्द या तकलीफ किस प्रकार की है?" },
+    options: { en: ["Pressure / tightness", "Sharp / stabbing", "Burning / Acidity", "Dull ache"], hi: ["दबाव या भारीपन", "तेज़ चुभन", "जलन या एसिडिटी", "हल्का मीठा दर्द"] },
+  },
+  {
+    concept: "severity",
+    prompt: { en: "How severe is the discomfort (1–10)?", hi: "तकलीफ की तीव्रता कितनी है (1–10)?" },
+    options: { en: ["Mild (1–3)", "Moderate (4–6)", "Severe (7–10)"], hi: ["हल्की (1–3)", "मध्यम (4–6)", "अत्यधिक तीव्र (7–10)"] },
+  },
+  {
+    concept: "radiation_to_arm",
+    prompt: { en: "Does it spread to your arm, jaw, or back?", hi: "क्या दर्द हाथ, जबड़े या पीठ की तरफ फैलता है?" },
+    options: { en: ["Yes", "No"], hi: ["हाँ", "नहीं"] },
+  },
+  {
+    concept: "dyspnea",
+    prompt: { en: "Do you feel breathless or short of breath?", hi: "क्या सांस लेने में कठिनाई हो रही है?" },
+    options: { en: ["Yes", "No"], hi: ["हाँ", "नहीं"] },
+  },
+  {
+    concept: "sweating",
+    prompt: { en: "Have you been sweating more than usual?", hi: "क्या सामान्य से अधिक पसीना आ रहा है?" },
+    options: { en: ["Yes", "No"], hi: ["हाँ", "नहीं"] },
+  },
+  {
+    concept: "medication_reported_none",
+    prompt: { en: "Are you currently taking any daily medicines?", hi: "क्या आप वर्तमान में कोई नियमित दवा ले रहे हैं?" },
+    options: { en: ["Yes", "No"], hi: ["हाँ", "नहीं"] },
+    inverse: true,
+  },
+  {
+    concept: "allergy_reported_none",
+    prompt: { en: "Do you have any known drug allergies?", hi: "क्या आपको किसी दवा से कोई एलर्जी है?" },
+    options: { en: ["Yes", "No"], hi: ["हाँ", "नहीं"] },
+    inverse: true,
+  },
 ];
 
 export default function PatientPage() {
@@ -108,6 +141,20 @@ export default function PatientPage() {
     }
   };
 
+  const resetSession = () => {
+    VoiceService.stopSpeaking();
+    VoiceService.stopListening();
+    setPatient(null);
+    setTreatments([]);
+    setPatientIdInput("");
+    setSelectedIllnessId(null);
+    setEncounterId(null);
+    setQIndex(0);
+    setDocStatus({});
+    setHistoryStack([]);
+    setStep("lang_mode");
+  };
+
   // Safe navigation with history stack
   const goTo = (nextStep: FlowStep) => {
     setHistoryStack((prev) => [...prev, step]);
@@ -122,17 +169,9 @@ export default function PatientPage() {
   };
 
   const cancelSession = () => {
-    if (window.confirm(lang === "hi" ? "क्या आप इस सत्र को रद्द करना चाहते हैं?" : "Are you sure you want to cancel this session?")) {
-      VoiceService.stopSpeaking();
-      VoiceService.stopListening();
-      setPatient(null);
-      setTreatments([]);
-      setPatientIdInput("");
-      setSelectedIllnessId(null);
-      setEncounterId(null);
-      setQIndex(0);
-      setHistoryStack([]);
-      setStep("lang_mode");
+    const prompt = lang === "hi" ? "क्या आप इस सत्र को रद्द करना चाहते हैं?" : "Are you sure you want to cancel this session?";
+    if (window.confirm(prompt)) {
+      resetSession();
     }
   };
 
@@ -281,8 +320,6 @@ export default function PatientPage() {
   };
 
   // 5. Adaptive Symptom Questions
-  const questions = lang === "hi" ? ADAPTIVE_QUESTIONS_HI : ADAPTIVE_QUESTIONS_EN;
-
   const answerAdaptive = async (concept: string, value: any, certainty: "confirmed" | "unknown", inverse?: boolean) => {
     if (!encounterId) return;
     const finalValue = certainty === "unknown" ? null : inverse ? value === (lang === "hi" ? "नहीं" : "No") : value;
@@ -299,7 +336,7 @@ export default function PatientPage() {
       console.warn("Failed to submit answer:", e);
     }
 
-    if (qIndex + 1 >= questions.length) {
+    if (qIndex + 1 >= ADAPTIVE_QUESTIONS.length) {
       goTo("documents_upload");
     } else {
       setQIndex((prev) => prev + 1);
@@ -1008,26 +1045,26 @@ export default function PatientPage() {
         )}
 
         {/* STEP 5B: Adaptive SOCRATES Questions */}
-        {step === "symptoms_adaptive" && (
+        {step === "symptoms_adaptive" && ADAPTIVE_QUESTIONS[qIndex] && (
           <div className="max-w-xl mx-auto bg-white border-2 border-slate-200 rounded-3xl p-8 shadow-xl">
             <div className="text-xs font-mono font-bold text-teal-700 mb-2">
-              {lang === "hi" ? "प्रश्न" : "QUESTION"} {qIndex + 1} / {questions.length}
+              {lang === "hi" ? "प्रश्न" : "QUESTION"} {qIndex + 1} / {ADAPTIVE_QUESTIONS.length}
             </div>
             <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 mb-6">
-              {questions[qIndex].prompt}
+              {ADAPTIVE_QUESTIONS[qIndex].prompt[lang] || ADAPTIVE_QUESTIONS[qIndex].prompt.en}
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {questions[qIndex].options.map((opt) => (
+              {(ADAPTIVE_QUESTIONS[qIndex].options[lang] || ADAPTIVE_QUESTIONS[qIndex].options.en).map((opt) => (
                 <button
                   key={opt}
                   type="button"
                   onClick={() =>
                     answerAdaptive(
-                      questions[qIndex].concept,
+                      ADAPTIVE_QUESTIONS[qIndex].concept,
                       opt,
                       "confirmed",
-                      questions[qIndex].inverse
+                      ADAPTIVE_QUESTIONS[qIndex].inverse
                     )
                   }
                   className="p-5 border-2 border-slate-300 hover:border-teal-600 hover:bg-teal-50 rounded-2xl text-left font-bold text-lg text-slate-800 transition transform active:scale-95 shadow-sm"
@@ -1040,7 +1077,7 @@ export default function PatientPage() {
             <button
               type="button"
               onClick={() =>
-                answerAdaptive(questions[qIndex].concept, null, "unknown")
+                answerAdaptive(ADAPTIVE_QUESTIONS[qIndex].concept, null, "unknown")
               }
               className="w-full p-4 border-2 border-dashed border-slate-300 hover:bg-slate-50 rounded-2xl text-slate-500 font-semibold text-center transition"
             >
@@ -1120,15 +1157,7 @@ export default function PatientPage() {
 
               <button
                 type="button"
-                onClick={() => {
-                  setStep("lang_mode");
-                  setPatient(null);
-                  setTreatments([]);
-                  setPatientIdInput("");
-                  setSelectedIllnessId(null);
-                  setEncounterId(null);
-                  setQIndex(0);
-                }}
+                onClick={resetSession}
                 className="w-full py-4 border-2 border-slate-300 hover:bg-slate-100 text-slate-700 rounded-2xl font-bold text-base transition"
               >
                 ↻ {lang === "hi" ? "नया मरीज शुरू करें" : "Start Next Patient"}

@@ -1,3 +1,4 @@
+import os
 import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
@@ -5,6 +6,9 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from .config import get_settings
 
 settings = get_settings()
+
+DEFAULT_SQLITE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "medikiosk.db"))
+DEFAULT_SQLITE_URL = f"sqlite:///{DEFAULT_SQLITE_PATH.replace(os.sep, '/')}"
 
 db_url = settings.DATABASE_URL
 connect_args = {}
@@ -19,7 +23,7 @@ try:
     engine = create_engine(db_url, connect_args=connect_args, **engine_kwargs)
 except Exception as e:
     logging.warning(f"Could not initialize database with {db_url}: {e}. Falling back to SQLite.")
-    engine = create_engine("sqlite:///./medikiosk.db", connect_args={"check_same_thread": False})
+    engine = create_engine(DEFAULT_SQLITE_URL, connect_args={"check_same_thread": False})
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

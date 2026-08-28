@@ -29,6 +29,8 @@ export const api = {
   createPatient: (data: Partial<Patient>) =>
     request<Patient>("/patients", { method: "POST", body: JSON.stringify(data) }),
   getPatient: (id: string) => request<Patient>(`/patients/${id}`),
+  listPatients: () => request<Patient[]>("/patients"),
+  listPatientEncounters: (patient_id: string) => request<Encounter[]>(`/patients/${patient_id}/encounters`),
   createEncounter: (patient_id: string, mode: string = "general", previous_illness_id?: string) =>
     request<Encounter>("/encounters", {
       method: "POST",

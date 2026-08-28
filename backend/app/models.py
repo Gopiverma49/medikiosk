@@ -12,7 +12,7 @@ Design rules enforced throughout:
 """
 import uuid
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Column, String, Integer, Float, Boolean, DateTime, ForeignKey, JSON, Text, Enum
@@ -25,6 +25,10 @@ from .database import Base
 
 def gen_uuid():
     return str(uuid.uuid4())
+
+
+def utcnow():
+    return datetime.now(timezone.utc)
 
 
 class VerificationStatus(str, enum.Enum):
@@ -55,8 +59,8 @@ class Role(str, enum.Enum):
 
 
 class TimestampMixin:
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
 
 class User(Base, TimestampMixin):
@@ -120,7 +124,7 @@ class Consent(Base, TimestampMixin):
     id = Column(GUID(), primary_key=True, default=gen_uuid)
     encounter_id = Column(GUID(), ForeignKey("encounters.id"), nullable=False)
     granted = Column(Boolean, nullable=False)
-    granted_at = Column(DateTime, default=datetime.utcnow)
+    granted_at = Column(DateTime, default=utcnow)
 
     encounter = relationship("Encounter", back_populates="consents")
 
@@ -283,7 +287,7 @@ class RedFlagEvent(Base, TimestampMixin):
     rule_name = Column(String, nullable=False)
     priority = Column(String, nullable=False)
     action = Column(String, nullable=False)
-    triggered_at = Column(DateTime, default=datetime.utcnow)
+    triggered_at = Column(DateTime, default=utcnow)
 
 
 class TriageEvent(Base, TimestampMixin):
@@ -317,20 +321,22 @@ class ContradictionResolution(Base, TimestampMixin):
 
 
 class AIProvenance(Base, TimestampMixin):
-    """Every AI operation should ideally record provider/model/confidence/status."""
+    """Every AI operation records provider, model, confidence, and verification status."""
     __tablename__ = "ai_provenance"
     id = Column(GUID(), primary_key=True, default=gen_uuid)
     encounter_id = Column(GUID(), ForeignKey("encounters.id"), nullable=True)
-    operation = Column(String, nullable=False)  # asr | ocr | nlp_extraction | summary | translation
-    provider = Column(String, nullable=False)
-    model = Column(String, nullable=True)
-    input_reference = Column(String, nullable=True)
-    output_reference = Column(String, nullable=True)
+    task = Column(String, nullable=False)  # asr | ocr | nlp | summary | translation
+    provider = Column(String, nullable=False)  # mock | google | openai | custom
+    model_name = Column(String, nullable=True)
+    raw_input_hash = Column(String, nullable=True)
+    raw_output = Column(JSON, nullable=True)
     confidence = Column(Float, nullable=True)
-    status = Column(String, default="success")  # success | failed | fallback
+    prompt_version = Column(String, nullable=True)
+    latency_ms = Column(Integer, nullable=True)
+    verification_status = Column(Enum(VerificationStatus), default=VerificationStatus.UNVERIFIED)
 
 
-class AIEvaluation(Base, TimestampMixin):
+class AIEvaluation(Base):
     __tablename__ = "ai_evaluations"
     id = Column(GUID(), primary_key=True, default=gen_uuid)
     metric_name = Column(String, nullable=False)
@@ -338,7 +344,7 @@ class AIEvaluation(Base, TimestampMixin):
     recall = Column(Float, nullable=True)
     f1 = Column(Float, nullable=True)
     extra = Column(JSON, nullable=True)
-    computed_at = Column(DateTime, default=datetime.utcnow)
+    computed_at = Column(DateTime, default=utcnow)
 
 
 class HumanVerification(Base, TimestampMixin):
@@ -354,7 +360,7 @@ class HumanVerification(Base, TimestampMixin):
 class AuditLog(Base):
     __tablename__ = "audit_logs"
     id = Column(GUID(), primary_key=True, default=gen_uuid)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=utcnow)
     event = Column(String, nullable=False)
     detail = Column(String, nullable=True)
     actor = Column(String, nullable=True)
