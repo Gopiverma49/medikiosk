@@ -50,13 +50,32 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <a
           href="/"
           className="inline-flex items-center gap-2 py-2 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm shadow-sm transition"
         >
-          ← Back to Portals
+          ← Back to Portals Home
         </a>
+
+        <div className="flex items-center gap-2">
+          <a
+            href="/patient"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="py-2 px-4 bg-teal-50 border border-teal-200 hover:bg-teal-100 text-teal-800 font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm"
+          >
+            <span>🏥</span> Open Patient Kiosk ↗
+          </a>
+          <a
+            href="/doctor"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="py-2 px-4 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-800 font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm"
+          >
+            <span>👨‍⚕️</span> Open Doctor Station ↗
+          </a>
+        </div>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-2xl p-6">

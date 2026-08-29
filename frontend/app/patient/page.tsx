@@ -412,13 +412,14 @@ export default function PatientPage() {
       {/* Top Header Bar */}
       <header className="max-w-4xl w-full mx-auto flex items-center justify-between pb-4 border-b border-slate-300">
         <div className="flex items-center gap-3">
-          <a
-            href="/"
+          <button
+            type="button"
+            onClick={resetSession}
             className="w-10 h-10 rounded-xl bg-teal-700 hover:bg-teal-800 flex items-center justify-center text-white font-black text-xl shadow transition"
-            title={lang === "hi" ? "मुख्य पृष्ठ" : "Back to Home"}
+            title={lang === "hi" ? "सत्र रीसेट करें" : "Reset Kiosk Session"}
           >
             +
-          </a>
+          </button>
           <div>
             <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">
               MediKiosk
@@ -1142,13 +1143,6 @@ export default function PatientPage() {
               >
                 ↻ {lang === "hi" ? "नया मरीज शुरू करें" : "Start Next Patient"}
               </button>
-
-              <a
-                href="/"
-                className="block w-full py-3 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl font-bold text-sm transition text-center"
-              >
-                ← {lang === "hi" ? "मुख्य पृष्ठ पर जाएं" : "Back to Portals Home"}
-              </a>
             </div>
           </div>
         )}

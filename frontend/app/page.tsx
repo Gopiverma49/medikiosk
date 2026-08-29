@@ -21,13 +21,21 @@ export default function Home() {
 
       {/* 3 Main Portals */}
       <div>
-        <h2 className="text-xs font-mono font-bold uppercase tracking-widest text-slate-400 mb-4 px-1">
-          Select Main Portal
-        </h2>
+        <div className="flex items-center justify-between mb-4 px-1">
+          <h2 className="text-xs font-mono font-bold uppercase tracking-widest text-slate-400">
+            Select Main Portal
+          </h2>
+          <span className="text-xs font-semibold text-slate-400">
+            Each portal opens securely in a dedicated tab
+          </span>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Portal 1: Patient */}
           <Link
             href="/patient"
+            target="_blank"
+            rel="noopener noreferrer"
             className="group bg-white border-2 border-slate-200 hover:border-teal-600 rounded-3xl p-8 transition transform hover:-translate-y-1 shadow-md flex flex-col justify-between"
           >
             <div>
@@ -35,7 +43,7 @@ export default function Home() {
                 🏥
               </div>
               <div className="text-xs font-mono uppercase tracking-wider text-teal-700 font-extrabold mb-1">
-                Portal 1
+                Portal 1 • Terminal
               </div>
               <h2 className="text-2xl font-black text-slate-900 mb-2">
                 Patient Kiosk
@@ -44,14 +52,19 @@ export default function Home() {
                 5-stage accessible patient intake with English/Hindi localization, touch or voice guidance, QR/keypad lookup, and adaptive history collection.
               </p>
             </div>
-            <div className="flex items-center text-sm font-bold text-teal-700 group-hover:text-teal-900">
-              Launch Patient Kiosk →
+            <div className="flex items-center justify-between text-sm font-bold text-teal-700 group-hover:text-teal-900">
+              <span>Launch Patient Kiosk</span>
+              <span className="text-xs font-mono bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200 group-hover:bg-teal-100">
+                New Tab ↗
+              </span>
             </div>
           </Link>
 
           {/* Portal 2: Doctor */}
           <Link
             href="/doctor"
+            target="_blank"
+            rel="noopener noreferrer"
             className="group bg-white border-2 border-slate-200 hover:border-blue-600 rounded-3xl p-8 transition transform hover:-translate-y-1 shadow-md flex flex-col justify-between"
           >
             <div>
@@ -59,23 +72,28 @@ export default function Home() {
                 👨‍⚕️
               </div>
               <div className="text-xs font-mono uppercase tracking-wider text-blue-700 font-extrabold mb-1">
-                Portal 2
+                Portal 2 • Confidential
               </div>
               <h2 className="text-2xl font-black text-slate-900 mb-2">
                 Doctor Station
               </h2>
               <p className="text-slate-500 text-sm leading-relaxed mb-6">
-                Real-time patient queue, clinical facts review with confidence badges, discrepancy resolution, 1-click summary verification, and FHIR export.
+                Real-time patient queue, clinical summary review, physician verification actions, and document inspections.
               </p>
             </div>
-            <div className="flex items-center text-sm font-bold text-blue-700 group-hover:text-blue-900">
-              Open Doctor Station →
+            <div className="flex items-center justify-between text-sm font-bold text-blue-700 group-hover:text-blue-900">
+              <span>Open Doctor Station</span>
+              <span className="text-xs font-mono bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 group-hover:bg-blue-100">
+                New Tab ↗
+              </span>
             </div>
           </Link>
 
           {/* Portal 3: Admin */}
           <Link
             href="/admin"
+            target="_blank"
+            rel="noopener noreferrer"
             className="group bg-white border-2 border-slate-200 hover:border-slate-800 rounded-3xl p-8 transition transform hover:-translate-y-1 shadow-md flex flex-col justify-between"
           >
             <div>
@@ -83,7 +101,7 @@ export default function Home() {
                 ⚙️
               </div>
               <div className="text-xs font-mono uppercase tracking-wider text-slate-600 font-extrabold mb-1">
-                Portal 3
+                Portal 3 • Superuser
               </div>
               <h2 className="text-2xl font-black text-slate-900 mb-2">
                 Hospital Admin
@@ -92,8 +110,11 @@ export default function Home() {
                 Emergency red-flag rule configuration & testing, AI precision/recall evaluation benchmark execution, and clinical audit trail review.
               </p>
             </div>
-            <div className="flex items-center text-sm font-bold text-slate-800 group-hover:text-black">
-              Manage System Settings →
+            <div className="flex items-center justify-between text-sm font-bold text-slate-800 group-hover:text-black">
+              <span>Manage System Settings</span>
+              <span className="text-xs font-mono bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-300 group-hover:bg-slate-200">
+                New Tab ↗
+              </span>
             </div>
           </Link>
         </div>
