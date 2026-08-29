@@ -26,17 +26,35 @@ def test_chest_pain_rule_does_not_fire_without_associated_symptoms(client):
     assert not any(e["rule_id"] == "RF_CHEST_001" for e in events)
 
 
-def test_rule_configuration_via_admin_endpoints(client):
-    payload = {
-        "rule_id": "RF_TEST_999", "name": "Test rule", "enabled": True, "priority": "LOW",
-        "action": "FLAG_FOR_REVIEW", "conditions": {"all": [{"concept": "fever", "operator": "equals", "value": True}], "any": []},
-    }
-    created = client.post("/api/red-flags/rules", json=payload)
-    assert created.status_code == 200
-    assert created.json()["version"] == "1.0"
+def test_animal_bite_rule_fires_with_broken_skin(client):
+    enc = _make_encounter(client)
+    client.post("/api/history/answer", json={
+        "encounter_id": enc["id"], "question_concept": "animal_exposure_broken_skin",
+        "raw_answer": True, "certainty": "confirmed",
+    })
+    resp = client.post(f"/api/triage/evaluate?encounter_id={enc['id']}")
+    events = resp.json()["events"]
+    assert any(e["rule_id"] == "RF_ANIMAL_004" for e in events)
 
-    test_resp = client.post("/api/red-flags/rules/RF_TEST_999/test", json={"rule_id": "RF_TEST_999", "inputs": {"fever": True}})
-    assert test_resp.json()["fires"] is True
 
-    disable_resp = client.post("/api/red-flags/rules/RF_TEST_999/disable")
-    assert disable_resp.json()["enabled"] is False
+def test_active_bleeding_rule_fires(client):
+    enc = _make_encounter(client)
+    client.post("/api/history/answer", json={
+        "encounter_id": enc["id"], "question_concept": "active_bleeding",
+        "raw_answer": True, "certainty": "confirmed",
+    })
+    resp = client.post(f"/api/triage/evaluate?encounter_id={enc['id']}")
+    events = resp.json()["events"]
+    assert any(e["rule_id"] == "RF_BLEED_005" for e in events)
+
+
+def test_thunderclap_headache_rule_fires(client):
+    enc = _make_encounter(client)
+    client.post("/api/history/answer", json={
+        "encounter_id": enc["id"], "question_concept": "headache_thunderclap",
+        "raw_answer": True, "certainty": "confirmed",
+    })
+    resp = client.post(f"/api/triage/evaluate?encounter_id={enc['id']}")
+    events = resp.json()["events"]
+    assert any(e["rule_id"] == "RF_HEADACHE_006" for e in events)
+

@@ -40,6 +40,24 @@ DEFAULT_RULES = [
         "enabled": False, "priority": "HIGH", "version": "1.0", "action": "FLAG_FOR_REVIEW",
         "conditions": {"all": [{"concept": "allergy_medication_conflict", "operator": "equals", "value": True}], "any": []},
     },
+    {
+        "rule_id": "RF_ANIMAL_004",
+        "name": "Animal bite or scratch with broken skin (Immediate Rabies PEP Evaluation)",
+        "enabled": True, "priority": "HIGH", "version": "1.0", "action": "URGENT_TRIAGE",
+        "conditions": {"all": [{"concept": "animal_exposure_broken_skin", "operator": "equals", "value": True}], "any": []},
+    },
+    {
+        "rule_id": "RF_BLEED_005",
+        "name": "Active continuous bleeding following injury",
+        "enabled": True, "priority": "HIGH", "version": "1.0", "action": "URGENT_TRIAGE",
+        "conditions": {"all": [{"concept": "active_bleeding", "operator": "equals", "value": True}], "any": []},
+    },
+    {
+        "rule_id": "RF_HEADACHE_006",
+        "name": "Sudden onset severe thunderclap headache",
+        "enabled": True, "priority": "HIGH", "version": "1.0", "action": "URGENT_TRIAGE",
+        "conditions": {"all": [{"concept": "headache_thunderclap", "operator": "equals", "value": True}], "any": []},
+    },
 ]
 
 

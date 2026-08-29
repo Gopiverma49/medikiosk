@@ -7,6 +7,7 @@ import { KioskStepIndicator } from "../../components/KioskStepIndicator";
 import { KioskKeypad } from "../../components/KioskKeypad";
 import { KioskScanner } from "../../components/KioskScanner";
 import { KioskVoiceIndicator } from "../../components/KioskVoiceIndicator";
+import AdaptiveSymptomEngine, { SymptomAnswerRecord } from "../../components/symptoms/AdaptiveSymptomEngine";
 import type { Patient, TreatmentRecord } from "../../lib/types";
 
 type FlowStep =
@@ -21,66 +22,9 @@ type FlowStep =
   | "history_details" // Step 4: Previous Illness Summary
   | "history_auto_skip" // Step 4: No history auto message
   | "symptoms_intro" // Step 5: Start Symptom Intake
-  | "symptoms_adaptive" // Step 5: Adaptive SOCRATES Questions
+  | "symptoms_adaptive" // Step 5: Adaptive Question Engine
   | "documents_upload" // Step 5: Optional Document Scan
   | "completed"; // Final Done Screen
-
-type QuestionConfig = {
-  concept: string;
-  prompt: { en: string; hi: string };
-  options: { en: string[]; hi: string[] };
-  inverse?: boolean;
-};
-
-const ADAPTIVE_QUESTIONS: QuestionConfig[] = [
-  {
-    concept: "symptom_onset",
-    prompt: { en: "When did the symptoms begin?", hi: "तकलीफ कब शुरू हुई थी?" },
-    options: { en: ["Today", "Yesterday", "2–7 days ago", "More than a week"], hi: ["आज", "कल", "2–7 दिन पहले", "एक सप्ताह से अधिक"] },
-  },
-  {
-    concept: "location",
-    prompt: { en: "Where is the discomfort located?", hi: "तकलीफ शरीर के किस हिस्से में है?" },
-    options: { en: ["Left chest", "Centre of chest", "Right chest", "Abdomen / Stomach"], hi: ["सीने के बाईं तरफ", "सीने के बीच में", "सीने के दाईं तरफ", "पेट में"] },
-  },
-  {
-    concept: "character",
-    prompt: { en: "How would you describe the sensation?", hi: "यह दर्द या तकलीफ किस प्रकार की है?" },
-    options: { en: ["Pressure / tightness", "Sharp / stabbing", "Burning / Acidity", "Dull ache"], hi: ["दबाव या भारीपन", "तेज़ चुभन", "जलन या एसिडिटी", "हल्का मीठा दर्द"] },
-  },
-  {
-    concept: "severity",
-    prompt: { en: "How severe is the discomfort (1–10)?", hi: "तकलीफ की तीव्रता कितनी है (1–10)?" },
-    options: { en: ["Mild (1–3)", "Moderate (4–6)", "Severe (7–10)"], hi: ["हल्की (1–3)", "मध्यम (4–6)", "अत्यधिक तीव्र (7–10)"] },
-  },
-  {
-    concept: "radiation_to_arm",
-    prompt: { en: "Does it spread to your arm, jaw, or back?", hi: "क्या दर्द हाथ, जबड़े या पीठ की तरफ फैलता है?" },
-    options: { en: ["Yes", "No"], hi: ["हाँ", "नहीं"] },
-  },
-  {
-    concept: "dyspnea",
-    prompt: { en: "Do you feel breathless or short of breath?", hi: "क्या सांस लेने में कठिनाई हो रही है?" },
-    options: { en: ["Yes", "No"], hi: ["हाँ", "नहीं"] },
-  },
-  {
-    concept: "sweating",
-    prompt: { en: "Have you been sweating more than usual?", hi: "क्या सामान्य से अधिक पसीना आ रहा है?" },
-    options: { en: ["Yes", "No"], hi: ["हाँ", "नहीं"] },
-  },
-  {
-    concept: "medication_reported_none",
-    prompt: { en: "Are you currently taking any daily medicines?", hi: "क्या आप वर्तमान में कोई नियमित दवा ले रहे हैं?" },
-    options: { en: ["Yes", "No"], hi: ["हाँ", "नहीं"] },
-    inverse: true,
-  },
-  {
-    concept: "allergy_reported_none",
-    prompt: { en: "Do you have any known drug allergies?", hi: "क्या आपको किसी दवा से कोई एलर्जी है?" },
-    options: { en: ["Yes", "No"], hi: ["हाँ", "नहीं"] },
-    inverse: true,
-  },
-];
 
 export default function PatientPage() {
   // Session State
@@ -115,6 +59,9 @@ export default function PatientPage() {
   const [isListening, setIsListening] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState("");
   const [voiceError, setVoiceError] = useState<string | null>(null);
+
+  // Auto-Reset 7-second Timer State (Completion screen)
+  const [autoResetSeconds, setAutoResetSeconds] = useState<number>(7);
 
   // Map step to numerical indicator (1 to 5)
   const getStepNumber = (s: FlowStep): number => {
@@ -212,7 +159,7 @@ export default function PatientPage() {
     }
   }, [interactionMode, lang]);
 
-  // Handle voice prompts per step change
+  // Handle continuous voice prompts per step change
   useEffect(() => {
     if (interactionMode === "voice") {
       switch (step) {
@@ -222,19 +169,83 @@ export default function PatientPage() {
         case "id_method":
           playVoicePrompt("voice_speak_prompt_id");
           break;
+        case "scan_id":
+          playVoicePrompt("voice_speak_prompt_scan");
+          break;
+        case "keypad_id":
+          playVoicePrompt("voice_speak_prompt_keypad");
+          break;
         case "patient_confirm":
           playVoicePrompt("voice_speak_prompt_confirm");
+          break;
+        case "patient_register":
+          playVoicePrompt("voice_speak_prompt_register");
+          break;
+        case "patient_register_confirm":
+          playVoicePrompt("voice_speak_prompt_reg_confirm");
           break;
         case "history_check":
           playVoicePrompt("voice_speak_prompt_history");
           break;
-        case "symptoms_intro":
-        case "symptoms_adaptive":
-          playVoicePrompt("voice_speak_prompt_symptoms");
+        case "history_details":
+          playVoicePrompt("voice_speak_prompt_history_details");
+          break;
+        case "history_auto_skip":
+          playVoicePrompt("voice_speak_prompt_history_auto_skip");
+          break;
+        case "documents_upload":
+          playVoicePrompt("voice_speak_prompt_docs");
+          break;
+        case "completed":
+          playVoicePrompt("voice_speak_prompt_completed");
           break;
       }
     }
   }, [step, interactionMode, playVoicePrompt]);
+
+  // Completion screen: 7-second countdown auto-reset
+  useEffect(() => {
+    if (step === "completed") {
+      setAutoResetSeconds(7);
+      const interval = setInterval(() => {
+        setAutoResetSeconds((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            resetSession();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => clearInterval(interval);
+    }
+  }, [step]);
+
+  // Global 30-second inactivity timeout: resets to start page if abandoned anywhere in patient flow
+  useEffect(() => {
+    if (step === "lang_mode" || step === "completed") return;
+
+    let timeoutId: NodeJS.Timeout;
+
+    const resetInactivityTimer = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        resetSession();
+      }, 30000); // 30 seconds
+    };
+
+    const activityEvents = ["touchstart", "touchend", "click", "keydown", "mousemove", "scroll"];
+    activityEvents.forEach((evt) => window.addEventListener(evt, resetInactivityTimer, { passive: true }));
+
+    // Start initial timer
+    resetInactivityTimer();
+
+    return () => {
+      clearTimeout(timeoutId);
+      activityEvents.forEach((evt) => window.removeEventListener(evt, resetInactivityTimer));
+    };
+  }, [step]);
 
   // 1. Handle Patient Lookup
   const handleLookup = async (id: string) => {
@@ -344,27 +355,30 @@ export default function PatientPage() {
     }
   };
 
-  // 5. Adaptive Symptom Questions
-  const answerAdaptive = async (concept: string, value: any, certainty: "confirmed" | "unknown", inverse?: boolean) => {
-    if (!encounterId) return;
-    const finalValue = certainty === "unknown" ? null : inverse ? value === (lang === "hi" ? "नहीं" : "No") : value;
-
-    try {
-      await api.submitAnswer({
-        encounter_id: encounterId,
-        question_concept: concept,
-        raw_answer: certainty === "unknown" ? null : finalValue,
-        certainty,
-        source_language: lang,
-      });
-    } catch (e) {
-      console.warn("Failed to submit answer:", e);
-    }
-
-    if (qIndex + 1 >= ADAPTIVE_QUESTIONS.length) {
+  // 5. Dynamic Adaptive Symptom Intake Completion
+  const handleCompleteAdaptiveSymptoms = async (answers: SymptomAnswerRecord[]) => {
+    if (!encounterId) {
       goTo("documents_upload");
-    } else {
-      setQIndex((prev) => prev + 1);
+      return;
+    }
+    setIsLoading(true);
+    try {
+      for (const ans of answers) {
+        await api.submitAnswer({
+          encounter_id: encounterId,
+          question_concept: ans.concept,
+          raw_answer: ans.certainty === "unknown" ? null : ans.value,
+          certainty: ans.certainty,
+          source_language: lang,
+        });
+      }
+      await api.evaluateTriage(encounterId);
+      await api.detectContradictions(encounterId);
+    } catch (e) {
+      console.warn("Failed saving symptom facts:", e);
+    } finally {
+      setIsLoading(false);
+      goTo("documents_upload");
     }
   };
 
@@ -473,8 +487,8 @@ export default function PatientPage() {
                   type="button"
                   onClick={() => setLang("en")}
                   className={`py-5 px-6 rounded-2xl border-4 text-2xl font-black transition transform active:scale-95 shadow-md ${lang === "en"
-                      ? "border-teal-600 bg-teal-50 text-teal-900 ring-4 ring-teal-200"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                    ? "border-teal-600 bg-teal-50 text-teal-900 ring-4 ring-teal-200"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
                     }`}
                 >
                   English
@@ -483,8 +497,8 @@ export default function PatientPage() {
                   type="button"
                   onClick={() => setLang("hi")}
                   className={`py-5 px-6 rounded-2xl border-4 text-2xl font-black transition transform active:scale-95 shadow-md ${lang === "hi"
-                      ? "border-teal-600 bg-teal-50 text-teal-900 ring-4 ring-teal-200"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                    ? "border-teal-600 bg-teal-50 text-teal-900 ring-4 ring-teal-200"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
                     }`}
                 >
                   हिंदी
@@ -776,8 +790,8 @@ export default function PatientPage() {
                       type="button"
                       onClick={() => setRegForm({ ...regForm, gender: g })}
                       className={`py-3 px-4 rounded-xl border-2 font-bold text-base transition ${regForm.gender === g
-                          ? "border-teal-600 bg-teal-50 text-teal-900 shadow-sm"
-                          : "border-slate-300 bg-white text-slate-700"
+                        ? "border-teal-600 bg-teal-50 text-teal-900 shadow-sm"
+                        : "border-slate-300 bg-white text-slate-700"
                         }`}
                     >
                       {g === "Male"
@@ -1039,124 +1053,14 @@ export default function PatientPage() {
           </div>
         )}
 
-        {/* STEP 5A: Symptoms Intro */}
-        {step === "symptoms_intro" && (
-          <div className="max-w-xl mx-auto bg-white border-2 border-slate-200 rounded-3xl p-8 shadow-xl text-center">
-            <h2 className="text-2xl md:text-3xl font-black text-slate-900 mb-2">
-              {t("symptoms_title", lang)}
-            </h2>
-            <p className="text-slate-500 mb-8 text-sm md:text-base">
-              {selectedIllnessId
-                ? lang === "hi"
-                  ? "अपनी पूर्व बीमारी के वर्तमान लक्षणों का वर्णन करें।"
-                  : "Describing symptoms for previous condition update."
-                : lang === "hi"
-                  ? "कृपया अपनी मुख्य तकलीफ बोलकर या छूकर बताएं।"
-                  : "Describe your chief complaint using voice or tap options."}
-            </p>
-
-            <div className="space-y-4 mb-8">
-              <button
-                type="button"
-                onClick={() => {
-                  if (interactionMode === "voice") {
-                    setIsListening(true);
-                    VoiceService.listen(
-                      lang,
-                      (res) => {
-                        setVoiceTranscript(res);
-                        setIsListening(false);
-                        goTo("symptoms_adaptive");
-                      },
-                      (err) => {
-                        setVoiceError(err);
-                        setIsListening(false);
-                      }
-                    );
-                  } else {
-                    goTo("symptoms_adaptive");
-                  }
-                }}
-                className="w-full py-5 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-black text-xl shadow-lg transition transform active:scale-95 flex items-center justify-center gap-3"
-              >
-                <span>🎙</span> {t("speak_button", lang)}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => goTo("symptoms_adaptive")}
-                className="w-full py-4 border-2 border-slate-300 hover:bg-slate-100 rounded-2xl font-bold text-slate-700 text-lg transition"
-              >
-                {t("type_button", lang)}
-              </button>
-
-              <button
-                type="button"
-                onClick={goBack}
-                className="w-full py-3 border-2 border-slate-200 hover:bg-slate-100 rounded-xl font-bold text-slate-600 text-base transition"
-              >
-                ← {t("back", lang)}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 5B: Adaptive SOCRATES Questions */}
-        {step === "symptoms_adaptive" && ADAPTIVE_QUESTIONS[qIndex] && (
-          <div className="max-w-xl mx-auto bg-white border-2 border-slate-200 rounded-3xl p-8 shadow-xl">
-            <div className="text-xs font-mono font-bold text-teal-700 mb-2">
-              {lang === "hi" ? "प्रश्न" : "QUESTION"} {qIndex + 1} / {ADAPTIVE_QUESTIONS.length}
-            </div>
-            <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 mb-6">
-              {ADAPTIVE_QUESTIONS[qIndex].prompt[lang] || ADAPTIVE_QUESTIONS[qIndex].prompt.en}
-            </h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {(ADAPTIVE_QUESTIONS[qIndex].options[lang] || ADAPTIVE_QUESTIONS[qIndex].options.en).map((opt) => (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() =>
-                    answerAdaptive(
-                      ADAPTIVE_QUESTIONS[qIndex].concept,
-                      opt,
-                      "confirmed",
-                      ADAPTIVE_QUESTIONS[qIndex].inverse
-                    )
-                  }
-                  className="p-5 border-2 border-slate-300 hover:border-teal-600 hover:bg-teal-50 rounded-2xl text-left font-bold text-lg text-slate-800 transition transform active:scale-95 shadow-sm"
-                >
-                  {opt}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex gap-4">
-              <button
-                type="button"
-                onClick={() => {
-                  if (qIndex > 0) {
-                    setQIndex((prev) => prev - 1);
-                  } else {
-                    goBack();
-                  }
-                }}
-                className="py-3 px-6 border-2 border-slate-300 hover:bg-slate-100 rounded-xl font-bold text-slate-600 text-base transition"
-              >
-                ← {t("back", lang)}
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  answerAdaptive(ADAPTIVE_QUESTIONS[qIndex].concept, null, "unknown")
-                }
-                className="flex-1 p-3 border-2 border-dashed border-slate-300 hover:bg-slate-50 rounded-xl text-slate-500 font-semibold text-center transition"
-              >
-                ❓ {t("dont_know", lang)}
-              </button>
-            </div>
-          </div>
+        {/* STEP 5: Dynamic Adaptive Symptom Intake Engine */}
+        {(step === "symptoms_intro" || step === "symptoms_adaptive") && (
+          <AdaptiveSymptomEngine
+            lang={lang}
+            interactionMode={interactionMode}
+            onComplete={handleCompleteAdaptiveSymptoms}
+            onBackToPreviousStage={goBack}
+          />
         )}
 
         {/* STEP 5C: Document Scan */}
@@ -1225,22 +1129,25 @@ export default function PatientPage() {
             <h2 className="text-3xl font-black text-slate-900 mb-2">
               {t("all_done_title", lang)}
             </h2>
-            <p className="text-slate-500 mb-8 text-base">
+            <p className="text-slate-500 mb-6 text-base">
               {t("all_done_desc", lang)}
             </p>
 
-            <div className="space-y-4">
-              <a
-                href="/doctor"
-                className="block w-full py-5 bg-clinical-blue hover:bg-clinical-blue-deep text-white rounded-2xl font-black text-xl shadow-lg transition text-center"
-              >
-                {t("view_doctor_dashboard", lang)}
-              </a>
+            {/* Auto-Refresh Countdown Badge */}
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 border border-slate-300 rounded-full text-xs font-bold text-slate-600 mb-6 shadow-inner">
+              <span className="w-2.5 h-2.5 bg-teal-500 rounded-full animate-ping" />
+              <span>
+                {lang === "hi"
+                  ? `अगले मरीज के लिए स्वतः रीसेट: ${autoResetSeconds} सेकंड...`
+                  : `Auto-refreshing for next patient in ${autoResetSeconds}s...`}
+              </span>
+            </div>
 
+            <div className="space-y-4">
               <button
                 type="button"
                 onClick={resetSession}
-                className="w-full py-4 border-2 border-slate-300 hover:bg-slate-100 text-slate-700 rounded-2xl font-bold text-base transition"
+                className="w-full py-5 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-black text-xl shadow-lg transition transform active:scale-95 flex items-center justify-center gap-2"
               >
                 ↻ {lang === "hi" ? "नया मरीज शुरू करें" : "Start Next Patient"}
               </button>
