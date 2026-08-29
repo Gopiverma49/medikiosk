@@ -11,6 +11,15 @@ const TABS = ["summary", "documents"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function DoctorPage() {
+  // --- Auth State ---
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [usernameInput, setUsernameInput] = useState("");
+  const [passwordInput, setPasswordInput] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ username: string; full_name?: string } | null>(null);
+
+  // --- Clinical Workspace State ---
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>("");
   const [patient, setPatient] = useState<Patient | null>(null);
@@ -19,7 +28,73 @@ export default function DoctorPage() {
   const [priority, setPriority] = useState("ROUTINE");
   const [summary, setSummary] = useState<Summary | null>(null);
   const [documents, setDocuments] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // Check existing session
+    const savedToken = sessionStorage.getItem("medikiosk_doctor_token");
+    const savedUser = sessionStorage.getItem("medikiosk_doctor_user");
+    if (savedToken && savedUser) {
+      try {
+        const userObj = JSON.parse(savedUser);
+        setCurrentUser(userObj);
+        setIsAuthenticated(true);
+        loadDoctorDashboard();
+      } catch {
+        sessionStorage.removeItem("medikiosk_doctor_token");
+        sessionStorage.removeItem("medikiosk_doctor_user");
+      }
+    }
+    setAuthLoading(false);
+  }, []);
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setAuthError(null);
+    if (!usernameInput.trim() || !passwordInput.trim()) {
+      setAuthError("Please enter both username and password.");
+      return;
+    }
+    try {
+      const res = await api.login({ username: usernameInput.trim(), password: passwordInput.trim() });
+      if (res.role !== "DOCTOR" && res.role !== "ADMIN") {
+        setAuthError("Access denied. Doctor credentials required.");
+        return;
+      }
+      const userObj = { username: res.username || usernameInput.trim(), full_name: res.full_name || usernameInput.trim() };
+      sessionStorage.setItem("medikiosk_doctor_token", res.access_token);
+      sessionStorage.setItem("medikiosk_doctor_user", JSON.stringify(userObj));
+      setCurrentUser(userObj);
+      setIsAuthenticated(true);
+      await loadDoctorDashboard();
+    } catch (err: any) {
+      setAuthError("Invalid doctor username or password. Please check with your administrator.");
+    }
+  }
+
+  function handleLogout() {
+    sessionStorage.removeItem("medikiosk_doctor_token");
+    sessionStorage.removeItem("medikiosk_doctor_user");
+    setIsAuthenticated(false);
+    setCurrentUser(null);
+    setUsernameInput("");
+    setPasswordInput("");
+  }
+
+  async function loadDoctorDashboard() {
+    setLoading(true);
+    try {
+      const pList = await api.listPatients();
+      setPatients(pList);
+      if (pList.length > 0) {
+        await selectPatient(pList[0].id, pList);
+      }
+    } catch (err) {
+      console.error("Failed to load doctor dashboard:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function loadEncounterData(encId: string) {
     try {
@@ -61,22 +136,6 @@ export default function DoctorPage() {
     }
   }
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const pList = await api.listPatients();
-        setPatients(pList);
-        if (pList.length > 0) {
-          await selectPatient(pList[0].id, pList);
-        }
-      } catch (err) {
-        console.error("Failed to load doctor dashboard:", err);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
   async function handleGenerateSummary() {
     if (!encounterId) return;
     const s = await api.generateSummary(encounterId);
@@ -95,15 +154,90 @@ export default function DoctorPage() {
     setSummary(s);
   }
 
-  if (loading) return <div className="text-center py-20 text-slate-400 font-bold">Loading Doctor Portal…</div>;
+  if (authLoading) {
+    return <div className="text-center py-20 text-slate-400 font-bold">Loading Doctor Workspace…</div>;
+  }
 
+  // --- Doctor Login Screen ---
+  if (!isAuthenticated) {
+    return (
+      <div className="max-w-md mx-auto my-12 bg-white border-2 border-slate-200 rounded-3xl p-8 shadow-xl">
+        <div className="w-16 h-16 bg-blue-100 text-blue-700 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4">
+          👨‍⚕️
+        </div>
+        <h1 className="text-2xl font-black text-slate-900 text-center mb-1">
+          Doctor Station Login
+        </h1>
+        <p className="text-slate-500 text-xs text-center mb-6">
+          Sign in with your hospital-assigned physician credentials.
+        </p>
+
+        {authError && (
+          <div className="bg-red-50 border-2 border-red-300 text-red-700 text-xs font-bold p-3 rounded-xl mb-4 text-center">
+            ⚠ {authError}
+          </div>
+        )}
+
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+              Username / Doctor ID
+            </label>
+            <input
+              type="text"
+              required
+              value={usernameInput}
+              onChange={(e) => setUsernameInput(e.target.value)}
+              placeholder="e.g. doctor"
+              className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-blue-600 rounded-xl text-sm font-semibold text-slate-800 outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+              Password
+            </label>
+            <input
+              type="password"
+              required
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              placeholder="••••••••"
+              className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-blue-600 rounded-xl text-sm font-semibold text-slate-800 outline-none"
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="w-full py-3.5 bg-blue-700 hover:bg-blue-800 active:scale-98 text-white font-black text-base rounded-xl shadow-lg transition"
+          >
+            Sign In to Consultation Portal →
+          </button>
+        </form>
+
+        <div className="mt-6 pt-4 border-t border-slate-200 text-center">
+          <p className="text-[11px] text-slate-400">
+            Account credentials are created and managed by the Hospital Administrator.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Authenticated Doctor Workspace ---
   return (
     <div className="space-y-6">
-      {/* Top Patient Selector Bar */}
+      {/* Top Patient Selector & Physician Status Bar */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex-1">
-          <div className="text-xs font-mono uppercase tracking-wider text-blue-700 font-bold mb-1">
-            Doctor Consultation Workspace
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-mono uppercase tracking-wider text-blue-700 font-bold">
+              Doctor Consultation Workspace
+            </span>
+            <span className="text-xs text-slate-300">•</span>
+            <span className="text-xs font-semibold text-slate-600">
+              {currentUser?.full_name || currentUser?.username}
+            </span>
           </div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-extrabold text-slate-900">
@@ -122,27 +256,39 @@ export default function DoctorPage() {
           )}
         </div>
 
-        {/* Patient Switcher Dropdown */}
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-            Patient Queue:
-          </label>
-          <select
-            value={selectedPatientId}
-            onChange={(e) => selectPatient(e.target.value)}
-            className="p-2.5 bg-slate-50 border-2 border-slate-300 rounded-xl text-sm font-semibold text-slate-800 outline-none focus:border-blue-600 w-full md:w-64"
-          >
-            {patients.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} ({p.patient_id || p.id.slice(0, 6)})
-              </option>
-            ))}
-          </select>
+        {/* Patient Switcher & Doctor Session Actions */}
+        <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+              Queue:
+            </label>
+            <select
+              value={selectedPatientId}
+              onChange={(e) => selectPatient(e.target.value)}
+              className="p-2.5 bg-slate-50 border-2 border-slate-300 rounded-xl text-sm font-semibold text-slate-800 outline-none focus:border-blue-600 w-full md:w-56"
+            >
+              {patients.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.patient_id || p.id.slice(0, 6)})
+                </option>
+              ))}
+            </select>
+          </div>
           {priority && <PriorityPill priority={priority as any} />}
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="py-2 px-3 bg-slate-100 hover:bg-red-50 hover:text-red-700 border border-slate-300 rounded-xl text-xs font-bold text-slate-600 transition"
+            title="Sign out of doctor portal"
+          >
+            Sign Out ⎋
+          </button>
         </div>
       </div>
 
-      {!encounterId ? (
+      {loading ? (
+        <div className="text-center py-12 text-slate-400 font-bold">Refreshing consultation record…</div>
+      ) : !encounterId ? (
         <div className="bg-white border-2 border-dashed border-slate-300 rounded-3xl p-12 text-center">
           <div className="text-4xl mb-3">📋</div>
           <h2 className="text-xl font-bold text-slate-800 mb-2">No Active Intake Encounter Found</h2>
@@ -176,7 +322,7 @@ export default function DoctorPage() {
                   onClick={() => setTab(t)}
                   className={`pb-3 text-sm font-bold capitalize transition border-b-2 ${
                     tab === t
-                      ? "text-teal-700 border-teal-700 font-extrabold"
+                      ? "text-blue-700 border-blue-700 font-extrabold"
                       : "text-slate-400 border-transparent hover:text-slate-600"
                   }`}
                 >
@@ -268,7 +414,7 @@ export default function DoctorPage() {
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-      <div className="text-xs font-mono uppercase tracking-wider text-teal-700 font-bold mb-1">
+      <div className="text-xs font-mono uppercase tracking-wider text-blue-700 font-bold mb-1">
         {label}
       </div>
       <div className="text-2xl font-black text-slate-900">{value}</div>

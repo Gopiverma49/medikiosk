@@ -106,12 +106,38 @@ export const api = {
   submitAyushAnswer: (encounter_id: string, concept: string, value?: string) =>
     request(`/ayush/answer?encounter_id=${encounter_id}&concept=${concept}${value ? `&value=${encodeURIComponent(value)}` : ""}`, { method: "POST" }),
 
-  // --- evaluation ---
-  getEvaluationResults: () => request("/evaluation/results"),
-  runEvaluation: () => request("/evaluation/run", { method: "POST" }),
+  // --- auth ---
+  login: (payload: { username: string; password: string }) =>
+    request<{ access_token: string; token_type: string; role: string; username?: string; full_name?: string }>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  // --- admin doctor & patient management ---
+  listDoctors: () => request<import("./types").DoctorAccount[]>("/admin/doctors"),
+  createDoctor: (data: { username: string; password: string; full_name: string }) =>
+    request<import("./types").DoctorAccount>("/admin/doctors", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateDoctor: (id: string, data: { username?: string; password?: string; full_name?: string }) =>
+    request<import("./types").DoctorAccount>(`/admin/doctors/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteDoctor: (id: string) =>
+    request<{ ok: boolean; message: string }>(`/admin/doctors/${id}`, {
+      method: "DELETE",
+    }),
+  listAllPatientsAdmin: () => request<import("./types").AdminPatientRecord[]>("/admin/patients"),
+  deletePatientAdmin: (id: string) =>
+    request<{ ok: boolean; message: string }>(`/admin/patients/${id}`, {
+      method: "DELETE",
+    }),
 
   // --- admin ---
   getAuditLog: () => request("/admin/audit-log"),
   toggleAIStatus: (provider: string) => request(`/admin/ai-status/${provider}/toggle`, { method: "POST" }),
   getAIStatus: () => request("/admin/ai-status"),
 };
+

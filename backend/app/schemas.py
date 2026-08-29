@@ -171,8 +171,32 @@ class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     role: str
+    username: Optional[str] = None
+    full_name: Optional[str] = None
 
 
 class LoginIn(BaseModel):
     username: str
     password: str
+
+
+class DoctorCreate(BaseModel):
+    username: str
+    password: str
+    full_name: str
+
+
+class DoctorUpdate(BaseModel):
+    username: Optional[str] = None
+    password: Optional[str] = None
+    full_name: Optional[str] = None
+
+
+class DoctorOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    username: str
+    full_name: Optional[str] = None
+    role: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None

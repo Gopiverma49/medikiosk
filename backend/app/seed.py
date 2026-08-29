@@ -66,15 +66,24 @@ def seed():
     db = SessionLocal()
     try:
         demo_users = [
-            ("patient", "patient123", Role.PATIENT, "Rahul Kumar (demo patient login)"),
+            ("gopi", "gopi", Role.ADMIN, "Gopi (Administrator)"),
+            ("admin", "admin123", Role.ADMIN, "System Admin (demo)"),
             ("doctor", "doctor123", Role.DOCTOR, "Dr. (demo) Physician"),
             ("triage", "triage123", Role.TRIAGE, "Triage Nurse (demo)"),
-            ("admin", "admin123", Role.ADMIN, "System Admin (demo)"),
+            ("patient", "patient123", Role.PATIENT, "Rahul Kumar (demo patient login)"),
         ]
         for username, password, role, full_name in demo_users:
-            if not db.query(User).filter(User.username == username).first():
+            existing = db.query(User).filter(User.username == username).first()
+            if not existing:
                 db.add(User(username=username, hashed_password=hash_password(password),
                              role=role, full_name=full_name))
+            else:
+                # Update password to ensure it matches
+                existing.hashed_password = hash_password(password)
+                existing.role = role
+                if not existing.full_name:
+                    existing.full_name = full_name
+        db.commit()
 
         for rule_data in DEFAULT_RULES:
             if not db.query(RedFlagRule).filter(RedFlagRule.rule_id == rule_data["rule_id"]).first():

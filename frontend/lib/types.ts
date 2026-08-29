@@ -67,6 +67,28 @@ export interface Contradiction {
   status: "UNRESOLVED" | "RESOLVED";
 }
 
+export interface DoctorAccount {
+  id: string;
+  username: string;
+  full_name?: string | null;
+  role: string;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export interface AdminPatientRecord {
+  id: string;
+  patient_id: string;
+  name: string;
+  phone?: string | null;
+  age?: number | null;
+  gender?: string | null;
+  preferred_language?: string | null;
+  department?: string | null;
+  encounter_count: number;
+  created_at?: string | null;
+}
+
 export interface RedFlagRule {
   id: string;
   rule_id: string;

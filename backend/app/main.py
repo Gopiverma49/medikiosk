@@ -20,15 +20,18 @@ from .routers import (
     contradictions, red_flags, summaries, fhir, evaluation, ayush, admin,
 )
 
+from .seed import seed
+
 settings = get_settings()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # In production, use `alembic upgrade head` instead of create_all().
-    # create_all() is kept here too so `docker compose up` works out of the box
-    # even before migrations have been run.
     Base.metadata.create_all(bind=engine)
+    try:
+        seed()
+    except Exception as e:
+        print("Seed warning on startup:", e)
     yield
 
 
