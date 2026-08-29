@@ -49,9 +49,19 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-6">
-      <div className="text-xs font-mono uppercase tracking-wide text-clinical-teal font-bold mb-1">Admin</div>
-      <h1 className="text-2xl font-bold mb-4">System Configuration</h1>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <a
+          href="/"
+          className="inline-flex items-center gap-2 py-2 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm shadow-sm transition"
+        >
+          ← Back to Portals
+        </a>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-2xl p-6">
+        <div className="text-xs font-mono uppercase tracking-wide text-clinical-teal font-bold mb-1">Admin</div>
+        <h1 className="text-2xl font-bold mb-4">System Configuration</h1>
 
       <div className="flex gap-4 border-b border-slate-200 mb-4 flex-wrap">
         {TABS.map((t) => (
@@ -177,6 +187,7 @@ export default function AdminPage() {
           </table>
         </div>
       )}
+      </div>
     </div>
   );
 }

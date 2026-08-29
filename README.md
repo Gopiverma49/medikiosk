@@ -16,24 +16,61 @@ AI DECIDES → SYSTEM ACCEPTS
 
 ---
 
+## Quick Start (Live Server)
+
+Start the entire platform once in continuous live development mode with instant Hot Module Replacement (HMR) — **no restarts needed when editing code files**:
+
+### Option 1: 1-Click Launcher (Windows)
+Double-click:
+```cmd
+start_medikiosk.bat
+```
+*(Automatically seeds the database, opens the browser, and starts both backend and frontend live servers).*
+
+### Option 2: 1-Command Unified Runner (Terminal)
+```bash
+npm install
+npm run dev
+```
+*(Uses `concurrently` to run the FastAPI backend on Port 8000 and Next.js frontend on Port 3000 with real-time auto-reloading).*
+
+### Option 3: Docker Compose (Live Hot-Reload Stack)
+```bash
+docker compose up
+```
+*(Runs Postgres, FastAPI backend, and Next.js frontend with live volume mounts — file edits reload automatically inside containers).*
+
+---
+
+## Application Portals
+
+Once running, access the portals at:
+- **🏠 Main Launchpad**: [http://localhost:3000](http://localhost:3000)
+- **🏥 Patient Portal**: [http://localhost:3000/patient](http://localhost:3000/patient)
+- **👨‍⚕️ Doctor Portal**: [http://localhost:3000/doctor](http://localhost:3000/doctor)
+- **⚙️ Admin Portal**: [http://localhost:3000/admin](http://localhost:3000/admin)
+- **📖 API Docs (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+---
+
 ## Complete Clinical Patient Kiosk Workflow
 
-The patient-facing kiosk ([`/kiosk`](file:///d:/medikiosk-complete/medikiosk/frontend/app/kiosk/page.tsx)) features an accessible, large-touchscreen interface designed for low-literacy and elderly patients:
+The patient-facing kiosk ([`/patient`](file:///d:/medikiosk/frontend/app/patient/page.tsx)) features an accessible, large-touchscreen interface designed for low-literacy and elderly patients:
 
 1. **Stage 1 — Language & Interaction Mode Selection**:
    - **Languages**: Full bilingual support in **English** and **हिंदी (Hindi)** via a centralized translation framework (`translations/en.json` & `translations/hi.json`).
    - **Interaction Modes**: **TOUCH** (large tactile buttons) or **VOICE** (spoken audio guidance with Web Speech API TTS and listening soundwave feedback).
 2. **Stage 2 — Patient Identification**:
-   - **Scan ID**: Live camera barcode/QR scanner viewfinder with quick 1-click test simulation buttons.
-   - **Enter ID Number**: Touchscreen on-screen numeric keypad enforcing exact 10-digit Patient ID validation.
+   - **Scan ID**: Live camera barcode/QR scanner viewfinder with quick 1-click test simulation buttons and `← Back` option.
+   - **Enter ID Number**: Touchscreen on-screen numeric keypad enforcing exact 10-digit Patient ID validation, `✓ Enter` confirmation, and centered `← Back` navigation.
 3. **Stage 3 — Patient Database Lookup & Confirmation / Registration**:
-   - **Existing Patient**: Displays patient summary (*Name, Age, Gender, Masked Phone*) with explicit confirmation buttons (`[ YES, CONTINUE ]` / `[ NO, ENTER DIFFERENT ID ]`).
-   - **New Patient Registration**: If ID is not found, captures *Full Name, 10-Digit Mobile, Age, and Gender*, validates input, displays a confirmation card, and saves the new record to the database.
+   - **Existing Patient**: Displays patient summary (*Name, Age, Gender, Masked Phone*) with explicit confirmation buttons and `← Back` option.
+   - **New Patient Registration**: If ID is not found, captures *Full Name, 10-Digit Mobile, Age, and Gender*, validates input, displays a confirmation card, and provides seamless `← Back` navigation to edit details or return to ID entry.
 4. **Stage 4 — Previous Treatment History Intelligence**:
-   - **Patient With History**: Choice between **SAME ILLNESS** (viewing past visit date, symptoms, diagnosis, and treatment context) and **NEW ILLNESS**.
+   - **Patient With History**: Choice between **SAME ILLNESS** (viewing past visit date, symptoms, diagnosis, and treatment context) and **NEW ILLNESS**, with `← Back` support.
    - **Patient Without History**: Automatically displays a brief transition notice and skips directly to symptom intake without asking redundant questions.
 5. **Stage 5 — Symptom Collection & Clinical Routing**:
-   - Adaptive SOCRATES questionnaire in the chosen language.
+   - Adaptive SOCRATES questionnaire in the chosen language with question-by-question `← Back` revision.
    - "I don't know" button preserving certainty as `unknown` without false negatives.
    - Document upload/scan option for prior prescriptions, lab reports, or discharge summaries.
    - AI draft summary generation, red-flag triage evaluation, and instant transmission to the Doctor Dashboard.
@@ -62,80 +99,14 @@ The patient-facing kiosk ([`/kiosk`](file:///d:/medikiosk-complete/medikiosk/fro
 
 ---
 
-## Main Real Web Application Portals
+## Development & Validation Commands
 
-The platform is structured into three primary production portals connected to the FastAPI backend and database:
-
-1. **🏥 Patient Intake Kiosk (`/patient` or `/kiosk`)**:
-   - 5-stage patient intake with English & Hindi localization.
-   - Touchscreen numeric keypad with 10-digit validation and live camera QR/barcode scanner.
-   - Database lookup, new patient registration, treatment history branching (*Same vs New Illness*), and adaptive SOCRATES symptom collection.
-2. **👨‍⚕️ Doctor Consultation Workspace (`/doctor` or `/doctor/dashboard`)**:
-   - Real-time patient queue switcher to review any patient record.
-   - Review clinical facts with confidence scores and provenance.
-   - Cross-source contradiction resolution panel with audit trail.
-   - 1-click verification, correction, or rejection of AI clinical summary drafts.
-   - FHIR R4 standard bundle export.
-3. **⚙️ Hospital Admin Console (`/admin`)**:
-   - Red-flag rule editor and validator.
-   - AI precision/recall evaluation benchmark execution against ground-truth datasets.
-   - Real-time clinical audit log inspection.
-
----
-
-## How to Run MediKiosk
-
-### Step 1: Start Backend API (FastAPI + Database)
-```bash
-cd backend
-python -m app.seed          # Seeds demo users, test patients (with/without history) + red-flag rules
-uvicorn app.main:app --reload --port 8000
-```
-- Swagger API Docs: [http://localhost:8000/docs](http://localhost:8000/docs)
-- API Health Check: [http://localhost:8000/api/health](http://localhost:8000/api/health)
-
-### Step 2: Start Frontend Web App (Next.js)
-```bash
-cd frontend
-npm install
-npm run dev
-```
-- **🏠 Main Launchpad**: [http://localhost:3000](http://localhost:3000)
-- **🏥 Patient Portal**: [http://localhost:3000/patient](http://localhost:3000/patient)
-- **👨‍⚕️ Doctor Portal**: [http://localhost:3000/doctor](http://localhost:3000/doctor)
-- **⚙️ Admin Portal**: [http://localhost:3000/admin](http://localhost:3000/admin)
-
-### Docker Compose Stack (Production Mode)
-```bash
-cp .env.example .env
-docker compose up --build
-```
-- Frontend: [http://localhost:3000](http://localhost:3000)
-- Backend: [http://localhost:8000](http://localhost:8000)
-
----
-
-## Project Structure
-
-```
-medikiosk/
-  backend/            FastAPI + SQLAlchemy + Alembic (see docs/ARCHITECTURE.md)
-    app/              models, schemas, routers, services, seed data
-    ai/providers/     pluggable ASR/OCR/NLP/Summary/Translation abstraction layer
-    integrations/     FHIR R4 / ABDM / HIS interoperability layer
-    alembic/          database migrations
-    tests/            Pytest suite (28 unit & integration tests)
-  frontend/           Next.js 14 (App Router) + TypeScript + Tailwind CSS
-    app/              / (Portal Launchpad), /patient, /doctor, /admin
-    components/       KioskKeypad, KioskScanner, KioskStepIndicator, KioskVoiceIndicator, ClinicalComponents
-    lib/              API client, voice service, translation helper, types
-    translations/     en.json, hi.json (centralized localization)
-  evaluation/         Synthetic ground-truth datasets + run_evaluation.py harness
-  sample_data/        Sample synthetic prescription, lab report, discharge summary
-  docs/               Detailed architecture, API, demo walkthrough, and security specs
-  docker-compose.yml
-  .env.example
-```
+| Command | Description |
+| :--- | :--- |
+| **`npm run dev`** | Starts both Backend (Port 8000) and Frontend (Port 3000) with live reload. |
+| **`npm run typecheck`** | Non-destructive TypeScript typecheck without wiping or locking `.next/` cache. |
+| **`npm run seed`** | Reseeds demo users, test patients, and clinical red-flag rules. |
+| **`docker compose up`** | Starts live containerized stack with volume mounts. |
 
 ---
 

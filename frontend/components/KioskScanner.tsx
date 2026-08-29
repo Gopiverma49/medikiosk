@@ -294,7 +294,7 @@ export function KioskScanner({ lang, onDetected, onCancel, onSwitchToManual }: P
           onClick={onCancel}
           className="flex-1 py-4 px-6 border-2 border-slate-300 hover:bg-slate-100 rounded-2xl text-slate-700 font-bold text-lg transition text-center"
         >
-          {t("scanner_cancel", lang)}
+          ← {t("back", lang)}
         </button>
         <button
           type="button"

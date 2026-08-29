@@ -160,25 +160,13 @@ export function KioskKeypad({ lang, onSubmit, onCancel, isLoading }: Props) {
       </div>
 
       {/* Action Buttons */}
-      <div className="flex gap-4">
+      <div className="flex justify-center">
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 py-4 px-6 border-2 border-slate-300 hover:bg-slate-100 rounded-2xl text-slate-700 font-bold text-lg transition text-center"
+          className="py-3 px-10 border-2 border-slate-300 hover:bg-slate-100 rounded-2xl text-slate-700 font-extrabold text-base transition shadow-sm text-center flex items-center justify-center gap-2"
         >
-          {t("scanner_cancel", lang)}
-        </button>
-        <button
-          type="button"
-          disabled={value.length !== 10 || isLoading}
-          onClick={handleSubmit}
-          className={`flex-1 py-4 px-6 rounded-2xl text-white font-extrabold text-lg transition shadow-md text-center ${
-            value.length === 10
-              ? "bg-clinical-blue hover:bg-clinical-blue-deep"
-              : "bg-slate-300 text-slate-500 cursor-not-allowed"
-          }`}
-        >
-          {isLoading ? t("checking_records", lang) : t("continue_btn", lang)}
+          ← {t("back", lang)}
         </button>
       </div>
     </div>

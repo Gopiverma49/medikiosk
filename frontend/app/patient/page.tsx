@@ -162,10 +162,35 @@ export default function PatientPage() {
   };
 
   const goBack = () => {
-    if (historyStack.length === 0) return;
+    if (historyStack.length === 0) {
+      if (step === "patient_register" || step === "patient_confirm") {
+        setStep("id_method");
+      } else if (step === "patient_register_confirm") {
+        setStep("patient_register");
+      } else if (step === "scan_id" || step === "keypad_id") {
+        setStep("id_method");
+      } else if (step === "id_method") {
+        setStep("lang_mode");
+      }
+      return;
+    }
     const prev = historyStack[historyStack.length - 1];
     setHistoryStack((s) => s.slice(0, -1));
     setStep(prev);
+  };
+
+  const goBackToIdEntry = () => {
+    // Return to previous ID step (keypad_id or scan_id or id_method)
+    const prevIdStep = [...historyStack].reverse().find(
+      (s) => s === "keypad_id" || s === "scan_id" || s === "id_method"
+    );
+    if (prevIdStep) {
+      const idx = historyStack.lastIndexOf(prevIdStep);
+      setHistoryStack(historyStack.slice(0, idx));
+      setStep(prevIdStep);
+    } else {
+      setStep("id_method");
+    }
   };
 
   const cancelSession = () => {
@@ -323,7 +348,7 @@ export default function PatientPage() {
   const answerAdaptive = async (concept: string, value: any, certainty: "confirmed" | "unknown", inverse?: boolean) => {
     if (!encounterId) return;
     const finalValue = certainty === "unknown" ? null : inverse ? value === (lang === "hi" ? "नहीं" : "No") : value;
-    
+
     try {
       await api.submitAnswer({
         encounter_id: encounterId,
@@ -377,9 +402,13 @@ export default function PatientPage() {
       {/* Top Header Bar */}
       <header className="max-w-4xl w-full mx-auto flex items-center justify-between pb-4 border-b border-slate-300">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-teal-700 flex items-center justify-center text-white font-black text-xl shadow">
+          <a
+            href="/"
+            className="w-10 h-10 rounded-xl bg-teal-700 hover:bg-teal-800 flex items-center justify-center text-white font-black text-xl shadow transition"
+            title={lang === "hi" ? "मुख्य पृष्ठ" : "Back to Home"}
+          >
             +
-          </div>
+          </a>
           <div>
             <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">
               MediKiosk
@@ -443,22 +472,20 @@ export default function PatientPage() {
                 <button
                   type="button"
                   onClick={() => setLang("en")}
-                  className={`py-5 px-6 rounded-2xl border-4 text-2xl font-black transition transform active:scale-95 shadow-md ${
-                    lang === "en"
+                  className={`py-5 px-6 rounded-2xl border-4 text-2xl font-black transition transform active:scale-95 shadow-md ${lang === "en"
                       ? "border-teal-600 bg-teal-50 text-teal-900 ring-4 ring-teal-200"
                       : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
-                  }`}
+                    }`}
                 >
                   English
                 </button>
                 <button
                   type="button"
                   onClick={() => setLang("hi")}
-                  className={`py-5 px-6 rounded-2xl border-4 text-2xl font-black transition transform active:scale-95 shadow-md ${
-                    lang === "hi"
+                  className={`py-5 px-6 rounded-2xl border-4 text-2xl font-black transition transform active:scale-95 shadow-md ${lang === "hi"
                       ? "border-teal-600 bg-teal-50 text-teal-900 ring-4 ring-teal-200"
                       : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
-                  }`}
+                    }`}
                 >
                   हिंदी
                 </button>
@@ -649,10 +676,17 @@ export default function PatientPage() {
               </button>
               <button
                 type="button"
-                onClick={() => goTo("id_method")}
+                onClick={goBackToIdEntry}
                 className="w-full py-4 border-2 border-slate-300 hover:bg-slate-100 rounded-2xl font-bold text-slate-700 text-base transition"
               >
                 {t("no_different_id", lang)}
+              </button>
+              <button
+                type="button"
+                onClick={goBackToIdEntry}
+                className="w-full py-3 border-2 border-slate-200 hover:bg-slate-100 rounded-xl font-bold text-slate-600 text-sm transition"
+              >
+                ← {t("back", lang)}
               </button>
             </div>
           </div>
@@ -741,17 +775,16 @@ export default function PatientPage() {
                       key={g}
                       type="button"
                       onClick={() => setRegForm({ ...regForm, gender: g })}
-                      className={`py-3 px-4 rounded-xl border-2 font-bold text-base transition ${
-                        regForm.gender === g
+                      className={`py-3 px-4 rounded-xl border-2 font-bold text-base transition ${regForm.gender === g
                           ? "border-teal-600 bg-teal-50 text-teal-900 shadow-sm"
                           : "border-slate-300 bg-white text-slate-700"
-                      }`}
+                        }`}
                     >
                       {g === "Male"
                         ? t("male", lang)
                         : g === "Female"
-                        ? t("female", lang)
-                        : t("other", lang)}
+                          ? t("female", lang)
+                          : t("other", lang)}
                     </button>
                   ))}
                 </div>
@@ -761,10 +794,10 @@ export default function PatientPage() {
             <div className="flex gap-4">
               <button
                 type="button"
-                onClick={goBack}
-                className="flex-1 py-4 border-2 border-slate-300 hover:bg-slate-100 rounded-2xl font-bold text-slate-700 text-lg"
+                onClick={goBackToIdEntry}
+                className="flex-1 py-4 border-2 border-slate-300 hover:bg-slate-100 rounded-2xl font-bold text-slate-700 text-lg transition flex items-center justify-center gap-2"
               >
-                {t("back", lang)}
+                ← {t("back", lang)}
               </button>
               <button
                 type="button"
@@ -827,16 +860,16 @@ export default function PatientPage() {
             <div className="flex gap-4">
               <button
                 type="button"
-                onClick={() => goTo("patient_register")}
-                className="flex-1 py-4 border-2 border-slate-300 hover:bg-slate-100 rounded-2xl font-bold text-slate-700 text-lg"
+                onClick={() => setStep("patient_register")}
+                className="flex-1 py-4 border-2 border-slate-300 hover:bg-slate-100 rounded-2xl font-bold text-slate-700 text-lg transition flex items-center justify-center gap-2"
               >
-                {t("edit", lang)}
+                ← {t("back", lang)}
               </button>
               <button
                 type="button"
                 disabled={isLoading}
                 onClick={saveNewPatientToDB}
-                className="flex-1 py-4 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-extrabold text-lg shadow-lg"
+                className="flex-1 py-4 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-extrabold text-lg shadow-lg transition transform active:scale-95"
               >
                 {isLoading ? t("saving_patient", lang) : t("confirm", lang)}
               </button>
@@ -962,6 +995,13 @@ export default function PatientPage() {
               >
                 {t("new_illness", lang)}
               </button>
+              <button
+                type="button"
+                onClick={goBack}
+                className="w-full py-3 border-2 border-slate-200 hover:bg-slate-100 rounded-xl font-bold text-slate-600 text-sm transition"
+              >
+                ← {t("back", lang)}
+              </button>
             </div>
           </div>
         )}
@@ -979,14 +1019,23 @@ export default function PatientPage() {
               {t("starting_symptoms_auto", lang)}
             </p>
 
-            <button
-              type="button"
-              disabled={isLoading}
-              onClick={() => startEncounterFlow(null)}
-              className="py-5 px-10 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-black text-xl shadow-lg transition transform active:scale-95"
-            >
-              {isLoading ? "..." : t("continue_btn", lang)} →
-            </button>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+              <button
+                type="button"
+                onClick={goBack}
+                className="w-full sm:w-auto py-4 px-8 border-2 border-slate-300 hover:bg-slate-100 rounded-2xl font-bold text-slate-700 text-lg transition"
+              >
+                ← {t("back", lang)}
+              </button>
+              <button
+                type="button"
+                disabled={isLoading}
+                onClick={() => startEncounterFlow(null)}
+                className="w-full sm:w-auto py-5 px-10 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-black text-xl shadow-lg transition transform active:scale-95"
+              >
+                {isLoading ? "..." : t("continue_btn", lang)} →
+              </button>
+            </div>
           </div>
         )}
 
@@ -1002,8 +1051,8 @@ export default function PatientPage() {
                   ? "अपनी पूर्व बीमारी के वर्तमान लक्षणों का वर्णन करें।"
                   : "Describing symptoms for previous condition update."
                 : lang === "hi"
-                ? "कृपया अपनी मुख्य तकलीफ बोलकर या छूकर बताएं।"
-                : "Describe your chief complaint using voice or tap options."}
+                  ? "कृपया अपनी मुख्य तकलीफ बोलकर या छूकर बताएं।"
+                  : "Describe your chief complaint using voice or tap options."}
             </p>
 
             <div className="space-y-4 mb-8">
@@ -1040,6 +1089,14 @@ export default function PatientPage() {
               >
                 {t("type_button", lang)}
               </button>
+
+              <button
+                type="button"
+                onClick={goBack}
+                className="w-full py-3 border-2 border-slate-200 hover:bg-slate-100 rounded-xl font-bold text-slate-600 text-base transition"
+              >
+                ← {t("back", lang)}
+              </button>
             </div>
           </div>
         )}
@@ -1074,15 +1131,31 @@ export default function PatientPage() {
               ))}
             </div>
 
-            <button
-              type="button"
-              onClick={() =>
-                answerAdaptive(ADAPTIVE_QUESTIONS[qIndex].concept, null, "unknown")
-              }
-              className="w-full p-4 border-2 border-dashed border-slate-300 hover:bg-slate-50 rounded-2xl text-slate-500 font-semibold text-center transition"
-            >
-              ❓ {t("dont_know", lang)}
-            </button>
+            <div className="flex gap-4">
+              <button
+                type="button"
+                onClick={() => {
+                  if (qIndex > 0) {
+                    setQIndex((prev) => prev - 1);
+                  } else {
+                    goBack();
+                  }
+                }}
+                className="py-3 px-6 border-2 border-slate-300 hover:bg-slate-100 rounded-xl font-bold text-slate-600 text-base transition"
+              >
+                ← {t("back", lang)}
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  answerAdaptive(ADAPTIVE_QUESTIONS[qIndex].concept, null, "unknown")
+                }
+                className="flex-1 p-3 border-2 border-dashed border-slate-300 hover:bg-slate-50 rounded-xl text-slate-500 font-semibold text-center transition"
+              >
+                ❓ {t("dont_know", lang)}
+              </button>
+            </div>
           </div>
         )}
 
@@ -1123,14 +1196,23 @@ export default function PatientPage() {
               ))}
             </div>
 
-            <button
-              type="button"
-              disabled={isLoading}
-              onClick={finishKioskIntake}
-              className="w-full py-5 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-black text-xl shadow-lg transition transform active:scale-95"
-            >
-              {isLoading ? "..." : t("continue_btn", lang)} →
-            </button>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <button
+                type="button"
+                onClick={goBack}
+                className="flex-1 py-4 px-6 border-2 border-slate-300 hover:bg-slate-100 rounded-2xl font-bold text-slate-700 text-lg transition text-center"
+              >
+                ← {t("back", lang)}
+              </button>
+              <button
+                type="button"
+                disabled={isLoading}
+                onClick={finishKioskIntake}
+                className="flex-1 py-5 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-black text-xl shadow-lg transition transform active:scale-95 text-center"
+              >
+                {isLoading ? "..." : t("continue_btn", lang)} →
+              </button>
+            </div>
           </div>
         )}
 
@@ -1162,6 +1244,13 @@ export default function PatientPage() {
               >
                 ↻ {lang === "hi" ? "नया मरीज शुरू करें" : "Start Next Patient"}
               </button>
+
+              <a
+                href="/"
+                className="block w-full py-3 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl font-bold text-sm transition text-center"
+              >
+                ← {lang === "hi" ? "मुख्य पृष्ठ पर जाएं" : "Back to Portals Home"}
+              </a>
             </div>
           </div>
         )}

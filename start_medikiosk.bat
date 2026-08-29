@@ -1,30 +1,32 @@
 @echo off
 setlocal enabledelayedexpansion
-title MediKiosk Full-Stack Launcher
+title MediKiosk Live Development Server
 
 echo ========================================================
-echo Starting MediKiosk Clinical Intake Platform
+echo   MediKiosk Live Development Platform
 echo ========================================================
+echo.
 
 cd /d "%~dp0"
 
-echo [1/3] Starting Backend API (Port 8000)...
-start "MediKiosk Backend (Port 8000)" powershell -NoExit -Command "cd '%~dp0backend'; python -m app.seed; python -m uvicorn app.main:app --reload --port 8000"
+echo [1/3] Preparing database & seeding demo records...
+cd "%~dp0backend"
+python -m app.seed
+cd "%~dp0"
 
-timeout /t 3 /nobreak >nul
-
-echo [2/3] Starting Frontend Web App (Port 3000)...
-start "MediKiosk Frontend (Port 3000)" powershell -NoExit -Command "cd '%~dp0frontend'; npm run dev"
-
-timeout /t 4 /nobreak >nul
-
-echo [3/3] Opening browser...
+echo.
+echo [2/3] Opening browser at http://localhost:3000 ...
 start http://localhost:3000
 
 echo.
+echo [3/3] Starting Live Hot-Reload Server (Backend + Frontend)...
+echo.
 echo ========================================================
-echo MediKiosk is running!
-echo - Patient Portal: http://localhost:3000/patient
-echo - Doctor Portal:  http://localhost:3000/doctor
-echo - Admin Portal:   http://localhost:3000/admin
+echo   LIVE SERVER ACTIVE!
+echo   * Changes to .tsx, .css, or .py files auto-update instantly.
+echo   * You do NOT need to restart this launcher on code changes.
+echo   * Press Ctrl+C in this window to stop the servers.
 echo ========================================================
+echo.
+
+npm run dev

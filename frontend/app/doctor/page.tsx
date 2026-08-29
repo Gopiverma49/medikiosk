@@ -165,6 +165,16 @@ export default function DoctorPage() {
 
   return (
     <div className="space-y-6">
+      {/* Back navigation & header */}
+      <div className="flex items-center justify-between">
+        <a
+          href="/"
+          className="inline-flex items-center gap-2 py-2 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm shadow-sm transition"
+        >
+          ← Back to Portals
+        </a>
+      </div>
+
       {/* Top Patient Selector Bar */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex-1">
