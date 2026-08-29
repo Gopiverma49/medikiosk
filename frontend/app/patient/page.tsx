@@ -548,14 +548,9 @@ export default function PatientPage() {
         {/* STEP 2: Choose ID Method */}
         {step === "id_method" && (
           <div className="bg-white border-2 border-slate-200 rounded-3xl p-8 md:p-12 shadow-xl text-center">
-            <h2 className="text-3xl md:text-4xl font-black text-slate-900 mb-2">
+            <h2 className="text-3xl md:text-4xl font-black text-slate-900 mb-8">
               {t("id_method_title", lang)}
             </h2>
-            <p className="text-slate-500 mb-8 text-base md:text-lg">
-              {lang === "hi"
-                ? "कृपया आईडी स्कैन करें या स्क्रीन पर 10 अंकों का नंबर दर्ज करें।"
-                : "Choose whether to scan your card or enter your 10-digit ID number."}
-            </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto mb-8">
               <button

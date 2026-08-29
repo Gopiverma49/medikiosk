@@ -78,7 +78,16 @@ export default function SymptomCategoryGrid({
       </div>
 
       {/* Action Footer */}
-      <div className="space-y-3 pt-2">
+      <div className="space-y-4 pt-2">
+        {/* I DON'T KNOW Option */}
+        <button
+          type="button"
+          onClick={onUnknown}
+          className="w-full py-3.5 border-2 border-dashed border-slate-300 hover:bg-slate-100 hover:border-slate-400 rounded-2xl text-slate-600 font-bold text-base transition flex items-center justify-center gap-2"
+        >
+          <span>❓</span> {t("dont_know", lang)} ({lang === "hi" ? "मुझे ठीक से नहीं पता" : "I am not sure / skip"})
+        </button>
+
         <div className="flex gap-4">
           {onBack && (
             <button
@@ -105,15 +114,6 @@ export default function SymptomCategoryGrid({
               : t("continue_btn", lang)}
           </button>
         </div>
-
-        {/* I DON'T KNOW Option */}
-        <button
-          type="button"
-          onClick={onUnknown}
-          className="w-full py-3.5 border-2 border-dashed border-slate-300 hover:bg-slate-100 rounded-2xl text-slate-600 font-bold text-base transition flex items-center justify-center gap-2"
-        >
-          <span>❓</span> {t("dont_know", lang)} ({lang === "hi" ? "मुझे ठीक से नहीं पता" : "I am not sure / skip"})
-        </button>
       </div>
     </div>
   );

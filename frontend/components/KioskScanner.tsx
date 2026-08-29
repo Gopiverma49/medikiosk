@@ -233,7 +233,7 @@ export function KioskScanner({ lang, onDetected, onCancel, onSwitchToManual }: P
             <p className="text-xs text-slate-400 mb-4 max-w-xs">
               {lang === "hi"
                 ? "कैमरा उपलब्ध नहीं होने पर नीचे दिए गए बटन से नंबर दर्ज करें।"
-                : "If camera is in use or unavailable, switch to manual 10-digit keypad."}
+                : "If camera is in use or unavailable, switch to manual keypad."}
             </p>
             <button
               type="button"

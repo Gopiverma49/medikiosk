@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { t, Language } from "../lib/translations";
 
 interface Props {
@@ -12,12 +12,19 @@ interface Props {
 export function KioskKeypad({ lang, onSubmit, onCancel, isLoading }: Props) {
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [keyboardMode, setKeyboardMode] = useState<"numbers" | "letters">("numbers");
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleDigit = (d: string) => {
-    setError(null);
-    if (value.length < 10) {
-      setValue((prev) => prev + d);
+  useEffect(() => {
+    // Focus input for physical keyboard support
+    if (inputRef.current) {
+      inputRef.current.focus();
     }
+  }, []);
+
+  const handleChar = (char: string) => {
+    setError(null);
+    setValue((prev) => prev + char);
   };
 
   const handleBackspace = () => {
@@ -30,21 +37,18 @@ export function KioskKeypad({ lang, onSubmit, onCancel, isLoading }: Props) {
     setValue("");
   };
 
-  const handleSubmit = () => {
-    if (value.length !== 10) {
+  const handleSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanValue = value.trim();
+    if (!cleanValue) {
       setError(t("keypad_invalid", lang));
       return;
     }
-    onSubmit(value);
-  };
-
-  const setSampleId = (sample: string) => {
-    setError(null);
-    setValue(sample);
+    onSubmit(cleanValue);
   };
 
   return (
-    <div className="max-w-xl mx-auto bg-white border-2 border-slate-200 rounded-3xl p-6 md:p-8 shadow-xl">
+    <div className="max-w-2xl mx-auto bg-white border-2 border-slate-200 rounded-3xl p-6 md:p-8 shadow-xl">
       <h2 className="text-2xl md:text-3xl font-extrabold text-slate-800 text-center mb-2">
         {t("keypad_title", lang)}
       </h2>
@@ -52,121 +56,192 @@ export function KioskKeypad({ lang, onSubmit, onCancel, isLoading }: Props) {
         {t("keypad_placeholder", lang)}
       </p>
 
-      {/* ID Display Box */}
-      <div className="bg-slate-900 border-4 border-slate-700 rounded-2xl p-4 text-center mb-4 shadow-inner">
-        <div className="text-4xl md:text-5xl font-mono tracking-widest font-bold text-teal-400 min-h-[56px] flex items-center justify-center">
-          {value ? (
-            <span>{value}</span>
-          ) : (
-            <span className="text-slate-600 font-normal text-2xl md:text-3xl">
-              _ _ _ _ _ _ _ _ _ _
-            </span>
+      {/* ID Display / Direct Input Box */}
+      <form onSubmit={handleSubmit} className="mb-6">
+        <div className="relative bg-slate-900 border-4 border-slate-700 rounded-2xl p-3 md:p-4 shadow-inner flex items-center justify-between">
+          <input
+            ref={inputRef}
+            type="text"
+            value={value}
+            onChange={(e) => {
+              setError(null);
+              setValue(e.target.value.toUpperCase());
+            }}
+            placeholder={lang === "hi" ? "आईडी दर्ज करें..." : "ENTER ID..."}
+            className="w-full bg-transparent text-teal-400 font-mono text-2xl md:text-4xl font-bold tracking-wider placeholder:text-slate-600 outline-none uppercase text-center"
+            autoComplete="off"
+            spellCheck="false"
+          />
+          {value && (
+            <button
+              type="button"
+              onClick={handleClear}
+              className="absolute right-4 p-2 text-slate-400 hover:text-white rounded-lg transition text-sm font-bold"
+              title="Clear"
+            >
+              ✕
+            </button>
           )}
         </div>
-        <div className="text-xs text-slate-400 mt-2 font-mono">
-          {value.length}/10 {lang === "hi" ? "अंक" : "Digits"}
-        </div>
-      </div>
+      </form>
 
       {error && (
-        <div className="bg-red-50 border-2 border-red-300 text-red-700 font-bold p-3 rounded-xl text-center mb-4 text-sm md:text-base">
+        <div className="bg-red-50 border-2 border-red-300 text-red-700 font-bold p-3 rounded-xl text-center mb-6 text-sm md:text-base">
           ⚠ {error}
         </div>
       )}
 
-      {/* Keypad Grid (3x4) */}
-      <div className="grid grid-cols-3 gap-3 md:gap-4 mb-6">
-        {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
-          <button
-            key={digit}
-            type="button"
-            onClick={() => handleDigit(digit)}
-            className="h-16 md:h-20 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 border-2 border-slate-300 rounded-2xl text-2xl md:text-3xl font-black text-slate-800 transition transform active:scale-95 shadow"
-          >
-            {digit}
-          </button>
-        ))}
-
-        {/* Backspace */}
+      {/* Keyboard Mode Tabs for Touch Screen */}
+      <div className="flex gap-2 mb-4 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
         <button
           type="button"
-          onClick={handleBackspace}
-          className="h-16 md:h-20 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 border-2 border-amber-300 rounded-2xl text-xl md:text-2xl font-bold text-amber-900 transition transform active:scale-95 flex items-center justify-center shadow"
-        >
-          ⌫ {lang === "hi" ? "मिटाएं" : "Clear"}
-        </button>
-
-        {/* Zero */}
-        <button
-          type="button"
-          onClick={() => handleDigit("0")}
-          className="h-16 md:h-20 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 border-2 border-slate-300 rounded-2xl text-2xl md:text-3xl font-black text-slate-800 transition transform active:scale-95 shadow"
-        >
-          0
-        </button>
-
-        {/* Submit Checkmark */}
-        <button
-          type="button"
-          disabled={value.length !== 10 || isLoading}
-          onClick={handleSubmit}
-          className={`h-16 md:h-20 rounded-2xl text-xl md:text-2xl font-black transition transform active:scale-95 flex items-center justify-center shadow-lg ${
-            value.length === 10
-              ? "bg-teal-600 hover:bg-teal-700 text-white border-2 border-teal-500"
-              : "bg-slate-200 text-slate-400 border-2 border-slate-300 cursor-not-allowed"
+          onClick={() => setKeyboardMode("numbers")}
+          className={`flex-1 py-2.5 rounded-xl font-bold text-sm md:text-base transition ${
+            keyboardMode === "numbers"
+              ? "bg-white text-teal-900 shadow-md border border-slate-200"
+              : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          {isLoading ? "..." : `✓ ${lang === "hi" ? "पुष्टि" : "Enter"}`}
+          🔢 123 ({lang === "hi" ? "संख्या" : "Numbers"})
+        </button>
+        <button
+          type="button"
+          onClick={() => setKeyboardMode("letters")}
+          className={`flex-1 py-2.5 rounded-xl font-bold text-sm md:text-base transition ${
+            keyboardMode === "letters"
+              ? "bg-white text-teal-900 shadow-md border border-slate-200"
+              : "text-slate-600 hover:text-slate-900"
+          }`}
+        >
+          🔤 ABC ({lang === "hi" ? "अक्षर" : "Letters"})
         </button>
       </div>
 
-      {/* Quick Test Demo Presets for Testing */}
-      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-6">
-        <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 text-center">
-          {lang === "hi" ? "त्वरित परीक्षण नमूना आईडी:" : "Demo Test Patient IDs:"}
-        </div>
-        <div className="grid grid-cols-3 gap-2 text-xs">
-          <button
-            type="button"
-            onClick={() => setSampleId("1000000001")}
-            className="p-2 bg-white border border-slate-300 rounded-lg hover:border-teal-600 font-mono text-center font-bold text-teal-800"
-          >
-            1000000001
-            <span className="block text-[10px] text-slate-500 font-normal">
-              {lang === "hi" ? "(पुराना इतिहास)" : "(With History)"}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setSampleId("1000000002")}
-            className="p-2 bg-white border border-slate-300 rounded-lg hover:border-teal-600 font-mono text-center font-bold text-teal-800"
-          >
-            1000000002
-            <span className="block text-[10px] text-slate-500 font-normal">
-              {lang === "hi" ? "(बिना इतिहास)" : "(No History)"}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setSampleId("9999999999")}
-            className="p-2 bg-white border border-slate-300 rounded-lg hover:border-teal-600 font-mono text-center font-bold text-amber-800"
-          >
-            9999999999
-            <span className="block text-[10px] text-slate-500 font-normal">
-              {lang === "hi" ? "(नया मरीज)" : "(New Patient)"}
-            </span>
-          </button>
-        </div>
-      </div>
+      {/* Number Keypad View */}
+      {keyboardMode === "numbers" && (
+        <div className="grid grid-cols-3 gap-3 md:gap-4 mb-6">
+          {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
+            <button
+              key={digit}
+              type="button"
+              onClick={() => handleChar(digit)}
+              className="h-16 md:h-18 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 border-2 border-slate-300 rounded-2xl text-2xl md:text-3xl font-black text-slate-800 transition transform active:scale-95 shadow"
+            >
+              {digit}
+            </button>
+          ))}
 
-      {/* Action Buttons */}
-      <div className="flex justify-center">
+          {/* Dash / Hyphen */}
+          <button
+            type="button"
+            onClick={() => handleChar("-")}
+            className="h-16 md:h-18 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 border-2 border-slate-300 rounded-2xl text-2xl md:text-3xl font-black text-slate-700 transition transform active:scale-95 shadow"
+          >
+            -
+          </button>
+
+          {/* Zero */}
+          <button
+            type="button"
+            onClick={() => handleChar("0")}
+            className="h-16 md:h-18 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 border-2 border-slate-300 rounded-2xl text-2xl md:text-3xl font-black text-slate-800 transition transform active:scale-95 shadow"
+          >
+            0
+          </button>
+
+          {/* Backspace */}
+          <button
+            type="button"
+            onClick={handleBackspace}
+            className="h-16 md:h-18 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 border-2 border-amber-300 rounded-2xl text-lg md:text-xl font-bold text-amber-900 transition transform active:scale-95 flex items-center justify-center shadow"
+          >
+            ⌫ {lang === "hi" ? "मिटाएं" : "Delete"}
+          </button>
+        </div>
+      )}
+
+      {/* Alphabet Keypad View (QWERTY layout) */}
+      {keyboardMode === "letters" && (
+        <div className="space-y-2 mb-6">
+          {/* Row 1 */}
+          <div className="grid grid-cols-10 gap-1 md:gap-2">
+            {["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"].map((letter) => (
+              <button
+                key={letter}
+                type="button"
+                onClick={() => handleChar(letter)}
+                className="h-12 md:h-14 bg-slate-100 hover:bg-teal-50 active:bg-teal-100 border-2 border-slate-300 hover:border-teal-500 rounded-xl text-lg md:text-xl font-bold text-slate-800 transition transform active:scale-95 shadow-sm"
+              >
+                {letter}
+              </button>
+            ))}
+          </div>
+
+          {/* Row 2 */}
+          <div className="grid grid-cols-9 gap-1 md:gap-2 px-2 md:px-4">
+            {["A", "S", "D", "F", "G", "H", "J", "K", "L"].map((letter) => (
+              <button
+                key={letter}
+                type="button"
+                onClick={() => handleChar(letter)}
+                className="h-12 md:h-14 bg-slate-100 hover:bg-teal-50 active:bg-teal-100 border-2 border-slate-300 hover:border-teal-500 rounded-xl text-lg md:text-xl font-bold text-slate-800 transition transform active:scale-95 shadow-sm"
+              >
+                {letter}
+              </button>
+            ))}
+          </div>
+
+          {/* Row 3 */}
+          <div className="grid grid-cols-9 gap-1 md:gap-2 px-1 md:px-2">
+            <button
+              type="button"
+              onClick={() => handleChar("-")}
+              className="h-12 md:h-14 bg-slate-200 hover:bg-slate-300 border-2 border-slate-300 rounded-xl text-lg md:text-xl font-bold text-slate-700 transition transform active:scale-95 shadow-sm"
+            >
+              -
+            </button>
+            {["Z", "X", "C", "V", "B", "N", "M"].map((letter) => (
+              <button
+                key={letter}
+                type="button"
+                onClick={() => handleChar(letter)}
+                className="h-12 md:h-14 bg-slate-100 hover:bg-teal-50 active:bg-teal-100 border-2 border-slate-300 hover:border-teal-500 rounded-xl text-lg md:text-xl font-bold text-slate-800 transition transform active:scale-95 shadow-sm"
+              >
+                {letter}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={handleBackspace}
+              className="h-12 md:h-14 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 border-2 border-amber-300 rounded-xl text-sm md:text-base font-bold text-amber-900 transition transform active:scale-95 shadow-sm flex items-center justify-center"
+            >
+              ⌫
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Action Controls: Submit & Back */}
+      <div className="flex flex-col sm:flex-row gap-3 justify-between items-center">
         <button
           type="button"
           onClick={onCancel}
-          className="py-3 px-10 border-2 border-slate-300 hover:bg-slate-100 rounded-2xl text-slate-700 font-extrabold text-base transition shadow-sm text-center flex items-center justify-center gap-2"
+          className="w-full sm:w-auto py-3.5 px-8 border-2 border-slate-300 hover:bg-slate-100 rounded-2xl text-slate-700 font-extrabold text-base transition shadow-sm text-center"
         >
           ← {t("back", lang)}
+        </button>
+
+        <button
+          type="button"
+          disabled={!value.trim() || isLoading}
+          onClick={() => handleSubmit()}
+          className={`w-full sm:flex-1 py-3.5 px-8 rounded-2xl text-lg md:text-xl font-black transition transform active:scale-95 flex items-center justify-center shadow-lg ${
+            value.trim()
+              ? "bg-teal-600 hover:bg-teal-700 text-white border-2 border-teal-500 cursor-pointer"
+              : "bg-slate-200 text-slate-400 border-2 border-slate-300 cursor-not-allowed"
+          }`}
+        >
+          {isLoading ? "..." : `✓ ${lang === "hi" ? "पुष्टि करें" : "Enter / Submit"}`}
         </button>
       </div>
     </div>
