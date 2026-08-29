@@ -21,7 +21,6 @@ type FlowStep =
   | "history_check" // Step 4: Same vs New Illness
   | "history_details" // Step 4: Previous Illness Summary
   | "history_auto_skip" // Step 4: No history auto message
-  | "symptoms_intro" // Step 5: Start Symptom Intake
   | "symptoms_adaptive" // Step 5: Adaptive Question Engine
   | "documents_upload" // Step 5: Optional Document Scan
   | "completed"; // Final Done Screen
@@ -49,8 +48,7 @@ export default function PatientPage() {
   });
   const [regErrors, setRegErrors] = useState<Record<string, string>>({});
 
-  // Symptom Questionnaire State
-  const [qIndex, setQIndex] = useState(0);
+  // Loading & Document Status
   const [isLoading, setIsLoading] = useState(false);
   const [docStatus, setDocStatus] = useState<Record<string, string>>({});
 
@@ -80,7 +78,6 @@ export default function PatientPage() {
       case "history_details":
       case "history_auto_skip":
         return 4;
-      case "symptoms_intro":
       case "symptoms_adaptive":
       case "documents_upload":
       case "completed":
@@ -96,7 +93,6 @@ export default function PatientPage() {
     setPatientIdInput("");
     setSelectedIllnessId(null);
     setEncounterId(null);
-    setQIndex(0);
     setDocStatus({});
     setHistoryStack([]);
     setStep("lang_mode");
@@ -347,11 +343,11 @@ export default function PatientPage() {
       setEncounterId(enc.id);
       await api.recordConsent(enc.id, true);
       setIsLoading(false);
-      goTo("symptoms_intro");
+      goTo("symptoms_adaptive");
     } catch (err) {
       console.error("Error creating encounter:", err);
       setIsLoading(false);
-      goTo("symptoms_intro");
+      goTo("symptoms_adaptive");
     }
   };
 
@@ -1054,7 +1050,7 @@ export default function PatientPage() {
         )}
 
         {/* STEP 5: Dynamic Adaptive Symptom Intake Engine */}
-        {(step === "symptoms_intro" || step === "symptoms_adaptive") && (
+        {step === "symptoms_adaptive" && (
           <AdaptiveSymptomEngine
             lang={lang}
             interactionMode={interactionMode}

@@ -1,146 +1,171 @@
-# MediKiosk
+# 🏥 MediKiosk — Smart Multilingual Hospital Intake Platform
 
-AI-powered multilingual clinical patient intake and medical document digitization platform designed for high-density outpatient departments (OPDs) and AYUSH institutions in India.
-
-**This is an AI-assisted clinical intake platform.** It does not diagnose patients, prescribe treatment, replace clinicians, or make autonomous clinical decisions. All AI-generated extractions and summaries are initialized as drafts requiring explicit physician verification.
-
-The central architectural principle enforced throughout the codebase:
-
-```
-AI ASSISTS → SYSTEM VALIDATES → HUMAN VERIFIES → SYSTEM RECORDS
-```
-*Never:*
-```
-AI DECIDES → SYSTEM ACCEPTS
-```
+> **Simple, fast, and accessible digital patient check-in for busy outpatient hospital clinics.**  
+> Supports **English** and **हिंदी (Hindi)** with large touch controls, voice guidance, and smart symptom collection.
 
 ---
 
-## Quick Start (Live Server)
+## 🌟 The Core Principle
 
-Start the entire platform once in continuous live development mode with instant Hot Module Replacement (HMR) — **no restarts needed when editing code files**:
+```mermaid
+flowchart LR
+    A["🤖 AI Collects & Assists"] --> B["⚙️ System Validates & Screens"]
+    B --> C["👨‍⚕️ Doctor Reviews & Verifies"]
+    C --> D["📋 Official Medical Record"]
+    
+    style A fill:#e0f2fe,stroke:#0284c7,stroke-width:2px,color:#0369a1
+    style B fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#92400e
+    style C fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#15803d
+    style D fill:#f1f5f9,stroke:#475569,stroke-width:2px,color:#334155
+```
 
-### Option 1: 1-Click Launcher (Windows)
-Double-click:
+> [!IMPORTANT]
+> **Safety First:** MediKiosk assists patients and doctors by collecting information in advance. It **never** prescribes medicines or replaces the doctor. Every summary and extraction must be confirmed by a licensed physician.
+
+---
+
+## 🚀 How to Start the App (1-Click Setup)
+
+### Option 1: Double-Click the Launcher (Windows)
+Simply double-click:
 ```cmd
 start_medikiosk.bat
 ```
-*(Automatically seeds the database, opens the browser, and starts both backend and frontend live servers).*
+*This opens your browser and starts everything with live auto-refresh enabled.*
 
-### Option 2: 1-Command Unified Runner (Terminal)
+### Option 2: Run in Terminal (Mac / Linux / Windows)
 ```bash
 npm install
 npm run dev
 ```
-*(Uses `concurrently` to run the FastAPI backend on Port 8000 and Next.js frontend on Port 3000 with real-time auto-reloading).*
 
-### Option 3: Docker Compose (Live Hot-Reload Stack)
-```bash
-docker compose up
+---
+
+## 🌐 Quick Access Links
+
+| Portal | URL | Description |
+| :--- | :--- | :--- |
+| **🏠 Portal Launchpad** | [http://localhost:3000](http://localhost:3000) | Choose between Patient, Doctor, and Admin views |
+| **🏥 Patient Kiosk** | [http://localhost:3000/patient](http://localhost:3000/patient) | Touch & voice self check-in station for patients |
+| **👨‍⚕️ Doctor Station** | [http://localhost:3000/doctor](http://localhost:3000/doctor) | Doctor consultation queue, AI summary & verification |
+| **⚙️ Admin Station** | [http://localhost:3000/admin](http://localhost:3000/admin) | Hospital triage rules & accuracy benchmarks |
+| **📖 API Documentation** | [http://localhost:8000/docs](http://localhost:8000/docs) | Interactive backend API testing interface |
+
+---
+
+## 🗺️ Step-by-Step Patient Check-In Journey
+
+```mermaid
+flowchart TD
+    Step1["Step 1: Choose Language & Mode\n(English / Hindi • Touch or Voice)"] --> Step2["Step 2: Enter Patient ID\n(Scan Card OR Type 10-Digit ID)"]
+    
+    Step2 --> Lookup{"Found in\nDatabase?"}
+    
+    Lookup -- "Yes" --> Step3A["Step 3A: Confirm Identity\n(Name, Age, Masked Mobile)"]
+    Lookup -- "No" --> Step3B["Step 3B: Quick Registration\n(Name, Mobile, Age, Gender)"]
+    
+    Step3A --> History{"Has Past Visit\nRecords?"}
+    Step3B --> Step5["Step 5: Dynamic Symptoms Intake"]
+    
+    History -- "Yes" --> Step4["Step 4: Past Illness Choice\n(Same Illness vs New Problem)"]
+    History -- "No" --> Step5
+    Step4 --> Step5
+    
+    Step5 --> Summary["Review & Confirm Symptoms"]
+    Summary --> SafetyCheck{"Urgent Red Flag\nDetected?"}
+    
+    SafetyCheck -- "Yes" --> Alert["⚠️ Show Urgent Medical Alert\n(Notify Triage Nurse)"] --> Done
+    SafetyCheck -- "No" --> Done["Step 6: All Done!\n(Auto-sent to Doctor Dashboard)"]
+    
+    Done --> Reset["⏳ Auto-Resets in 7s for Next Patient"]
+
+    style Step1 fill:#f0fdfa,stroke:#0d9488,stroke-width:2px
+    style Step2 fill:#f0fdfa,stroke:#0d9488,stroke-width:2px
+    style Step3A fill:#f0fdfa,stroke:#0d9488,stroke-width:2px
+    style Step3B fill:#fef3c7,stroke:#d97706,stroke-width:2px
+    style Step4 fill:#f0fdfa,stroke:#0d9488,stroke-width:2px
+    style Step5 fill:#e0f2fe,stroke:#0284c7,stroke-width:2px
+    style Alert fill:#fee2e2,stroke:#dc2626,stroke-width:2px
+    style Done fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+    style Reset fill:#f1f5f9,stroke:#64748b,stroke-width:1px
 ```
-*(Runs Postgres, FastAPI backend, and Next.js frontend with live volume mounts — file edits reload automatically inside containers).*
 
 ---
 
-## Application Portals
+## 🎯 Key Features Explained Simply
 
-Once running, access the portals at:
-- **🏠 Main Launchpad**: [http://localhost:3000](http://localhost:3000)
-- **🏥 Patient Portal**: [http://localhost:3000/patient](http://localhost:3000/patient)
-- **👨‍⚕️ Doctor Portal**: [http://localhost:3000/doctor](http://localhost:3000/doctor)
-- **⚙️ Admin Portal**: [http://localhost:3000/admin](http://localhost:3000/admin)
-- **📖 API Docs (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)
+### 1. 🗣️ Continuous Spoken Voice Guidance
+- When the patient chooses **VOICE**, the kiosk gently speaks instructions in their language (English or Hindi) at **every step**.
+- If voice recognition is noisy, the patient can simply tap the screen at any time.
 
----
+### 2. ⚡ Adaptive Symptom Collection (No Long Forms)
+- Instead of showing a giant medical form, the kiosk asks:  
+  **"Select the problem that best describes why you are visiting today."**
+- The system automatically asks follow-up questions based on the complaint:
+  - **Fever:** How many days? Any chills, body pain, or cough?
+  - **Pain:** Interactive body area picker (Head, Chest, Abdomen, Arm, Leg), 0–10 pain scale, duration.
+  - **Eye Problem:** Left, right, or both eyes? Redness, watering, or blurred vision?
+  - **Injury:** What happened (fall, cut, burn, accident)? Any active bleeding?
+  - **Animal Bite:** Dog, cat, monkey? Did it break the skin? (Alerts staff immediately if Rabies shots are needed).
+  - **Other Problem:** Speak or type freely in your own words.
 
-## Complete Clinical Patient Kiosk Workflow
+### 3. ❓ Always Allows "I Don't Know"
+- Patients are never forced to guess. Every question has an **"I don't know"** button. The system saves it honestly as unknown rather than making up answers.
 
-The patient-facing kiosk ([`/patient`](file:///d:/medikiosk/frontend/app/patient/page.tsx)) features an accessible, large-touchscreen interface designed for low-literacy and elderly patients:
+### 4. 🚨 Automatic Safety Screening
+- If dangerous symptoms are reported (e.g. chest pain spreading to the arm, dog bite with bleeding, severe breathing difficulty), the kiosk shows an **Urgent Medical Advisory** prompting the patient to inform hospital staff right away.
 
-1. **Stage 1 — Language & Interaction Mode Selection**:
-   - **Languages**: Full bilingual support in **English** and **हिंदी (Hindi)** via a centralized translation framework (`translations/en.json` & `translations/hi.json`).
-   - **Interaction Modes**: **TOUCH** (large tactile buttons) or **VOICE** (spoken audio guidance with Web Speech API TTS and listening soundwave feedback).
-2. **Stage 2 — Patient Identification**:
-   - **Scan ID**: Live camera barcode/QR scanner viewfinder with quick 1-click test simulation buttons and `← Back` option.
-   - **Enter ID Number**: Touchscreen on-screen numeric keypad enforcing exact 10-digit Patient ID validation, `✓ Enter` confirmation, and centered `← Back` navigation.
-3. **Stage 3 — Patient Database Lookup & Confirmation / Registration**:
-   - **Existing Patient**: Displays patient summary (*Name, Age, Gender, Masked Phone*) with explicit confirmation buttons and `← Back` option.
-   - **New Patient Registration**: If ID is not found, captures *Full Name, 10-Digit Mobile, Age, and Gender*, validates input, displays a confirmation card, and provides seamless `← Back` navigation to edit details or return to ID entry.
-4. **Stage 4 — Previous Treatment History Intelligence**:
-   - **Patient With History**: Choice between **SAME ILLNESS** (viewing past visit date, symptoms, diagnosis, and treatment context) and **NEW ILLNESS**, with `← Back` support.
-   - **Patient Without History**: Automatically displays a brief transition notice and skips directly to symptom intake without asking redundant questions.
-5. **Stage 5 — Symptom Collection & Clinical Routing**:
-   - Adaptive SOCRATES questionnaire in the chosen language with question-by-question `← Back` revision.
-   - "I don't know" button preserving certainty as `unknown` without false negatives.
-   - Document upload/scan option for prior prescriptions, lab reports, or discharge summaries.
-   - AI draft summary generation, red-flag triage evaluation, and instant transmission to the Doctor Dashboard.
+### 5. ⏱️ Smart Kiosk Timers
+- **7-Second Auto-Reset:** When intake finishes, the screen shows a 7-second countdown and resets automatically for the next person in line.
+- **30-Second Inactivity Reset:** If a patient walks away midway, the screen refreshes back to the start page after 30 seconds of inactivity to protect privacy.
 
 ---
 
-## Core System Modules
+## 🧪 Demo Test Patient Accounts
 
-- **Multimodal History Engine (Module A)**: Dual-mode voice and touchscreen interview engine with adaptive clinical branching.
-- **AYUSH Clinical Pathway**: Specialized Ayurvedic history intake capturing the **Dashavidha Pariksha** (Prakriti, Vikriti, Sara, Samhanana, Pramana, Satmya, Sattva, Ahara Shakti, Vyayama Shakti, Vaya), Ahara-Vihara, Agni, Koshtha, and Samprapti.
-- **Medical Document Intelligence (Module B)**: Digitization and OCR pipeline extracting structured medications, dosages, lab investigation results with reference ranges, and past medical history.
-- **Contradiction & Conflict Engine**: Automatically detects cross-source discrepancies (e.g., patient reports "no current medications" while scanned prescription lists active medications).
-- **Configurable Red-Flag Triage**: Evaluates emergency symptoms (e.g., acute chest pain with dyspnea/sweating/radiation) and triggers priority triage alerts before routine consultation.
-- **Physician Clinical Summary (Module C)**: Synthesizes conversational history, digitized documents, and lab findings into a standard structured summary with 1-click physician verification, editing, and correction.
-- **DPDP Act 2023 & ABDM/FHIR Integration (Module D)**: Audio-guided granular patient consent, ABHA ID linking, and FHIR R4 Bundle exports.
+Try these pre-made test IDs on the kiosk keypad:
 
----
-
-## Test Patient Accounts & Scenarios
-
-| Patient ID | Name | Age / Gender | Treatment History | Expected Kiosk Flow |
-| :--- | :--- | :--- | :--- | :--- |
-| **`1000000001`** | Rahul Kumar | 42, Male | **Yes** (Fever & Viral Infection, 12 Aug 2026) | Existing Patient → `[ SAME ILLNESS ]` / `[ NEW ILLNESS ]` prompt |
-| **`1000000002`** | Priya Sharma | 30, Female | **None** | Existing Patient → Automatically skips to Symptom Collection |
-| **`9999999999`** | *(New)* | *(Any)* | **None** | ID Not Found → Registration Form → Save → Symptom Collection |
+| Patient ID | Patient Name | Past History | What Happens in the Kiosk? |
+| :--- | :--- | :--- | :--- |
+| **`1000000001`** | **Rahul Kumar** (42M) | **Yes** (Fever & Viral Infection) | Prompts: *"Continue previous illness or start a new problem?"* |
+| **`1000000002`** | **Priya Sharma** (30F) | **None** | Confirms identity and moves directly to symptom collection. |
+| **`9999999999`** | *(New Patient)* | **None** | ID not found → Opens 1-minute registration form → Saves new record. |
 
 ---
 
-## Development & Validation Commands
+## 👨‍⚕️ What the Doctor Sees
 
-| Command | Description |
+When the patient finishes at the kiosk, their record appears instantly on the **Doctor Station**:
+
+```mermaid
+flowchart LR
+    A["Patient Completes Kiosk"] --> B["Doctor Queue Updates Live"]
+    B --> C["Review AI Intake Summary\n(Complaints, Pain Score, History)"]
+    C --> D["Check Safety Alerts &\nContradiction Warnings"]
+    D --> E["1-Click Verify, Edit,\nor Add Prescription"]
+    
+    style A fill:#e0f2fe,stroke:#0284c7,stroke-width:2px
+    style B fill:#fef3c7,stroke:#d97706,stroke-width:2px
+    style C fill:#f0fdfa,stroke:#0d9488,stroke-width:2px
+    style D fill:#fee2e2,stroke:#dc2626,stroke-width:2px
+    style E fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+```
+
+- **Conflict Detection:** Warns the doctor if the patient says they take no medicines, but an uploaded prescription shows active pills.
+- **1-Click Review:** The doctor can approve the intake with one click or edit any detail during consultation.
+
+---
+
+## 🛠️ Helpful Commands for Developers
+
+| Action | Command |
 | :--- | :--- |
-| **`npm run dev`** | Starts both Backend (Port 8000) and Frontend (Port 3000) with live reload. |
-| **`npm run typecheck`** | Non-destructive TypeScript typecheck without wiping or locking `.next/` cache. |
-| **`npm run seed`** | Reseeds demo users, test patients, and clinical red-flag rules. |
-| **`docker compose up`** | Starts live containerized stack with volume mounts. |
+| **Start Everything (Live Dev)** | `npm run dev` |
+| **Check Code for Errors** | `npm run typecheck` |
+| **Reset Demo Database** | `npm run seed` |
+| **Run Automated Tests** | `cd backend && pytest -v` |
 
 ---
 
-## Testing & Evaluation
-
-### Run Backend Tests (Pytest)
-```bash
-cd backend
-pytest -v
-```
-*(Executes 28 automated unit & integration tests covering kiosk lookup/registration/history branching, AI fallbacks, contradiction detection, red-flag triggers, verification state machines, and FHIR export).*
-
-### Run AI Evaluation Benchmark
-```bash
-python evaluation/run_evaluation.py
-```
-*(Evaluates precision, recall, and F1 across symptom extraction, multilingual normalization, medication/allergy extraction, and red-flag sensitivity; outputs `evaluation/results.json` and `evaluation/report.html`).*
-
----
-
-## Demo Credentials (Staff)
-
-Seeded synthetic test accounts:
-- **Doctor**: `doctor` / `doctor123` *(role: DOCTOR)*
-- **Patient**: `patient` / `patient123` *(role: PATIENT)*
-- **Triage Nurse**: `triage` / `triage123` *(role: TRIAGE)*
-- **Administrator**: `admin` / `admin123` *(role: ADMIN)*
-
----
-
-## Documentation Links
-
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — System architecture, clinical data model, verification state machines, contradiction engine.
-- [docs/API.md](docs/API.md) — Complete REST API endpoint reference.
-- [docs/DEMO.md](docs/DEMO.md) — Step-by-step 22-stage acceptance criteria walkthrough.
-- [docs/SECURITY.md](docs/SECURITY.md) — DPDP Act 2023 compliance, RBAC, session management, and audit logging.
-- [docs/EVALUATION.md](docs/EVALUATION.md) — Benchmark methodology and ground-truth validation.
+## 🔒 Privacy & Safety Notice
+MediKiosk is designed following Indian healthcare digital standards (ABDM, FHIR R4, and DPDP Act 2023). All test data in this demo is synthetic and safe for demonstration purposes.
