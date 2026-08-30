@@ -4,12 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Patient, Encounter, Consent, TreatmentRecord
+from ..models import Patient, Encounter, Consent, TreatmentRecord, ClinicalFact, ClinicalSummary
 from ..schemas import (
     PatientCreate, PatientOut, EncounterCreate, EncounterOut, ConsentCreate,
     PatientLookupIn, TreatmentRecordOut,
 )
 from ..services.audit import log_event
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/api", tags=["patients"])
 
@@ -20,6 +21,115 @@ def _get_patient(db: Session, identifier: str) -> Optional[Patient]:
     return db.query(Patient).filter((Patient.id == clean_id) | (Patient.patient_id == clean_id)).first()
 
 
+def _clean_str_value(val) -> str:
+    if val is None or val is True or val is False:
+        return ""
+    if isinstance(val, dict):
+        return str(val.get("displayLabel") or val.get("name") or val.get("mainLocation") or "").strip()
+    if isinstance(val, list):
+        items = [_clean_str_value(x) for x in val if x not in (True, False, None)]
+        return ", ".join(i for i in items if i)
+    s = str(val).strip()
+    if s.lower() in ("true", "false", "none", "null", "undefined"):
+        return ""
+    if s.startswith("{") and s.endswith("}"):
+        import ast, json
+        try:
+            d = json.loads(s.replace("'", '"'))
+            if isinstance(d, dict):
+                return str(d.get("displayLabel") or d.get("name") or d.get("mainLocation") or "").strip()
+        except Exception:
+            try:
+                d = ast.literal_eval(s)
+                if isinstance(d, dict):
+                    return str(d.get("displayLabel") or d.get("name") or d.get("mainLocation") or "").strip()
+            except Exception:
+                pass
+    if s.startswith("[") and s.endswith("]"):
+        import ast
+        try:
+            parsed = ast.literal_eval(s)
+            if isinstance(parsed, (list, tuple)):
+                items = [_clean_str_value(x) for x in parsed if x not in (True, False, None)]
+                return ", ".join(i for i in items if i)
+        except Exception:
+            pass
+    if "_" in s:
+        s = s.replace("_", " ").title()
+    return s
+
+
+def _get_combined_patient_treatments(db: Session, patient: Patient) -> list:
+    """Retrieve all past medical records with clean structured symptoms, duration, and dates."""
+    # 1. Fetch explicit TreatmentRecords directly
+    records = db.query(TreatmentRecord).filter(TreatmentRecord.patient_id == patient.id).order_by(TreatmentRecord.created_at.desc()).all()
+    out = list(records)
+
+    # 2. Also check past completed or documented Encounters for this patient
+    encounters = db.query(Encounter).filter(Encounter.patient_id == patient.id).order_by(Encounter.created_at.desc()).all()
+
+    existing_illness_keys = {
+        f"{(r.illness_name or '').strip().lower()}_{(r.visit_date or '').strip().lower()}"
+        for r in out
+    }
+
+    for enc in encounters:
+        summary = db.query(ClinicalSummary).filter(ClinicalSummary.encounter_id == enc.id).first()
+        facts = db.query(ClinicalFact).filter(ClinicalFact.encounter_id == enc.id).all()
+        
+        if not summary and not facts:
+            continue
+
+        # Extract duration
+        onset_fact = next((f for f in facts if f.concept == "symptom_onset" and f.label), None)
+        duration_str = _clean_str_value(onset_fact.label if onset_fact else "")
+        if not duration_str:
+            duration_str = "1–3 days"
+
+        # Extract meaningful symptoms (filtering out booleans, duration, JSON artifacts)
+        symptom_items = []
+        for f in facts:
+            if f.concept in ("symptom_onset", "consent", "encounter_mode"):
+                continue
+            cleaned = _clean_str_value(f.label or f.value)
+            if not cleaned or cleaned.lower() in ("true", "false", "yes", "no", "none", "general medical evaluation"):
+                if f.concept in ("fever", "sweating", "dyspnea", "active_bleeding", "chest_pain") and f.value is True:
+                    cleaned = f.concept.replace("_", " ").title()
+                else:
+                    continue
+            if cleaned and cleaned not in symptom_items:
+                symptom_items.append(cleaned)
+
+        if not symptom_items:
+            cc_raw = next((f.label for f in facts if f.concept == "chief_complaint"), None)
+            cleaned_cc = _clean_str_value(cc_raw)
+            symptom_items = [cleaned_cc] if cleaned_cc else ["General Consultation"]
+
+        symptoms_str = ", ".join(symptom_items[:4])
+        illness_name = symptom_items[0] if symptom_items else "Medical Consultation"
+        visit_date_str = enc.created_at.strftime("%d %b %Y") if enc.created_at else "Recent Visit"
+        
+        record_key = f"{illness_name.strip().lower()}_{visit_date_str.strip().lower()}"
+        if record_key in existing_illness_keys:
+            continue
+        existing_illness_keys.add(record_key)
+        
+        out.append(TreatmentRecord(
+            id=enc.id,
+            patient_id=patient.id,
+            illness_id=f"VISIT_{enc.id[:8].upper()}",
+            illness_name=illness_name,
+            symptoms=symptoms_str,
+            diagnosis=f"Duration: {duration_str}",
+            treatment="OPD Consultation",
+            visit_date=visit_date_str,
+            created_at=enc.created_at or datetime.now(timezone.utc),
+        ))
+
+    out.sort(key=lambda r: r.created_at or datetime.min, reverse=True)
+    return out
+
+
 @router.post("/patients/lookup", response_model=dict)
 def lookup_patient(payload: PatientLookupIn, db: Session = Depends(get_db)):
     """Search for a patient by 10-digit Patient ID."""
@@ -27,7 +137,7 @@ def lookup_patient(payload: PatientLookupIn, db: Session = Depends(get_db)):
     if not patient:
         return {"found": False, "patient": None}
     
-    treatments = db.query(TreatmentRecord).filter(TreatmentRecord.patient_id == patient.id).order_by(TreatmentRecord.created_at.desc()).all()
+    treatments = _get_combined_patient_treatments(db, patient)
     
     return {
         "found": True,
@@ -43,7 +153,7 @@ def get_patient_treatments(patient_id: str, db: Session = Depends(get_db)):
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
     
-    return db.query(TreatmentRecord).filter(TreatmentRecord.patient_id == patient.id).order_by(TreatmentRecord.created_at.desc()).all()
+    return _get_combined_patient_treatments(db, patient)
 
 
 @router.post("/patients", response_model=PatientOut)

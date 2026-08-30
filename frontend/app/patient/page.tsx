@@ -25,6 +25,21 @@ type FlowStep =
   | "documents_upload" // Step 5: Optional Document Scan
   | "completed"; // Final Done Screen
 
+function cleanSymptomText(str: string): string {
+  if (!str) return "";
+  return str
+    .replace(/\{.*?['"]displayLabel['"]:\s*['"](.*?)['"].*?\}/g, "$1")
+    .replace(/\[\s*['"](.*?)['"]\s*\]/g, "$1")
+    .replace(/\(\s*\[.*?\]\s*\)/g, "")
+    .replace(/\(\s*['"](.*?)['"]\s*\)/g, "($1)")
+    .replace(/_/g, " ")
+    .replace(/\b(true|false|none|null|undefined)\b/gi, "")
+    .replace(/,\s*,/g, ",")
+    .replace(/^\s*,\s*|\s*,\s*$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export default function PatientPage() {
   // Session State
   const [lang, setLang] = useState<Language>("en");
@@ -280,12 +295,12 @@ export default function PatientPage() {
       if (pastTreatments.length > 0) {
         goTo("history_check");
       } else {
-        goTo("history_auto_skip");
+        await startEncounterFlow(null, patient);
       }
     } catch (err) {
       console.error("Error fetching treatments:", err);
       setIsLoading(false);
-      goTo("history_auto_skip");
+      await startEncounterFlow(null, patient);
     }
   };
 
@@ -327,8 +342,7 @@ export default function PatientPage() {
       });
       setPatient(created);
       setTreatments([]);
-      setIsLoading(false);
-      goTo("history_auto_skip");
+      await startEncounterFlow(null, created);
     } catch (err: any) {
       console.error("Error creating patient:", err);
       setIsLoading(false);
@@ -337,20 +351,38 @@ export default function PatientPage() {
   };
 
   // 4. Handle Treatment History Branching
-  const startEncounterFlow = async (prevIllnessId: string | null = null) => {
-    if (!patient) return;
+  const startEncounterFlow = async (
+    prevIllnessId: string | null = null,
+    currentPatient?: Patient | null,
+    skipSymptoms: boolean = false
+  ) => {
+    const targetPatient = currentPatient || patient;
+    if (!targetPatient) return;
     setIsLoading(true);
     try {
       setSelectedIllnessId(prevIllnessId);
-      const enc = await api.createEncounter(patient.id, "general", prevIllnessId || undefined);
+      const enc = await api.createEncounter(targetPatient.id, "general", prevIllnessId || undefined);
       setEncounterId(enc.id);
       await api.recordConsent(enc.id, true);
-      setIsLoading(false);
-      goTo("symptoms_adaptive");
+
+      if (skipSymptoms && prevIllnessId) {
+        // Auto-generate clinical summary from chosen continuing illness
+        try {
+          await api.generateSummary(enc.id);
+        } catch (e) {
+          console.warn("Auto-summary error:", e);
+        }
+        setIsLoading(false);
+        // Jump directly to documents upload (or token generation)
+        goTo("documents_upload");
+      } else {
+        setIsLoading(false);
+        goTo("symptoms_adaptive");
+      }
     } catch (err) {
       console.error("Error creating encounter:", err);
       setIsLoading(false);
-      goTo("symptoms_adaptive");
+      goTo(skipSymptoms ? "documents_upload" : "symptoms_adaptive");
     }
   };
 
@@ -909,10 +941,12 @@ export default function PatientPage() {
               📋
             </div>
             <h2 className="text-2xl md:text-3xl font-black text-slate-900 mb-2">
-              {t("previous_records_found", lang)}
+              {lang === "hi" ? "आपके पुराने रिकॉर्ड उपलब्ध हैं" : "Previous Medical Records Found"}
             </h2>
             <p className="text-slate-500 text-base md:text-lg mb-8">
-              {t("continue_illness_prompt", lang)}
+              {lang === "hi"
+                ? "क्या आप अपनी पुरानी बीमारी के लिए आए हैं या कोई नई समस्या है?"
+                : "Are you visiting for a previous illness or a new problem?"}
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -923,24 +957,24 @@ export default function PatientPage() {
               >
                 <div className="text-4xl mb-3">🔄</div>
                 <div className="text-2xl font-black text-teal-950 mb-1">
-                  {t("same_illness", lang)}
+                  {lang === "hi" ? "वही पुरानी बीमारी" : "Continuing Past Illness"}
                 </div>
-                <div className="text-xs text-teal-800 font-semibold">
-                  {treatments[0].illness_name} ({treatments[0].visit_date || "Past Visit"})
+                <div className="text-xs text-teal-800 font-bold mt-1">
+                  {treatments.length} {lang === "hi" ? "रिकॉर्ड उपलब्ध" : "past record(s) available"}
                 </div>
               </button>
 
               <button
                 type="button"
-                onClick={() => startEncounterFlow(null)}
+                onClick={() => startEncounterFlow(null, patient, false)}
                 className="p-8 bg-slate-50 hover:bg-slate-100 border-4 border-slate-300 hover:border-slate-500 rounded-3xl text-left transition transform hover:-translate-y-1 active:scale-95 shadow-lg group"
               >
                 <div className="text-4xl mb-3">✨</div>
                 <div className="text-2xl font-black text-slate-900 mb-1">
-                  {t("new_illness", lang)}
+                  {lang === "hi" ? "नई बीमारी / समस्या" : "New Problem"}
                 </div>
-                <div className="text-xs text-slate-500 font-semibold">
-                  {lang === "hi" ? "नई समस्या या लक्षण" : "Start fresh consultation"}
+                <div className="text-xs text-slate-500 font-semibold mt-1">
+                  {lang === "hi" ? "नए लक्षण बताएं" : "Start fresh intake for new symptoms"}
                 </div>
               </button>
             </div>
@@ -955,77 +989,97 @@ export default function PatientPage() {
           </div>
         )}
 
-        {/* STEP 4B: Previous Illness Summary */}
+        {/* STEP 4B: Select from Past Illnesses (Keywords + Date) */}
         {step === "history_details" && treatments.length > 0 && (
-          <div className="max-w-xl mx-auto bg-white border-2 border-slate-200 rounded-3xl p-8 shadow-xl">
-            <h2 className="text-2xl md:text-3xl font-black text-slate-900 text-center mb-2">
-              {t("prev_illness_title", lang)}
-            </h2>
-            <p className="text-slate-500 text-center mb-6 text-sm">
-              {t("continue_with_this_illness_q", lang)}
-            </p>
-
-            <div className="bg-slate-50 border-2 border-teal-200 rounded-2xl p-6 text-left mb-8 shadow-inner space-y-3 font-sans">
-              <div>
-                <span className="text-xs font-bold uppercase text-slate-400 block">
-                  {t("illness_label", lang)}
-                </span>
-                <span className="text-lg font-black text-teal-900">
-                  {treatments[0].illness_name}
-                </span>
-              </div>
-              <div>
-                <span className="text-xs font-bold uppercase text-slate-400 block">
-                  {t("prev_visit_label", lang)}
-                </span>
-                <span className="text-sm font-semibold text-slate-700">
-                  {treatments[0].visit_date || "Recent"}
-                </span>
-              </div>
-              {treatments[0].symptoms && (
-                <div>
-                  <span className="text-xs font-bold uppercase text-slate-400 block">
-                    {t("prev_symptoms_label", lang)}
-                  </span>
-                  <span className="text-sm font-medium text-slate-800">
-                    {treatments[0].symptoms}
-                  </span>
-                </div>
-              )}
-              {treatments[0].treatment && (
-                <div>
-                  <span className="text-xs font-bold uppercase text-slate-400 block">
-                    {t("prev_treatment_label", lang)}
-                  </span>
-                  <span className="text-sm font-medium text-slate-800">
-                    {treatments[0].treatment}
-                  </span>
-                </div>
-              )}
+          <div className="max-w-2xl mx-auto bg-white border-2 border-slate-200 rounded-3xl p-8 md:p-10 shadow-xl">
+            <div className="text-center mb-6">
+              <span className="text-xs font-bold uppercase tracking-widest text-teal-700 bg-teal-50 px-3 py-1 rounded-full border border-teal-200 inline-block mb-2">
+                {lang === "hi" ? "पिछली बीमारी चुनें" : "SELECT PREVIOUS ILLNESS"}
+              </span>
+              <h2 className="text-2xl md:text-3xl font-black text-slate-900 mb-2">
+                {lang === "hi" ? "अपनी पिछली बीमारी चुनें" : "Choose Your Continuing Illness"}
+              </h2>
+              <p className="text-slate-500 text-sm">
+                {lang === "hi"
+                  ? "नीचे दिए गए रिकॉर्ड में से चुनें (लक्षण पूछे बिना डॉक्टर को भेजा जाएगा):"
+                  : "Tap your past condition to continue (symptoms step will be skipped):"}
+              </p>
             </div>
 
-            <div className="space-y-4">
+            {/* List of past records in simple keywords: Symptoms first, Duration/Days second, Info third, Date last */}
+            <div className="space-y-3.5 mb-8 max-h-[380px] overflow-y-auto pr-1">
+              {treatments.map((tr, idx) => {
+                const cleanName = cleanSymptomText(tr.illness_name || "");
+                const cleanSym = cleanSymptomText(tr.symptoms || "");
+                const displaySymptoms = cleanSym && cleanSym !== "None reported" && cleanSym !== cleanName
+                  ? `${cleanName} • ${cleanSym}`
+                  : cleanName || "General Symptoms";
+                const cleanDiag = cleanSymptomText(tr.diagnosis || "");
+                const durationLabel = cleanDiag.includes("Duration:")
+                  ? cleanDiag.replace("Duration:", "").trim()
+                  : "1–3 days";
+                const shortInfo = cleanSymptomText(tr.treatment || "OPD Consultation");
+
+                return (
+                  <button
+                    key={tr.id || idx}
+                    type="button"
+                    disabled={isLoading}
+                    onClick={() => startEncounterFlow(tr.illness_id, patient, true)}
+                    className="w-full text-left p-5 rounded-2xl border-2 border-slate-200 hover:border-teal-600 bg-white hover:bg-teal-50/50 transition transform active:scale-[0.99] shadow-xs hover:shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4 group"
+                  >
+                    <div className="space-y-2 flex-1">
+                      {/* 1. SYMPTOMS FIRST (Bold, prominent) */}
+                      <div>
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-0.5">
+                          {lang === "hi" ? "लक्षण" : "Symptoms"}
+                        </span>
+                        <div className="text-lg font-black text-slate-900 group-hover:text-teal-950 leading-snug">
+                          🩺 {displaySymptoms}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                        {/* 2. DAYS / DURATION SECOND */}
+                        <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-teal-50 text-teal-800 border border-teal-200">
+                          ⏱️ {durationLabel}
+                        </span>
+
+                        {/* 3. REST INFORMATION IN SHORT (Third) */}
+                        <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-200">
+                          💊 {shortInfo}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* 4. DATE LAST (Crisp badge on the right/bottom) */}
+                    <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100 flex-shrink-0">
+                      <span className="text-xs font-bold font-mono px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs">
+                        📅 {tr.visit_date || "Past Visit"}
+                      </span>
+                      <span className="text-xs font-extrabold text-teal-700 group-hover:underline flex items-center gap-1">
+                        {lang === "hi" ? "चुनें" : "Select"} ›
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
               <button
                 type="button"
-                disabled={isLoading}
-                onClick={() => startEncounterFlow(treatments[0].illness_id)}
-                className="w-full py-5 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-black text-xl shadow-lg transition transform active:scale-95"
-              >
-                {isLoading ? t("checking_records", lang) : t("yes_continue", lang)}
-              </button>
-              <button
-                type="button"
-                onClick={() => startEncounterFlow(null)}
-                className="w-full py-4 border-2 border-slate-300 hover:bg-slate-100 rounded-2xl font-bold text-slate-700 text-base transition"
-              >
-                {t("new_illness", lang)}
-              </button>
-              <button
-                type="button"
-                onClick={goBack}
-                className="w-full py-3 border-2 border-slate-200 hover:bg-slate-100 rounded-xl font-bold text-slate-600 text-sm transition"
+                onClick={() => goTo("history_check")}
+                className="flex-1 py-3.5 border-2 border-slate-300 hover:bg-slate-100 rounded-xl font-bold text-slate-700 text-sm transition"
               >
                 ← {t("back", lang)}
+              </button>
+              <button
+                type="button"
+                onClick={() => startEncounterFlow(null, patient, false)}
+                className="flex-1 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl font-bold text-sm transition"
+              >
+                {lang === "hi" ? "नई समस्या के लिए देखें" : "Visiting for a New Problem"}
               </button>
             </div>
           </div>

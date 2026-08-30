@@ -44,6 +44,17 @@ interface ParsedClinicalSummary {
   investigations: string;
 }
 
+function cleanSymptomText(str: string): string {
+  if (!str) return "None reported";
+  return str
+    .replace(/\[\s*['"](.*?)['"]\s*\]/g, "$1")
+    .replace(/\(\s*\[.*?\]\s*\)/g, "")
+    .replace(/\(\s*['"](.*?)['"]\s*\)/g, "($1)")
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function parseStructuredSummary(rawText: string): ParsedClinicalSummary {
   const text = (rawText || "").trim();
 
@@ -56,9 +67,9 @@ function parseStructuredSummary(rawText: string): ParsedClinicalSummary {
     return match && match[1] ? match[1].trim() : "";
   };
 
+  const keySymptoms = extractSection("Key Symptoms", ["Duration", "Chief Complaint", "History of Present Illness", "MEDICATIONS", "ALLERGIES", "PAST MEDICAL HISTORY", "PREVIOUS TREATMENT", "INVESTIGATIONS"]);
+  const duration = extractSection("Duration", ["Chief Complaint", "Key Symptoms", "History of Present Illness", "MEDICATIONS", "ALLERGIES"]);
   const chief = extractSection("Chief Complaint", ["Duration", "Key Symptoms", "History of Present Illness", "MEDICATIONS", "ALLERGIES"]);
-  const duration = extractSection("Duration", ["Key Symptoms", "History of Present Illness", "MEDICATIONS", "ALLERGIES"]);
-  const keySymptoms = extractSection("Key Symptoms", ["MEDICATIONS", "ALLERGIES", "PAST MEDICAL HISTORY", "PREVIOUS TREATMENT", "INVESTIGATIONS"]);
   const hpi = extractSection("History of Present Illness", ["Exposure", "MEDICATIONS", "ALLERGIES"]);
   const medications = extractSection("MEDICATIONS", ["ALLERGIES", "PAST MEDICAL HISTORY", "PREVIOUS TREATMENT", "INVESTIGATIONS"]);
   const allergies = extractSection("ALLERGIES", ["PAST MEDICAL HISTORY", "PREVIOUS TREATMENT", "INVESTIGATIONS"]);
@@ -69,12 +80,12 @@ function parseStructuredSummary(rawText: string): ParsedClinicalSummary {
   return {
     chiefComplaint: chief || (text.includes("Chief Complaint") ? "General medical evaluation" : text.split("\n")[0] || "General medical evaluation"),
     duration: duration || "Not recorded",
-    keySymptoms: keySymptoms || hpi || "None reported",
-    medications: medications || "None reported",
-    allergies: allergies || "No known allergies reported",
-    pmh: pmh || "None reported",
-    previousTreatment: treatment || "None reported",
-    investigations: investigations || "No reports available",
+    keySymptoms: cleanSymptomText(keySymptoms || hpi || "None reported"),
+    medications: cleanSymptomText(medications || "None reported"),
+    allergies: cleanSymptomText(allergies || "No known allergies reported"),
+    pmh: cleanSymptomText(pmh || "None reported"),
+    previousTreatment: cleanSymptomText(treatment || "None reported"),
+    investigations: cleanSymptomText(investigations || "No reports available"),
   };
 }
 
@@ -639,7 +650,6 @@ export default function DoctorPage() {
                     </h3>
                     <div className="text-xs text-slate-500 font-semibold mt-0.5">
                       {tok.patient_age ? `${tok.patient_age} yrs` : ""} {tok.patient_gender ? `• ${tok.patient_gender}` : ""}
-                      {tok.patient_identifier ? ` • ID: ${tok.patient_identifier}` : ""}
                     </div>
                   </div>
 
@@ -674,28 +684,35 @@ export default function DoctorPage() {
       {/* 2. ACTIVE CONSULTATION CONTROL BANNER */}
       {/* ========================================================================= */}
       {activeToken && (
-        <div className="bg-gradient-to-r from-blue-900 to-indigo-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl border-3 border-blue-400">
+        <div className="bg-gradient-to-r from-blue-900 via-blue-950 to-indigo-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl border-2 border-blue-400/40">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <div className="flex items-center gap-5">
-              <div className="w-20 h-20 rounded-2xl bg-white text-blue-950 flex flex-col items-center justify-center font-mono shadow-lg">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">TOKEN</span>
-                <span className="text-3xl font-black">{activeToken.token_number}</span>
+            <div className="flex items-center gap-6">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-white text-blue-950 flex flex-col items-center justify-center font-mono shadow-xl flex-shrink-0">
+                <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-widest">TOKEN</span>
+                <span className="text-3xl sm:text-4xl font-black">{activeToken.token_number}</span>
               </div>
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-mono font-extrabold uppercase bg-blue-500/30 text-blue-200 px-3 py-0.5 rounded-full border border-blue-400/30">
-                    ACTIVE IN {assignedRoom}
-                  </span>
-                  <span className="text-xs text-blue-300 font-semibold font-mono">
-                    Status: {activeToken.status}
-                  </span>
-                </div>
-                <h3 className="text-2xl font-black text-white">
+              <div className="space-y-2">
+                <h3 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
                   {patient ? patient.name : "Active Patient"}
                 </h3>
-                <p className="text-xs text-blue-200 mt-0.5">
-                  Age: {patient?.age} • Gender: {patient?.gender} • Dept: {activeToken.department || "General Medicine"}
-                </p>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  {patient?.age && (
+                    <span className="bg-white/15 backdrop-blur-md text-white px-3.5 py-1 rounded-xl text-sm sm:text-base font-bold border border-white/20">
+                      Age: {patient.age} yrs
+                    </span>
+                  )}
+                  {patient?.gender && (
+                    <span className="bg-white/15 backdrop-blur-md text-white px-3.5 py-1 rounded-xl text-sm sm:text-base font-bold border border-white/20">
+                      Gender: {patient.gender}
+                    </span>
+                  )}
+                  <span className="bg-white/15 backdrop-blur-md text-white px-3.5 py-1 rounded-xl text-sm sm:text-base font-bold border border-white/20">
+                    Dept: {activeToken.department || "General Medicine"}
+                  </span>
+                  <span className="bg-emerald-500/30 text-emerald-200 px-3.5 py-1 rounded-xl text-sm sm:text-base font-bold border border-emerald-400/40">
+                    ● In Consultation
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -736,16 +753,9 @@ export default function DoctorPage() {
             <span className="text-xs font-mono uppercase tracking-wider text-slate-400 font-bold block mb-1">
               Clinical Record
             </span>
-            <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-black text-slate-900">
-                {patient ? patient.name : "No Active Patient"}
-              </h2>
-              {patient && (
-                <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full font-mono">
-                  ID: {patient.patient_id || patient.id.slice(0, 8)}
-                </span>
-              )}
-            </div>
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-900">
+              {patient ? patient.name : "No Active Patient"}
+            </h2>
           </div>
 
           {patient ? (
@@ -774,50 +784,30 @@ export default function DoctorPage() {
           </div>
         ) : (
           <>
-            {/* Quick Metrics Header */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
-                <div className="text-xs font-mono uppercase tracking-wider text-slate-400 font-bold mb-1">
-                  Clinical Summary
-                </div>
-                <div className="text-xl font-black text-slate-900">
-                  {summary ? "Draft Ready" : "Pending Generation"}
-                </div>
-                <div className="text-xs text-slate-500 mt-1 font-semibold">
-                  {summary?.facts?.length || 0} fact(s) to verify
-                </div>
-              </div>
-
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
-                <div className="text-xs font-mono uppercase tracking-wider text-slate-400 font-bold mb-1">
-                  Documents
-                </div>
-                <div className="text-xl font-black text-slate-900">
-                  {documents.length}
-                </div>
-                <div className="text-xs text-slate-500 mt-1 font-semibold">
-                  {documents.filter((d) => d.ocr_status === "COMPLETED").length} processed
-                </div>
-              </div>
-            </div>
-
             {/* Navigation Tabs */}
             <div className="flex border-b border-slate-200 mb-6 gap-6">
-              {TABS.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTab(t)}
-                  className={`pb-3 text-sm font-black capitalize transition border-b-2 ${tab === t
-                      ? "border-blue-600 text-blue-600"
-                      : "border-transparent text-slate-400 hover:text-slate-700"
+              {TABS.map((t) => {
+                const label = t === "documents"
+                  ? (documents.length > 0 ? `Documents (${documents.length})` : "Documents")
+                  : "Summary";
+
+                return (
+                  <button
+                    key={t}
+                    onClick={() => setTab(t)}
+                    className={`pb-3 text-sm font-black capitalize transition border-b-2 flex items-center gap-1.5 ${
+                      tab === t
+                        ? "border-blue-600 text-blue-600"
+                        : "border-transparent text-slate-400 hover:text-slate-700"
                     }`}
-                >
-                  {t}
-                </button>
-              ))}
+                  >
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Tab 1: AI Clinical Summary & Fact Verification */}
+            {/* Tab 1: AI Clinical Summary */}
             {tab === "summary" && (
               <div className="space-y-6">
                 {!summary ? (
@@ -832,44 +822,6 @@ export default function DoctorPage() {
                   </div>
                 ) : (
                   <div className="space-y-6">
-                    {/* Status & Verification Bar */}
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                      <div className="flex items-center gap-3">
-                        <VerificationBadge status={(summary.verification_status || summary.status || "UNVERIFIED") as any} />
-                        <span className="text-xs text-slate-500 font-semibold">
-                          Version {summary.version || 1} • Generated via {(summary.sources || []).join(", ")}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {(summary.verification_status === "UNVERIFIED" || summary.status === "DRAFT" || summary.status === "UNVERIFIED") && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={handleConfirmSummary}
-                              className="py-1.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow transition flex items-center gap-1"
-                            >
-                              <span>✓</span> Confirm Draft
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleRejectSummary}
-                              className="py-1.5 px-3 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-xs font-bold transition"
-                            >
-                              Reject
-                            </button>
-                          </>
-                        )}
-                        <button
-                          type="button"
-                          onClick={handleGenerateSummary}
-                          className="py-1.5 px-3 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold transition"
-                        >
-                          ↻ Regenerate
-                        </button>
-                      </div>
-                    </div>
-
                     {/* Structured Clinical Summary Box */}
                     {(() => {
                       const parsed = parseStructuredSummary(summary.draft_text || summary.text);
@@ -887,34 +839,37 @@ export default function DoctorPage() {
                               </span>
                             </div>
 
-                            {/* Chief Complaint */}
-                            <div>
-                              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
-                                Chief Complaint
-                              </div>
-                              <div className="text-lg md:text-xl font-extrabold text-slate-900 leading-snug">
-                                {parsed.chiefComplaint}
-                              </div>
-                            </div>
-
-                            {/* Duration */}
-                            <div>
-                              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
-                                Duration
-                              </div>
-                              <div className="text-sm md:text-base font-bold text-slate-800">
-                                {parsed.duration}
-                              </div>
-                            </div>
-
-                            {/* Key Symptoms */}
+                            {/* 1. Key Symptoms (FIRST) */}
                             <div>
                               <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
                                 Key Symptoms
                               </div>
-                              <div className="text-sm font-semibold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl p-3.5 leading-relaxed">
+                              <div className="text-base font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl p-4 leading-relaxed">
                                 {parsed.keySymptoms}
                               </div>
+                            </div>
+
+                            {/* 2. Duration (SECOND) */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                              <div>
+                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                                  Duration
+                                </div>
+                                <div className="text-base font-bold text-slate-800">
+                                  {parsed.duration}
+                                </div>
+                              </div>
+
+                              {parsed.chiefComplaint && parsed.chiefComplaint !== "General medical evaluation" && (
+                                <div>
+                                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                                    Chief Complaint
+                                  </div>
+                                  <div className="text-base font-bold text-slate-800">
+                                    {parsed.chiefComplaint}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
 

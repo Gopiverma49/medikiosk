@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, or_
 
 from ..database import get_db, SessionLocal
-from ..models import TokenQueue, TokenStatus, Patient, Encounter, TriageEvent, ClinicalFact, ConsultationRoom, gen_uuid, utcnow
+from ..models import TokenQueue, TokenStatus, Patient, Encounter, TriageEvent, ClinicalFact, ConsultationRoom, TreatmentRecord, ClinicalSummary, gen_uuid, utcnow
 from ..schemas import (
     TokenGenerateIn, TokenCallIn, PatientTokenOut, TokenQueueItemOut,
     TokenDisplayStateOut, TokenColumnDisplay,
@@ -542,7 +542,7 @@ async def start_token_consultation(token_id: str, db: Session = Depends(get_db))
 
 @router.post("/tokens/{token_id}/complete", response_model=PatientTokenOut)
 async def complete_token(token_id: str, db: Session = Depends(get_db)):
-    """Complete consultation. Removes token from active display board."""
+    """Complete consultation. Removes token from active display board and persists treatment record."""
     token = db.query(TokenQueue).filter(TokenQueue.id == token_id).first()
     if not token:
         raise HTTPException(status_code=404, detail="Token not found")
@@ -550,6 +550,34 @@ async def complete_token(token_id: str, db: Session = Depends(get_db)):
     token.status = TokenStatus.COMPLETED
     token.completed_at = utcnow()
     db.flush()
+
+    # Auto-save TreatmentRecord for patient if encounter had clinical facts/summary
+    if token.encounter_id and token.patient_id:
+        existing_tr = db.query(TreatmentRecord).filter(
+            TreatmentRecord.patient_id == token.patient_id,
+            TreatmentRecord.illness_id == f"VISIT_{token.encounter_id[:8].upper()}"
+        ).first()
+        if not existing_tr:
+            facts = db.query(ClinicalFact).filter(ClinicalFact.encounter_id == token.encounter_id).all()
+            cc = next((f.label for f in facts if f.concept == "chief_complaint" and f.label), None)
+            symptom_labels = [f.label for f in facts if f.label and (f.category in ("symptom", "chief_complaint") or f.concept in ("chief_complaint", "location", "character"))]
+            if not symptom_labels and facts:
+                symptom_labels = [f.label or f.concept for f in facts if f.label or f.concept]
+            symptoms_str = ", ".join(symptom_labels[:4]) if symptom_labels else "General symptoms evaluation"
+            illness_title = cc or (symptom_labels[0] if symptom_labels else "OPD Medical Consultation")
+
+            tr = TreatmentRecord(
+                patient_id=token.patient_id,
+                illness_id=f"VISIT_{token.encounter_id[:8].upper()}",
+                illness_name=illness_title,
+                symptoms=symptoms_str,
+                diagnosis="Consultation Completed",
+                treatment="Prescribed Treatment & Medical Advice",
+                visit_date=datetime.now(timezone.utc).strftime("%d %b %Y"),
+            )
+            db.add(tr)
+            db.flush()
+
     log_event(db, "Token completed", f"Consultation completed for Token {token.token_number}", encounter_id=token.encounter_id)
     db.commit()
     db.refresh(token)
