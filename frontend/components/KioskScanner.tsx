@@ -158,10 +158,6 @@ export function KioskScanner({ lang, onDetected, onCancel, onSwitchToManual }: P
     };
   }, [lang]);
 
-  const handleSimulateScan = (id: string) => {
-    triggerSuccess(id);
-  };
-
   return (
     <div className="max-w-xl mx-auto bg-white border-2 border-slate-200 rounded-3xl p-6 md:p-8 shadow-xl text-center">
       <h2 className="text-2xl md:text-3xl font-extrabold text-slate-800 mb-2">
@@ -244,47 +240,6 @@ export function KioskScanner({ lang, onDetected, onCancel, onSwitchToManual }: P
             </button>
           </div>
         )}
-      </div>
-
-      {/* Interactive Quick Scan Simulator for Kiosk Testing */}
-      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-6">
-        <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-          {lang === "hi"
-            ? "त्वरित नमूना कार्ड स्कैन (1-क्लिक परीक्षण):"
-            : "Quick Test Barcodes (1-Click Simulation):"}
-        </div>
-        <div className="grid grid-cols-3 gap-2 text-xs">
-          <button
-            type="button"
-            onClick={() => handleSimulateScan("1000000001")}
-            className="py-3 px-2 bg-teal-50 border-2 border-teal-300 rounded-xl hover:bg-teal-100 font-bold text-teal-900 transition flex flex-col items-center justify-center active:scale-95"
-          >
-            <span className="font-mono text-sm">1000000001</span>
-            <span className="text-[10px] text-teal-700 font-normal">
-              {lang === "hi" ? "इतिहास वाला मरीज" : "With History"}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSimulateScan("1000000002")}
-            className="py-3 px-2 bg-teal-50 border-2 border-teal-300 rounded-xl hover:bg-teal-100 font-bold text-teal-900 transition flex flex-col items-center justify-center active:scale-95"
-          >
-            <span className="font-mono text-sm">1000000002</span>
-            <span className="text-[10px] text-teal-700 font-normal">
-              {lang === "hi" ? "बिना इतिहास मरीज" : "No History"}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSimulateScan("9999999999")}
-            className="py-3 px-2 bg-amber-50 border-2 border-amber-300 rounded-xl hover:bg-amber-100 font-bold text-amber-900 transition flex flex-col items-center justify-center active:scale-95"
-          >
-            <span className="font-mono text-sm">9999999999</span>
-            <span className="text-[10px] text-amber-700 font-normal">
-              {lang === "hi" ? "नया मरीज" : "New Patient"}
-            </span>
-          </button>
-        </div>
       </div>
 
       {/* Action Buttons */}

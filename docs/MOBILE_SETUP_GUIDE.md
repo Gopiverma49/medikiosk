@@ -50,19 +50,17 @@ This guide explains **how running your project on your mobile phone via local Wi
 
 ---
 
-### Step 3: Run the Servers with Network Access (`0.0.0.0`)
-To allow incoming connections from your phone, the servers run with host `0.0.0.0`:
+### Step 3: Run Everything in 1 Command
+Simply run:
+```powershell
+npm run dev:all
+```
+*(Or double-click `start_medikiosk.bat` on Windows)*
 
-- **Backend (FastAPI):**
-  ```powershell
-  python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --app-dir backend
-  ```
-- **Frontend (Next.js):**
-  ```powershell
-  npm --prefix frontend run dev -- -H 0.0.0.0
-  ```
-
-*(Or via the unified `npm run dev` script once configured)*
+This automatically starts:
+1. **FastAPI Backend** (listening on `0.0.0.0:8000`)
+2. **Next.js Frontend** (listening on `0.0.0.0:3000`)
+3. **Secure HTTPS Tunnel** (prints your phone URL `https://*.trycloudflare.com`)
 
 ---
 
