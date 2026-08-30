@@ -144,8 +144,8 @@ export default function TokenDisplayPage() {
     const connectWebSocket = () => {
       try {
         const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-        const host = window.location.hostname === "localhost" ? "localhost:8000" : window.location.host;
-        const wsUrl = `${protocol}//${host}/api/ws/tokens`;
+        const wsHost = `${window.location.hostname}:8000`;
+        const wsUrl = `${protocol}//${wsHost}/api/ws/tokens`;
 
         ws = new WebSocket(wsUrl);
 

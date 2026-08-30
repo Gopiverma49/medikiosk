@@ -96,9 +96,4 @@ def process_document(document_id: str, db: Session = Depends(get_db)):
 @router.get("/{encounter_id}/list")
 def list_documents(encounter_id: str, db: Session = Depends(get_db)):
     return db.query(Document).filter(Document.encounter_id == encounter_id).all()
-            quality_score=d.quality_score,
-            has_image=bool(d.image_data),
-            created_at=d.created_at,
-        )
-        for d in docs
-    ]
+
