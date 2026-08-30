@@ -65,38 +65,37 @@ def seed():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
-        demo_users = [
-            ("gopi", "gopi", Role.ADMIN, "Gopi (Administrator)"),
-            ("admin", "admin123", Role.ADMIN, "System Admin (demo)"),
-            ("doctor", "doctor123", Role.DOCTOR, "Dr. Rahul (Physician)"),
-            ("doctor2", "doctor123", Role.DOCTOR, "Dr. Priya (Physician)"),
-            ("triage", "triage123", Role.TRIAGE, "Triage Nurse (demo)"),
-            ("patient", "patient123", Role.PATIENT, "Rahul Kumar (demo patient login)"),
-        ]
-        for username, password, role, full_name in demo_users:
-            existing = db.query(User).filter(User.username == username).first()
-            if not existing:
-                db.add(User(username=username, hashed_password=hash_password(password),
-                             role=role, full_name=full_name))
-            else:
-                # Update password to ensure it matches
-                existing.hashed_password = hash_password(password)
-                existing.role = role
-                if not existing.full_name or "demo" in existing.full_name:
-                    existing.full_name = full_name
-        db.commit()
+        # 1. Seed demo users ONLY if the users table is completely empty
+        if db.query(User).count() == 0:
+            demo_users = [
+                ("gopi", "gopi", Role.ADMIN, "Gopi (Administrator)"),
+                ("admin", "admin123", Role.ADMIN, "System Admin (demo)"),
+                ("doctor", "doctor123", Role.DOCTOR, "Dr. Rahul (Physician)"),
+                ("doctor2", "doctor123", Role.DOCTOR, "Dr. Priya (Physician)"),
+                ("triage", "triage123", Role.TRIAGE, "Triage Nurse (demo)"),
+                ("patient", "patient123", Role.PATIENT, "Rahul Kumar (demo patient login)"),
+            ]
+            for username, password, role, full_name in demo_users:
+                db.add(User(
+                    username=username,
+                    hashed_password=hash_password(password),
+                    role=role,
+                    full_name=full_name,
+                ))
+            db.commit()
 
-        for rule_data in DEFAULT_RULES:
-            if not db.query(RedFlagRule).filter(RedFlagRule.rule_id == rule_data["rule_id"]).first():
+        # 2. Seed default red-flag triage rules ONLY if empty
+        if db.query(RedFlagRule).count() == 0:
+            for rule_data in DEFAULT_RULES:
                 rule = RedFlagRule(**rule_data)
                 db.add(rule)
                 db.flush()
                 db.add(RedFlagRuleVersion(rule_id=rule.rule_id, version=rule.version,
                                            conditions_snapshot=rule.conditions))
+            db.commit()
 
-        # Seed Patient 1: 1000000001 (Rahul Kumar) with previous treatment history
-        p1 = db.query(Patient).filter(Patient.patient_id == "1000000001").first()
-        if not p1:
+        # 3. Seed demo patients ONLY if empty
+        if db.query(Patient).count() == 0:
             p1 = Patient(
                 patient_id="1000000001",
                 name="Rahul Kumar",
@@ -122,9 +121,6 @@ def seed():
             )
             db.add(t1)
 
-        # Seed Patient 2: 1000000002 (Priya Sharma) without previous treatment history
-        p2 = db.query(Patient).filter(Patient.patient_id == "1000000002").first()
-        if not p2:
             p2 = Patient(
                 patient_id="1000000002",
                 name="Priya Sharma",
@@ -138,8 +134,7 @@ def seed():
             db.add(p2)
             db.flush()
 
-        # Seed initial token for demo queue if empty
-        if db.query(TokenQueue).count() == 0 and p1:
+            # Seed initial token for demo queue if empty
             tok1 = TokenQueue(
                 token_number="001",
                 patient_id=p1.id,
@@ -148,9 +143,9 @@ def seed():
                 triage_priority="ROUTINE",
             )
             db.add(tok1)
+            db.commit()
 
-        db.commit()
-        print("Seed complete: Demo users, demo patients, rules, and token queue verified.")
+        print("Database verification complete: tables ready.")
     finally:
         db.close()
 

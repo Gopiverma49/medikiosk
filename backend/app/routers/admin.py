@@ -7,9 +7,9 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import (
     User, Role, Patient, Encounter, AuditLog, ConsultationRoom, TokenQueue, TokenStatus, utcnow,
-    Consent, HistoryAnswer, ClinicalFact, Medication, Allergy, Document, DocumentExtraction,
-    LabResult, ClinicalSummary, RedFlagEvent, TriageEvent, Contradiction, ContradictionResolution,
-    AIProvenance, HumanVerification, TreatmentRecord
+    Consent, HistoryAnswer, ClinicalFact, Document, DocumentExtraction,
+    ClinicalSummary, RedFlagEvent, TriageEvent, Contradiction, ContradictionResolution,
+    HumanVerification, TreatmentRecord
 )
 from ..schemas import DoctorCreate, DoctorUpdate, DoctorOut, PatientOut, RoomCreateIn, RoomUpdateIn, RoomOut
 from ..security import hash_password
@@ -179,15 +179,11 @@ def delete_patient_admin(patient_id: str, db: Session = Depends(get_db)):
 
         # Delete facts and remaining clinical items
         db.query(ClinicalFact).filter(ClinicalFact.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
-        db.query(Medication).filter(Medication.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
-        db.query(Allergy).filter(Allergy.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
-        db.query(LabResult).filter(LabResult.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
         db.query(HistoryAnswer).filter(HistoryAnswer.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
         db.query(Consent).filter(Consent.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
         db.query(ClinicalSummary).filter(ClinicalSummary.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
         db.query(RedFlagEvent).filter(RedFlagEvent.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
         db.query(TriageEvent).filter(TriageEvent.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
-        db.query(AIProvenance).filter(AIProvenance.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
 
     # Delete tokens and treatment records
     db.query(TokenQueue).filter(TokenQueue.patient_id == patient_uuid).delete(synchronize_session=False)

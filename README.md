@@ -77,6 +77,7 @@ npm run dev
 | **📺 Token Display** | [http://localhost:3000/tokens](http://localhost:3000/tokens) | Multi-room live waiting-room TV display with simultaneous doctor calling |
 | **⚙️ Admin Station** | [http://localhost:3000/admin](http://localhost:3000/admin) | Physician accounts, triage safety rules & AI accuracy benchmarks |
 | **📖 API Documentation** | [http://localhost:8000/docs](http://localhost:8000/docs) | Interactive FastAPI Swagger documentation & test sandbox |
+| **🗄️ Database Schema** | [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md) | Complete reference for all 20 active database tables & relationships |
 
 ---
 

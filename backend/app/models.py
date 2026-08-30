@@ -142,15 +142,6 @@ class HistoryAnswer(Base, TimestampMixin):
     source_language = Column(String, nullable=True)
 
 
-class ClinicalConcept(Base):
-    """Controlled vocabulary of language-neutral clinical concepts."""
-    __tablename__ = "clinical_concepts"
-    id = Column(GUID(), primary_key=True, default=gen_uuid)
-    concept_key = Column(String, unique=True, nullable=False)  # e.g. "chest_pain"
-    display_name_en = Column(String, nullable=False)
-    category = Column(String, nullable=True)  # symptom | pmh | medication | allergy | investigation | ayush ...
-
-
 class ClinicalFact(Base, TimestampMixin):
     """
     The central unit of the system: one language-neutral clinical fact,
@@ -184,31 +175,6 @@ class ClinicalFact(Base, TimestampMixin):
     encounter = relationship("Encounter", back_populates="facts")
 
 
-class Medication(Base, TimestampMixin):
-    __tablename__ = "medications"
-    id = Column(GUID(), primary_key=True, default=gen_uuid)
-    encounter_id = Column(GUID(), ForeignKey("encounters.id"), nullable=False)
-    fact_id = Column(GUID(), ForeignKey("clinical_facts.id"), nullable=True)
-    name = Column(String, nullable=False)
-    dose = Column(String, nullable=True)
-    frequency = Column(String, nullable=True)
-    source = Column(Enum(FactSource), nullable=False)
-    confidence = Column(Float, nullable=True)
-    verification_status = Column(Enum(VerificationStatus), default=VerificationStatus.UNVERIFIED)
-
-
-class Allergy(Base, TimestampMixin):
-    __tablename__ = "allergies"
-    id = Column(GUID(), primary_key=True, default=gen_uuid)
-    encounter_id = Column(GUID(), ForeignKey("encounters.id"), nullable=False)
-    fact_id = Column(GUID(), ForeignKey("clinical_facts.id"), nullable=True)
-    substance = Column(String, nullable=False)
-    reaction = Column(String, nullable=True)
-    source = Column(Enum(FactSource), nullable=False)
-    confidence = Column(Float, nullable=True)
-    verification_status = Column(Enum(VerificationStatus), default=VerificationStatus.UNVERIFIED)
-
-
 class Document(Base, TimestampMixin):
     __tablename__ = "documents"
     id = Column(GUID(), primary_key=True, default=gen_uuid)
@@ -234,18 +200,6 @@ class DocumentExtraction(Base, TimestampMixin):
     confidence = Column(Float, nullable=True)
 
     document = relationship("Document", back_populates="extractions")
-
-
-class LabResult(Base, TimestampMixin):
-    __tablename__ = "lab_results"
-    id = Column(GUID(), primary_key=True, default=gen_uuid)
-    encounter_id = Column(GUID(), ForeignKey("encounters.id"), nullable=False)
-    fact_id = Column(GUID(), ForeignKey("clinical_facts.id"), nullable=True)
-    test_name = Column(String, nullable=False)
-    value = Column(Float, nullable=True)
-    unit = Column(String, nullable=True)
-    source = Column(Enum(FactSource), nullable=False)
-    confidence = Column(Float, nullable=True)
 
 
 class ClinicalSummary(Base, TimestampMixin):
@@ -320,33 +274,6 @@ class ContradictionResolution(Base, TimestampMixin):
     resolved_by = Column(String, nullable=False)
     kept_fact_id = Column(GUID(), nullable=True)
     discarded_fact_id = Column(GUID(), nullable=True)
-
-
-class AIProvenance(Base, TimestampMixin):
-    """Every AI operation records provider, model, confidence, and verification status."""
-    __tablename__ = "ai_provenance"
-    id = Column(GUID(), primary_key=True, default=gen_uuid)
-    encounter_id = Column(GUID(), ForeignKey("encounters.id"), nullable=True)
-    task = Column(String, nullable=False)  # asr | ocr | nlp | summary | translation
-    provider = Column(String, nullable=False)  # mock | google | openai | custom
-    model_name = Column(String, nullable=True)
-    raw_input_hash = Column(String, nullable=True)
-    raw_output = Column(JSON, nullable=True)
-    confidence = Column(Float, nullable=True)
-    prompt_version = Column(String, nullable=True)
-    latency_ms = Column(Integer, nullable=True)
-    verification_status = Column(Enum(VerificationStatus), default=VerificationStatus.UNVERIFIED)
-
-
-class AIEvaluation(Base):
-    __tablename__ = "ai_evaluations"
-    id = Column(GUID(), primary_key=True, default=gen_uuid)
-    metric_name = Column(String, nullable=False)
-    precision = Column(Float, nullable=True)
-    recall = Column(Float, nullable=True)
-    f1 = Column(Float, nullable=True)
-    extra = Column(JSON, nullable=True)
-    computed_at = Column(DateTime, default=utcnow)
 
 
 class HumanVerification(Base, TimestampMixin):
