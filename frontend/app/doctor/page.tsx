@@ -33,6 +33,51 @@ function playDoctorChime() {
   }
 }
 
+interface ParsedClinicalSummary {
+  chiefComplaint: string;
+  duration: string;
+  keySymptoms: string;
+  medications: string;
+  allergies: string;
+  pmh: string;
+  previousTreatment: string;
+  investigations: string;
+}
+
+function parseStructuredSummary(rawText: string): ParsedClinicalSummary {
+  const text = (rawText || "").trim();
+
+  const extractSection = (heading: string, nextHeadings: string[]): string => {
+    const pattern = new RegExp(
+      `(?:##\\s*|###\\s*|^|\\n)\\s*${heading}[:\\s]*\\n+([\\s\\S]*?)(?=(?:\\n+\\s*(?:##\\s*|###\\s*)?(?:${nextHeadings.join("|")})[:\\s]*\\n)|$)`,
+      "i"
+    );
+    const match = text.match(pattern);
+    return match && match[1] ? match[1].trim() : "";
+  };
+
+  const chief = extractSection("Chief Complaint", ["Duration", "Key Symptoms", "History of Present Illness", "MEDICATIONS", "ALLERGIES"]);
+  const duration = extractSection("Duration", ["Key Symptoms", "History of Present Illness", "MEDICATIONS", "ALLERGIES"]);
+  const keySymptoms = extractSection("Key Symptoms", ["MEDICATIONS", "ALLERGIES", "PAST MEDICAL HISTORY", "PREVIOUS TREATMENT", "INVESTIGATIONS"]);
+  const hpi = extractSection("History of Present Illness", ["Exposure", "MEDICATIONS", "ALLERGIES"]);
+  const medications = extractSection("MEDICATIONS", ["ALLERGIES", "PAST MEDICAL HISTORY", "PREVIOUS TREATMENT", "INVESTIGATIONS"]);
+  const allergies = extractSection("ALLERGIES", ["PAST MEDICAL HISTORY", "PREVIOUS TREATMENT", "INVESTIGATIONS"]);
+  const pmh = extractSection("PAST MEDICAL HISTORY", ["PREVIOUS TREATMENT", "INVESTIGATIONS"]);
+  const treatment = extractSection("PREVIOUS TREATMENT", ["INVESTIGATIONS"]);
+  const investigations = extractSection("INVESTIGATIONS", []);
+
+  return {
+    chiefComplaint: chief || (text.includes("Chief Complaint") ? "General medical evaluation" : text.split("\n")[0] || "General medical evaluation"),
+    duration: duration || "Not recorded",
+    keySymptoms: keySymptoms || hpi || "None reported",
+    medications: medications || "None reported",
+    allergies: allergies || "No known allergies reported",
+    pmh: pmh || "None reported",
+    previousTreatment: treatment || "None reported",
+    investigations: investigations || "No reports available",
+  };
+}
+
 export default function DoctorPage() {
   // --- Auth State ---
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -825,13 +870,124 @@ export default function DoctorPage() {
                       </div>
                     </div>
 
-                    {/* AI Raw Draft Display */}
-                    <div className="p-6 bg-amber-50/50 border border-amber-200 rounded-2xl font-mono text-xs text-slate-800 leading-relaxed whitespace-pre-wrap">
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-amber-800 mb-2">
-                        AI-Generated Clinical Draft
-                      </div>
-                      {summary.draft_text || summary.text}
-                    </div>
+                    {/* Structured Clinical Summary Box */}
+                    {(() => {
+                      const parsed = parseStructuredSummary(summary.draft_text || summary.text);
+                      return (
+                        <div className="space-y-5">
+                          {/* Top Main Box: CLINICAL SUMMARY */}
+                          <div className="bg-white border-2 border-slate-700 rounded-2xl p-5 md:p-6 shadow-sm space-y-4 font-sans">
+                            <div className="text-xs font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 pb-2.5 flex items-center justify-between">
+                              <span className="flex items-center gap-2">
+                                <span>📋</span>
+                                <span>CLINICAL SUMMARY</span>
+                              </span>
+                              <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+                                AI INTAKE DRAFT
+                              </span>
+                            </div>
+
+                            {/* Chief Complaint */}
+                            <div>
+                              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                                Chief Complaint
+                              </div>
+                              <div className="text-lg md:text-xl font-extrabold text-slate-900 leading-snug">
+                                {parsed.chiefComplaint}
+                              </div>
+                            </div>
+
+                            {/* Duration */}
+                            <div>
+                              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                                Duration
+                              </div>
+                              <div className="text-sm md:text-base font-bold text-slate-800">
+                                {parsed.duration}
+                              </div>
+                            </div>
+
+                            {/* Key Symptoms */}
+                            <div>
+                              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                                Key Symptoms
+                              </div>
+                              <div className="text-sm font-semibold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl p-3.5 leading-relaxed">
+                                {parsed.keySymptoms}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Secondary Clinical Categories Grid */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* MEDICATIONS */}
+                            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
+                              <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5">
+                                <span>💊</span>
+                                <span>MEDICATIONS</span>
+                              </div>
+                              <div className="text-sm font-bold text-slate-800">
+                                {parsed.medications}
+                              </div>
+                            </div>
+
+                            {/* ALLERGIES */}
+                            <div className={`border rounded-2xl p-4 shadow-2xs ${
+                              parsed.allergies.toLowerCase().includes("none") || parsed.allergies.toLowerCase().includes("no known")
+                                ? "bg-white border-slate-200"
+                                : "bg-red-50 border-red-200"
+                            }`}>
+                              <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5">
+                                <span>⚠️</span>
+                                <span className={!parsed.allergies.toLowerCase().includes("none") && !parsed.allergies.toLowerCase().includes("no known") ? "text-red-700" : ""}>
+                                  ALLERGIES
+                                </span>
+                              </div>
+                              <div className={`text-sm font-bold ${
+                                !parsed.allergies.toLowerCase().includes("none") && !parsed.allergies.toLowerCase().includes("no known")
+                                  ? "text-red-900"
+                                  : "text-slate-800"
+                              }`}>
+                                {parsed.allergies}
+                              </div>
+                            </div>
+
+                            {/* PAST MEDICAL HISTORY */}
+                            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
+                              <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5">
+                                <span>📋</span>
+                                <span>PAST MEDICAL HISTORY</span>
+                              </div>
+                              <div className="text-sm font-bold text-slate-800">
+                                {parsed.pmh}
+                              </div>
+                            </div>
+
+                            {/* PREVIOUS TREATMENT */}
+                            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
+                              <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5">
+                                <span>🩺</span>
+                                <span>PREVIOUS TREATMENT</span>
+                              </div>
+                              <div className="text-sm font-bold text-slate-800">
+                                {parsed.previousTreatment}
+                              </div>
+                            </div>
+
+                            {/* INVESTIGATIONS */}
+                            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs md:col-span-2">
+                              <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5">
+                                <span>🔬</span>
+                                <span>INVESTIGATIONS</span>
+                              </div>
+                              <div className="text-sm font-bold text-slate-800">
+                                {parsed.investigations}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Extracted Clinical Facts Verification List */}
                     {summary.facts && summary.facts.length > 0 && (
@@ -873,10 +1029,29 @@ export default function DoctorPage() {
 
             {/* Tab 2: Uploaded Clinical Documents */}
             {tab === "documents" && (
-              <div>
+              <div className="space-y-6 min-h-[320px]">
+                {/* Header matching Summary tab height and layout */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                  <div className="flex items-center gap-3">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+                    <span className="text-xs font-bold text-slate-800">
+                      Encounter Documents ({documents.length})
+                    </span>
+                  </div>
+                  <span className="text-xs text-slate-500 font-semibold">
+                    {documents.filter((d) => d.status === "processed" || d.ocr_status === "COMPLETED").length} Processed
+                  </span>
+                </div>
+
                 {documents.length === 0 ? (
-                  <div className="text-center py-10 text-slate-400 font-semibold text-xs border border-dashed rounded-2xl">
-                    No documents uploaded for this encounter.
+                  <div className="text-center py-12 px-6 bg-slate-50/50 border border-dashed border-slate-300 rounded-2xl">
+                    <div className="text-3xl mb-2">📄</div>
+                    <div className="text-sm font-bold text-slate-700 mb-1">
+                      No Documents Uploaded
+                    </div>
+                    <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                      No prescription or lab report documents were scanned during this patient's kiosk intake.
+                    </p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -884,15 +1059,15 @@ export default function DoctorPage() {
                       <div key={doc.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-bold text-slate-800 uppercase font-mono">
-                            {doc.doc_type || "Prescription / Lab"}
+                            {doc.doc_type || doc.filename || "Prescription / Lab"}
                           </span>
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-700">
-                            {doc.ocr_status}
+                            {doc.status || doc.ocr_status || "Uploaded"}
                           </span>
                         </div>
-                        {doc.extracted_text && (
+                        {(doc.ocr_text || doc.extracted_text) && (
                           <div className="text-xs text-slate-600 font-mono bg-white p-3 rounded-xl border border-slate-200 whitespace-pre-wrap max-h-40 overflow-y-auto">
-                            {doc.extracted_text}
+                            {doc.ocr_text || doc.extracted_text}
                           </div>
                         )}
                       </div>

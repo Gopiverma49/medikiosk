@@ -20,13 +20,6 @@ def _latest(facts, concept):
 
 
 def render_template_summary(facts) -> str:
-    def line(label, fact, unit=""):
-        if not fact:
-            return f"{label}: Not recorded"
-        if fact.certainty == "unknown":
-            return f"{label}: Not known / not reported"
-        return f"{label}: {fact.label}{unit}"
-
     # General / core facts
     cc = _latest(facts, "chief_complaint")
     onset = _latest(facts, "symptom_onset")
@@ -55,80 +48,75 @@ def render_template_summary(facts) -> str:
     meds = [f for f in facts if f.concept == "medication"]
     allergies = [f for f in facts if f.concept == "allergy"]
     pmh = [f for f in facts if f.concept == "past_medical_history"]
+    treatment = [f for f in facts if f.concept in ("treatment", "previous_treatment", "past_treatment")]
     investigations = [f for f in facts if f.category == "investigation"]
 
-    hpi_lines = []
-    if onset:
-        hpi_lines.append(line("Onset / Duration", onset))
-    if location:
-        hpi_lines.append(line("Location", location))
-    if character:
-        hpi_lines.append(line("Character", character))
-    if severity:
-        hpi_lines.append(line("Severity", severity, "/10" if severity.certainty != "unknown" else ""))
-    
-    # Add symptom-specific observations
-    if fever_assoc:
-        hpi_lines.append(line("Associated with Fever", fever_assoc))
-    if eye_side or eye_sym:
-        hpi_lines.append(f"Eye Findings: {eye_side.label if eye_side else ''} - {eye_sym.label if eye_sym else ''}".strip(" -"))
-    if injury_cause:
-        hpi_lines.append(line("Injury Mechanism", injury_cause))
-    if active_bleeding:
-        hpi_lines.append(line("Active Bleeding", active_bleeding))
-    if cough_char:
-        hpi_lines.append(line("Cough Character", cough_char))
-    if stomach_sym:
-        hpi_lines.append(line("Gastrointestinal Symptoms", stomach_sym))
-    if skin_sym:
-        hpi_lines.append(line("Dermatological Findings", skin_sym))
-    if dental_sym:
-        hpi_lines.append(line("Dental / Oral Findings", dental_sym))
-    if urine_sym:
-        hpi_lines.append(line("Urinary Symptoms", urine_sym))
-    
-    if radiation:
-        hpi_lines.append(line("Radiation to arm/jaw/back", radiation))
-    if dyspnea:
-        hpi_lines.append(line("Breathlessness", dyspnea))
-    if sweating:
-        hpi_lines.append(line("Sweating / Diaphoresis", sweating))
+    # Assemble Key Symptoms list
+    symptom_items = []
+    if cc and cc.label:
+        symptom_items.append(cc.label)
+    if location and location.label:
+        symptom_items.append(f"Location: {location.label}")
+    if character and character.label:
+        symptom_items.append(f"Character: {character.label}")
+    if severity and severity.label and severity.certainty != "unknown":
+        symptom_items.append(f"Severity: {severity.label}/10")
+    if fever_assoc and fever_assoc.label and fever_assoc.label not in symptom_items:
+        symptom_items.append(f"Fever ({fever_assoc.label})")
+    if cough_char and cough_char.label and "Cough" not in symptom_items:
+        symptom_items.append(f"Cough ({cough_char.label})")
+    if stomach_sym and stomach_sym.label:
+        symptom_items.append(stomach_sym.label)
+    if skin_sym and skin_sym.label:
+        symptom_items.append(skin_sym.label)
+    if eye_sym and eye_sym.label:
+        symptom_items.append(f"Eye: {eye_sym.label}")
+    if dental_sym and dental_sym.label:
+        symptom_items.append(dental_sym.label)
+    if urine_sym and urine_sym.label:
+        symptom_items.append(urine_sym.label)
+    if injury_cause and injury_cause.label:
+        symptom_items.append(f"Injury Mechanism: {injury_cause.label}")
+    if active_bleeding and active_bleeding.label:
+        symptom_items.append(f"Active Bleeding: {active_bleeding.label}")
+    if dyspnea and dyspnea.label and dyspnea.label.lower() not in ("no", "none", "false"):
+        symptom_items.append("Breathlessness")
+    if sweating and sweating.label and sweating.label.lower() not in ("no", "none", "false"):
+        symptom_items.append("Diaphoresis / Sweating")
+    if animal_type and animal_type.label:
+        symptom_items.append(f"Animal Exposure: {animal_type.label}")
 
-    if not hpi_lines:
-        hpi_lines.append("No specific HPI details reported.")
+    chief_str = cc.label if (cc and cc.label) else "General medical evaluation"
+    duration_str = onset.label if (onset and onset.label) else "Not specified"
+    key_symptoms_str = "   • ".join(symptom_items) if symptom_items else "None reported"
 
     parts = [
-        "## Chief Complaint",
-        line("Chief complaint", cc) if cc else "Chief complaint: Symptom evaluation completed via kiosk interview.",
+        "CLINICAL SUMMARY",
         "",
-        "## History of Present Illness",
-        "\n".join(hpi_lines),
+        "Chief Complaint",
+        chief_str,
+        "",
+        "Duration",
+        duration_str,
+        "",
+        "Key Symptoms",
+        f"• {key_symptoms_str}",
+        "",
+        "MEDICATIONS",
+        ", ".join(m.label for m in meds) if meds else "None reported",
+        "",
+        "ALLERGIES",
+        ", ".join(a.label for a in allergies) if allergies else "No known allergies reported",
+        "",
+        "PAST MEDICAL HISTORY",
+        ", ".join(p.label for p in pmh) if pmh else "None reported",
+        "",
+        "PREVIOUS TREATMENT",
+        ", ".join(t.label for t in treatment) if treatment else "None reported",
+        "",
+        "INVESTIGATIONS",
+        ", ".join(i.label for i in investigations) if investigations else "No reports available",
     ]
-
-    # Exposure section if animal exposure present
-    if animal_type or animal_skin:
-        parts.extend([
-            "",
-            "## Exposure & Safety Signals",
-            line("Animal Exposure", animal_type),
-            line("Skin Broken / Bleeding", animal_skin),
-            line("Exposure Timeline", animal_time) if animal_time else "",
-        ])
-
-    parts.extend([
-        "",
-        "## Medications",
-        "\n".join(f"- {m.label}" for m in meds) or "- None extracted (or patient reported none)",
-        "",
-        "## Allergies",
-        "\n".join(f"- {a.label}" for a in allergies) or "- None reported",
-        "",
-        "## Past Medical History",
-        "\n".join(f"- {p.label}" for p in pmh) or "- None recorded",
-        "",
-        "## Investigations",
-        "\n".join(f"- {i.label}" for i in investigations) or "- None uploaded",
-    ])
     return "\n".join(parts)
 
 

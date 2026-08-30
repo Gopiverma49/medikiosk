@@ -1155,9 +1155,11 @@ export default function PatientPage() {
                 <div className="text-6xl sm:text-7xl font-black font-mono tracking-wider text-teal-950 my-1 drop-shadow-sm">
                   {generatedToken.token_number}
                 </div>
-                <div className="text-sm font-bold text-slate-800 mt-1">
-                  {patient?.name} {patient?.patient_id ? `(ID: ${patient.patient_id})` : ""}
-                </div>
+                {patient?.name && (
+                  <div className="text-sm font-bold text-slate-800 mt-1">
+                    {patient.name}
+                  </div>
+                )}
                 <div className="text-xs font-semibold text-teal-800 mt-2 bg-white/80 border border-teal-200 rounded-xl py-2 px-3">
                   {lang === "hi"
                     ? "कृपया प्रतीक्षा क्षेत्र में बैठें और मुख्य डिस्प्ले स्क्रीन देखें।"

@@ -228,12 +228,8 @@ export default function TokenDisplayPage() {
   const getGridColsClass = (count: number) => {
     if (count === 1) return "grid grid-cols-1 max-w-xl mx-auto gap-5";
     if (count === 2) return "grid grid-cols-1 md:grid-cols-2 gap-5 lg:gap-6";
-    if (count === 3) return "grid grid-cols-1 md:grid-cols-3 gap-5";
-    if (count === 4) return "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5";
     return "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5";
   };
-
-  const activeConsultationCount = displayRooms.filter((r) => r.token_number && r.token_number.trim() !== "").length;
 
   return (
     <div className="min-h-[90vh] bg-slate-50/50 border border-slate-200 rounded-3xl p-5 md:p-7 flex flex-col justify-between shadow-lg font-sans select-none space-y-6">
@@ -330,76 +326,28 @@ export default function TokenDisplayPage() {
         </div>
       </main>
 
-      {/* 3. ENLARGED UPCOMING PATIENTS QUEUE STRIP (High visibility next-in-line sequence) */}
-      <section className="bg-white border-2 border-blue-200/80 rounded-2xl p-4 shadow-sm">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-          {/* Section Title & Wait count */}
-          <div className="flex items-center gap-3 flex-shrink-0">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center text-lg font-black shadow-inner">
-              ⏳
+      {/* 3. PATIENTS WAITING IN QUEUE BOX */}
+      <footer className="bg-white border-2 border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center text-xl font-black shadow-inner">
+            ⏳
+          </div>
+          <div>
+            <div className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">
+              Waiting Queue
             </div>
-            <div>
-              <div className="text-xs font-extrabold text-blue-900 uppercase tracking-wider flex items-center gap-2">
-                <span>UPCOMING PATIENTS QUEUE</span>
-                <span className="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
-                  {displayState.waiting_count} in Line
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 font-medium">
-                Please be seated in the OPD waiting lobby until your token is called.
-              </p>
+            <div className="text-xl md:text-2xl font-black text-slate-800 font-mono flex items-center gap-2">
+              <span className="text-blue-600">{displayState.waiting_count}</span>
+              <span className="text-sm font-bold text-slate-600 font-sans">
+                {displayState.waiting_count === 1 ? "Patient Waiting" : "Patients Waiting in Queue"}
+              </span>
             </div>
-          </div>
-
-          {/* Sequential Next-Up Token Badges */}
-          <div className="flex items-center gap-2 overflow-x-auto w-full lg:w-auto py-1">
-            {displayState.upcoming_tokens && displayState.upcoming_tokens.length > 0 ? (
-              displayState.upcoming_tokens.map((tokenNum, idx) => (
-                <div
-                  key={tokenNum + idx}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl font-mono font-black border transition ${
-                    idx === 0
-                      ? "bg-blue-700 text-white border-blue-800 text-base shadow-md ring-2 ring-blue-300 scale-105"
-                      : idx === 1
-                      ? "bg-blue-50 text-blue-900 border-blue-300 text-sm"
-                      : "bg-slate-100 text-slate-700 border-slate-200 text-xs"
-                  }`}
-                >
-                  {idx === 0 && <span className="text-xs uppercase tracking-wider font-sans font-extrabold bg-blue-800 px-1.5 py-0.5 rounded">NEXT</span>}
-                  <span>Token {tokenNum}</span>
-                  {idx < (displayState.upcoming_tokens.length - 1) && (
-                    <span className="text-slate-300 font-sans">→</span>
-                  )}
-                </div>
-              ))
-            ) : (
-              <div className="text-xs font-bold text-slate-400 italic bg-slate-100 px-4 py-2 rounded-xl">
-                No patients currently waiting in queue
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* 4. BOTTOM BAR: STATS SUMMARY & RECENT CALLS TICKER */}
-      <footer className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 text-xs font-semibold">
-        {/* Left: Summary Metrics */}
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
-            <span className="text-slate-500 uppercase font-bold text-[11px]">ACTIVE CONSULTATIONS:</span>
-            <span className="text-sm font-black text-emerald-700 font-mono">{activeConsultationCount} / {displayRooms.length}</span>
-          </div>
-
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
-            <span className="text-slate-500 uppercase font-bold text-[11px]">TOTAL WAITING:</span>
-            <span className="text-sm font-black text-blue-700 font-mono">{displayState.waiting_count}</span>
           </div>
         </div>
 
-        {/* Right: Hospital Guidance */}
-        <div className="text-slate-500 text-center md:text-right font-medium flex items-center gap-2">
+        <div className="text-xs text-slate-500 font-medium flex items-center gap-2 bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl">
           <span className="w-2 h-2 rounded-full bg-blue-500 inline-block animate-ping" />
-          <span>When your token number appears on the screen, please proceed to the indicated Consultation Room.</span>
+          <span>Please proceed to your assigned room when your token is called.</span>
         </div>
       </footer>
     </div>

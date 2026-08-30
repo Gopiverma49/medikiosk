@@ -1,55 +1,97 @@
-# 🏥 MediKiosk — Smart Multilingual Hospital Intake Platform
+# 🏥 MediKiosk — Smart Multilingual Hospital Intake & Physician Workflow Platform
 
-> **Simple, fast, and accessible digital patient check-in for busy outpatient hospital clinics.**  
-> Supports **English** and **हिंदी (Hindi)** with large touch controls, voice guidance, and smart symptom collection.
+> **Accessible digital check-in, real-time multi-room queue management, and physician AI verification workspace for busy outpatient hospital departments (OPDs).**  
+> Supports **English** and **हिंदी (Hindi)** with large touch controls, voice guidance, live barcode scanning, and multi-room TV token broadcast.
 
 ---
 
-## 🌟 The Core Principle
+## 🌟 System Architecture & Workflow
 
 ```mermaid
-flowchart LR
-    A["🤖 AI Collects & Assists"] --> B["⚙️ System Validates & Screens"]
-    B --> C["👨‍⚕️ Doctor Reviews & Verifies"]
-    C --> D["📋 Official Medical Record"]
-    
-    style A fill:#e0f2fe,stroke:#0284c7,stroke-width:2px,color:#0369a1
-    style B fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#92400e
-    style C fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#15803d
-    style D fill:#f1f5f9,stroke:#475569,stroke-width:2px,color:#334155
-```
+flowchart TD
+    subgraph KIOSK ["🏥 Patient Intake Kiosk (Mobile / Tablet / Kiosk)"]
+        A1["1. Language & Mode\n(English / Hindi • Touch / Voice)"]
+        A2["2. Patient Identification\n(Barcode Scan / 10-Digit UHID / Quick Register)"]
+        A3["3. Past History Confirmation\n(Same Illness vs New Problem)"]
+        A4["4. Dynamic Clinical Intake\n(Speech / Touch Symptom Flow)"]
+        A5["5. Token Issued\n(Real-Time Audio Chime & Number)"]
+        A1 --> A2 --> A3 --> A4 --> A5
+    end
 
-> [!IMPORTANT]
-> **Safety First:** MediKiosk assists patients and doctors by collecting information in advance. It **never** prescribes medicines or replaces the doctor. Every summary and extraction must be confirmed by a licensed physician.
+    subgraph BACKEND ["⚙️ Real-Time Clinical Engine (FastAPI + SQLite/Postgres)"]
+        B1["Clinical Fact Extraction\n(Confidence & Provenance Tracking)"]
+        B2["Red Flag & Safety Screening\n(Automated Triage Signals)"]
+        B3["Contradiction Detection Engine\n(Cross-Fact & Document Checks)"]
+        B4["Deterministic Clinical Summarizer\n(Structured Physician Draft)"]
+        B5["WebSocket Token Broadcast Hub\n(Multi-Room Queue Sync)"]
+    end
+
+    subgraph STATIONS ["👨‍⚕️ Clinical Workstations & TV Displays"]
+        C1["📺 Live Token Display TV\n(Multi-Room Broadcast + Audio Chimes)"]
+        C2["👨‍⚕️ Doctor Consultation Workspace\n(Queue Call, Structured Summary, Fact Verification)"]
+        C3["⚙️ Hospital Admin & Audit\n(Doctor Accounts, Triage Rules, Accuracy Metrics)"]
+    end
+
+    A4 --> B1
+    B1 --> B2 & B3 --> B4
+    A5 --> B5
+    B5 <== "Live WebSocket Sync" ==> C1
+    B5 <== "Live WebSocket Sync" ==> C2
+    B4 --> C2
+```
 
 ---
 
-## 🚀 How to Start the App (1-Click Setup)
+## 🚀 How to Start the App (1-Command Unified Launcher)
 
-### Option 1: Double-Click the Launcher (Windows)
-Simply double-click:
+### Option 1: Double-Click Launcher (Windows)
+Double-click:
 ```cmd
 start_medikiosk.bat
 ```
-*This opens your browser and starts everything with live auto-refresh enabled.*
+*Automatically starts the Backend, Frontend, and Cloudflare Mobile HTTPS Tunnel, opening `http://localhost:3000` in your browser.*
 
-### Option 2: Run in Terminal (Mac / Linux / Windows)
+### Option 2: Command Line (Any OS)
 ```bash
+# 1. Install dependencies
 npm install
+
+# 2. Start Full Suite (Laptop + Mobile Tunnel)
+npm run dev:all
+```
+
+*Or start local-only:*
+```bash
 npm run dev
 ```
 
 ---
 
-## 🌐 Quick Access Links
+## 🌐 Quick Access Portals
 
 | Portal | URL | Description |
 | :--- | :--- | :--- |
-| **🏠 Portal Launchpad** | [http://localhost:3000](http://localhost:3000) | Choose between Patient, Doctor, and Admin views |
+| **🏠 Portal Launchpad** | [http://localhost:3000](http://localhost:3000) | Hub to launch all patient, doctor, display, and admin portals |
 | **🏥 Patient Kiosk** | [http://localhost:3000/patient](http://localhost:3000/patient) | Touch & voice self check-in station for patients |
-| **👨‍⚕️ Doctor Station** | [http://localhost:3000/doctor](http://localhost:3000/doctor) | Doctor consultation queue, AI summary & verification |
-| **⚙️ Admin Station** | [http://localhost:3000/admin](http://localhost:3000/admin) | Hospital triage rules & accuracy benchmarks |
-| **📖 API Documentation** | [http://localhost:8000/docs](http://localhost:8000/docs) | Interactive backend API testing interface |
+| **👨‍⚕️ Doctor Station** | [http://localhost:3000/doctor](http://localhost:3000/doctor) | Doctor consultation queue, structured AI summary & verification |
+| **📺 Token Display** | [http://localhost:3000/tokens](http://localhost:3000/tokens) | Multi-room live waiting-room TV display with simultaneous doctor calling |
+| **⚙️ Admin Station** | [http://localhost:3000/admin](http://localhost:3000/admin) | Physician accounts, triage safety rules & AI accuracy benchmarks |
+| **📖 API Documentation** | [http://localhost:8000/docs](http://localhost:8000/docs) | Interactive FastAPI Swagger documentation & test sandbox |
+
+---
+
+## 📱 Running on Mobile Phones & Tablets
+
+MediKiosk is fully responsive and supports running directly on smartphones and tablets:
+
+1. **Option A (Secure HTTPS Tunnel — Works Anywhere over 4G/5G/Wi-Fi):**
+   - Run `npm run dev:all` (or `npm run dev:tunnel`).
+   - Copy the generated `https://*.trycloudflare.com` link and open it in Chrome/Safari on your phone.
+   - Enables full camera barcode scanning and microphone voice input out of the box.
+
+2. **Option B (Same Wi-Fi Local IP):**
+   - Run `ipconfig` (Windows) or `ifconfig` (Mac/Linux) to find your laptop's local IPv4 address (e.g. `192.168.1.50`).
+   - Open `http://YOUR_LOCAL_IP:3000` on your phone browser.
 
 ---
 
@@ -57,7 +99,7 @@ npm run dev
 
 ```mermaid
 flowchart TD
-    Step1["Step 1: Choose Language & Mode\n(English / Hindi • Touch or Voice)"] --> Step2["Step 2: Enter Patient ID\n(Scan Card OR Type 10-Digit ID)"]
+    Step1["Step 1: Language & Mode\n(English / Hindi • Touch or Voice)"] --> Step2["Step 2: Enter Patient ID\n(Scan Card Barcode OR Type 10-Digit ID)"]
     
     Step2 --> Lookup{"Found in\nDatabase?"}
     
@@ -74,8 +116,8 @@ flowchart TD
     Step5 --> Summary["Review & Confirm Symptoms"]
     Summary --> SafetyCheck{"Urgent Red Flag\nDetected?"}
     
-    SafetyCheck -- "Yes" --> Alert["⚠️ Show Urgent Medical Alert\n(Notify Triage Nurse)"] --> Done
-    SafetyCheck -- "No" --> Done["Step 6: All Done!\n(Auto-sent to Doctor Dashboard)"]
+    SafetyCheck -- "Yes" --> Alert["⚠️ Urgent Medical Alert\n(Immediate Nurse Intervention)"] --> Done
+    SafetyCheck -- "No" --> Done["Step 6: Consultation Token Issued\n(Real-Time Audio Chime)"]
     
     Done --> Reset["⏳ Auto-Resets in 7s for Next Patient"]
 
@@ -92,80 +134,57 @@ flowchart TD
 
 ---
 
-## 🎯 Key Features Explained Simply
+## 👨‍⚕️ Structured Physician Summary Format
 
-### 1. 🗣️ Continuous Spoken Voice Guidance
-- When the patient chooses **VOICE**, the kiosk gently speaks instructions in their language (English or Hindi) at **every step**.
-- If voice recognition is noisy, the patient can simply tap the screen at any time.
+MediKiosk generates a structured, noise-free clinical briefing for the attending doctor:
 
-### 2. ⚡ Adaptive Symptom Collection (No Long Forms)
-- Instead of showing a giant medical form, the kiosk asks:  
-  **"Select the problem that best describes why you are visiting today."**
-- The system automatically asks follow-up questions based on the complaint:
-  - **Fever:** How many days? Any chills, body pain, or cough?
-  - **Pain:** Interactive body area picker (Head, Chest, Abdomen, Arm, Leg), 0–10 pain scale, duration.
-  - **Eye Problem:** Left, right, or both eyes? Redness, watering, or blurred vision?
-  - **Injury:** What happened (fall, cut, burn, accident)? Any active bleeding?
-  - **Animal Bite:** Dog, cat, monkey? Did it break the skin? (Alerts staff immediately if Rabies shots are needed).
-  - **Other Problem:** Speak or type freely in your own words.
+```text
+┌──────────────────────────────────────────────┐
+│ CLINICAL SUMMARY                             │
+│                                              │
+│ Chief Complaint                              │
+│ Cough + Fever                                │
+│                                              │
+│ Duration                                     │
+│ 1–3 days                                     │
+│                                              │
+│ Key Symptoms                                 │
+│ • Fever  • Cough (Dry)  • Location: Chest    │
+└──────────────────────────────────────────────┘
 
-### 3. ❓ Always Allows "I Don't Know"
-- Patients are never forced to guess. Every question has an **"I don't know"** button. The system saves it honestly as unknown rather than making up answers.
+MEDICATIONS
+None reported
 
-### 4. 🚨 Automatic Safety Screening
-- If dangerous symptoms are reported (e.g. chest pain spreading to the arm, dog bite with bleeding, severe breathing difficulty), the kiosk shows an **Urgent Medical Advisory** prompting the patient to inform hospital staff right away.
+ALLERGIES
+No known allergies reported
 
-### 5. ⏱️ Smart Kiosk Timers
-- **7-Second Auto-Reset:** When intake finishes, the screen shows a 7-second countdown and resets automatically for the next person in line.
-- **30-Second Inactivity Reset:** If a patient walks away midway, the screen refreshes back to the start page after 30 seconds of inactivity to protect privacy.
+PAST MEDICAL HISTORY
+None reported
 
----
+PREVIOUS TREATMENT
+None reported
 
-## 🧪 Demo Test Patient Accounts
-
-Try these pre-made test IDs on the kiosk keypad:
-
-| Patient ID | Patient Name | Past History | What Happens in the Kiosk? |
-| :--- | :--- | :--- | :--- |
-| **`1000000001`** | **Rahul Kumar** (42M) | **Yes** (Fever & Viral Infection) | Prompts: *"Continue previous illness or start a new problem?"* |
-| **`1000000002`** | **Priya Sharma** (30F) | **None** | Confirms identity and moves directly to symptom collection. |
-| **`9999999999`** | *(New Patient)* | **None** | ID not found → Opens 1-minute registration form → Saves new record. |
-
----
-
-## 👨‍⚕️ What the Doctor Sees
-
-When the patient finishes at the kiosk, their record appears instantly on the **Doctor Station**:
-
-```mermaid
-flowchart LR
-    A["Patient Completes Kiosk"] --> B["Doctor Queue Updates Live"]
-    B --> C["Review AI Intake Summary\n(Complaints, Pain Score, History)"]
-    C --> D["Check Safety Alerts &\nContradiction Warnings"]
-    D --> E["1-Click Verify, Edit,\nor Add Prescription"]
-    
-    style A fill:#e0f2fe,stroke:#0284c7,stroke-width:2px
-    style B fill:#fef3c7,stroke:#d97706,stroke-width:2px
-    style C fill:#f0fdfa,stroke:#0d9488,stroke-width:2px
-    style D fill:#fee2e2,stroke:#dc2626,stroke-width:2px
-    style E fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+INVESTIGATIONS
+No reports available
 ```
 
-- **Conflict Detection:** Warns the doctor if the patient says they take no medicines, but an uploaded prescription shows active pills.
-- **1-Click Review:** The doctor can approve the intake with one click or edit any detail during consultation.
+---
+
+## 🧪 Testing & Quality Assurance
+
+The codebase includes an automated test suite verifying AI fallback resilience, contradiction detection, red flag safety rules, FHIR exports, and token queues.
+
+```bash
+# Run all backend unit & integration tests
+pytest
+
+# Run frontend TypeScript typecheck
+npm run typecheck
+```
 
 ---
 
-## 🛠️ Helpful Commands for Developers
+## 🔒 Safety & Medical Disclaimer
 
-| Action | Command |
-| :--- | :--- |
-| **Start Everything (Live Dev)** | `npm run dev` |
-| **Check Code for Errors** | `npm run typecheck` |
-| **Reset Demo Database** | `npm run seed` |
-| **Run Automated Tests** | `cd backend && pytest -v` |
-
----
-
-## 🔒 Privacy & Safety Notice
-MediKiosk is designed following Indian healthcare digital standards (ABDM, FHIR R4, and DPDP Act 2023). All test data in this demo is synthetic and safe for demonstration purposes.
+> [!IMPORTANT]
+> **Safety Principle:** MediKiosk is designed to assist hospital intake workflows by collecting structured symptoms and history in advance. It **never** prescribes medications, issues autonomous medical diagnoses, or bypasses clinical oversight. All AI extractions require explicit human verification by a licensed healthcare professional.
