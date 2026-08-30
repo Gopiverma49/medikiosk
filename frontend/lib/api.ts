@@ -134,6 +134,20 @@ export const api = {
     request<{ ok: boolean; message: string }>(`/admin/patients/${id}`, {
       method: "DELETE",
     }),
+  listRoomsAdmin: () => request<import("./types").ConsultationRoomItem[]>("/admin/rooms"),
+  createRoomAdmin: (data: { name: string; department?: string; default_doctor?: string }) =>
+    request<import("./types").ConsultationRoomItem>("/admin/rooms", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteRoomAdmin: (id: string) =>
+    request<{ ok: boolean; message: string }>(`/admin/rooms/${id}`, {
+      method: "DELETE",
+    }),
+  resetTokenSystemAdmin: () =>
+    request<{ ok: boolean; message: string; cleared_count: number }>("/admin/tokens/reset", {
+      method: "POST",
+    }),
 
   // --- admin ---
   getAuditLog: () => request("/admin/audit-log"),
@@ -163,6 +177,18 @@ export const api = {
     request<import("./types").TokenItem>(`/tokens/${token_id}/recall`, { method: "POST" }),
   getPatientActiveToken: (patient_id: string) =>
     request<import("./types").TokenItem | null>(`/tokens/patient/${patient_id}`),
+  getRoomAvailability: () =>
+    request<{ all_rooms: string[]; occupied: Record<string, string> }>("/tokens/rooms"),
+  claimRoom: (doctor_name: string, room_number: string) =>
+    request<{ ok: boolean; room_number: string; doctor_name: string }>("/tokens/rooms/claim", {
+      method: "POST",
+      body: JSON.stringify({ doctor_name, room_number }),
+    }),
+  releaseRoom: (doctor_name: string) =>
+    request<{ ok: boolean }>("/tokens/rooms/release", {
+      method: "POST",
+      body: JSON.stringify({ doctor_name }),
+    }),
 };
 
 

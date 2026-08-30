@@ -253,9 +253,26 @@ class TokenColumnDisplay(BaseModel):
     called_at: Optional[datetime] = None
 
 
+class RoomCreateIn(BaseModel):
+    name: str  # e.g. "Room C"
+    department: Optional[str] = "General Medicine"
+    default_doctor: Optional[str] = None
+
+
+class RoomOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    name: str
+    department: str
+    default_doctor: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+
+
 class TokenDisplayStateOut(BaseModel):
-    column1: Optional[TokenColumnDisplay] = None  # Doctor 1 / Room 1
-    column2: Optional[TokenColumnDisplay] = None  # Doctor 2 / Room 2
+    column1: Optional[TokenColumnDisplay] = None  # Backwards compat
+    column2: Optional[TokenColumnDisplay] = None  # Backwards compat
+    rooms: List[TokenColumnDisplay] = []  # Dynamic rooms: Room A, Room B, Room C...
     waiting_count: int = 0
     upcoming_tokens: List[str] = []
     recent_called: List[TokenColumnDisplay] = []

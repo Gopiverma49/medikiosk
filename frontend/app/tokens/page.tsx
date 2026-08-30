@@ -3,37 +3,44 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "../../lib/api";
 import type { TokenDisplayState, TokenColumnDisplay } from "../../lib/types";
 
-// Clean synthesized hospital chime via Web Audio API
+// Clean resonant synthesized hospital chime via Web Audio API
 function playHospitalChime() {
   try {
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
 
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+
     const now = ctx.currentTime;
+
+    // Tone 1: E5 (659.25 Hz)
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
     osc1.type = "sine";
-    osc1.frequency.setValueAtTime(587.33, now); // D5
-    gain1.gain.setValueAtTime(0.3, now);
-    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+    osc1.frequency.setValueAtTime(659.25, now);
+    gain1.gain.setValueAtTime(0.6, now);
+    gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.65);
     osc1.connect(gain1);
     gain1.connect(ctx.destination);
     osc1.start(now);
-    osc1.stop(now + 0.6);
+    osc1.stop(now + 0.65);
 
+    // Tone 2: C5 (523.25 Hz)
     const osc2 = ctx.createOscillator();
     const gain2 = ctx.createGain();
     osc2.type = "sine";
-    osc2.frequency.setValueAtTime(880.0, now + 0.2); // A5
-    gain2.gain.setValueAtTime(0.35, now + 0.2);
-    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
+    osc2.frequency.setValueAtTime(523.25, now + 0.25);
+    gain2.gain.setValueAtTime(0.65, now + 0.25);
+    gain2.gain.exponentialRampToValueAtTime(0.0001, now + 1.1);
     osc2.connect(gain2);
     gain2.connect(ctx.destination);
-    osc2.start(now + 0.2);
-    osc2.stop(now + 0.9);
+    osc2.start(now + 0.25);
+    osc2.stop(now + 1.1);
   } catch (e) {
-    console.warn("Audio chime not available:", e);
+    console.warn("Audio chime error:", e);
   }
 }
 
@@ -41,6 +48,7 @@ export default function TokenDisplayPage() {
   const [displayState, setDisplayState] = useState<TokenDisplayState>({
     column1: null,
     column2: null,
+    rooms: [],
     waiting_count: 0,
     upcoming_tokens: [],
     recent_called: [],
@@ -50,26 +58,69 @@ export default function TokenDisplayPage() {
   const [currentDate, setCurrentDate] = useState<string>("");
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
-  const [col1Flash, setCol1Flash] = useState<boolean>(false);
-  const [col2Flash, setCol2Flash] = useState<boolean>(false);
+  const [flashingRooms, setFlashingRooms] = useState<Record<string, boolean>>({});
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
-  const prevCol1Token = useRef<string | null>(null);
-  const prevCol2Token = useRef<string | null>(null);
+  const prevRoomStates = useRef<Record<string, { token: string; calledAt: string | null }>>({});
 
   // Live Clock
   useEffect(() => {
     const updateTime = () => {
       const d = new Date();
-      // Format: 11:19 AM
       setCurrentTime(d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }));
-      // Format: Sun, Aug 30, 2026
       setCurrentDate(d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }));
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Trigger call chime and card flash animation for a room
+  const triggerRoomAnimation = useCallback((roomName: string) => {
+    if (soundEnabled) {
+      playHospitalChime();
+    }
+    setFlashingRooms((prev) => ({ ...prev, [roomName]: true }));
+    setTimeout(() => {
+      setFlashingRooms((prev) => ({ ...prev, [roomName]: false }));
+    }, 2500);
+  }, [soundEnabled]);
+
+  // Check state changes across all dynamic rooms
+  const checkTokenChanges = useCallback((newState: TokenDisplayState) => {
+    const currentRooms = (newState.rooms && newState.rooms.length > 0)
+      ? newState.rooms
+      : [
+          newState.column1 || { token_number: "", doctor_name: "Dr. Rahul Kumar", room_number: "Room A", status: "WAITING" },
+          newState.column2 || { token_number: "", doctor_name: "Dr. Priya Sharma", room_number: "Room B", status: "WAITING" },
+        ];
+
+    let hasSoundTriggered = false;
+
+    currentRooms.forEach((r) => {
+      const rKey = r.room_number || "Room";
+      const prev = prevRoomStates.current[rKey];
+      const curToken = r.token_number || "";
+      const curCalledAt = r.called_at ? String(r.called_at) : null;
+
+      if (curToken) {
+        const isNew = prev ? prev.token !== curToken : false;
+        const isRecalled = prev ? (curCalledAt !== null && prev.calledAt !== curCalledAt) : false;
+
+        if (isNew || isRecalled) {
+          if (!hasSoundTriggered) {
+            triggerRoomAnimation(rKey);
+            hasSoundTriggered = true;
+          } else {
+            setFlashingRooms((f) => ({ ...f, [rKey]: true }));
+            setTimeout(() => setFlashingRooms((f) => ({ ...f, [rKey]: false })), 2500);
+          }
+        }
+      }
+
+      prevRoomStates.current[rKey] = { token: curToken, calledAt: curCalledAt };
+    });
+  }, [triggerRoomAnimation]);
 
   // Fetch initial & polled state
   const loadState = useCallback(async () => {
@@ -80,36 +131,7 @@ export default function TokenDisplayPage() {
     } catch (e) {
       console.warn("Display state fetch error:", e);
     }
-  }, []);
-
-  const triggerCallAnimation = useCallback((colNum: 1 | 2) => {
-    if (soundEnabled) {
-      playHospitalChime();
-    }
-    if (colNum === 1) {
-      setCol1Flash(true);
-      setTimeout(() => setCol1Flash(false), 2500);
-    } else {
-      setCol2Flash(true);
-      setTimeout(() => setCol2Flash(false), 2500);
-    }
-  }, [soundEnabled]);
-
-  const checkTokenChanges = useCallback((newState: TokenDisplayState) => {
-    if (newState.column1 && newState.column1.token_number !== prevCol1Token.current) {
-      if (prevCol1Token.current !== null) {
-        triggerCallAnimation(1);
-      }
-      prevCol1Token.current = newState.column1.token_number;
-    }
-
-    if (newState.column2 && newState.column2.token_number !== prevCol2Token.current) {
-      if (prevCol2Token.current !== null) {
-        triggerCallAnimation(2);
-      }
-      prevCol2Token.current = newState.column2.token_number;
-    }
-  }, [triggerCallAnimation]);
+  }, [checkTokenChanges]);
 
   // WebSocket Connection with Reconnect & Fallback Polling
   useEffect(() => {
@@ -134,7 +156,15 @@ export default function TokenDisplayPage() {
         ws.onmessage = (event) => {
           try {
             const msg = JSON.parse(event.data);
-            if (msg.type === "INITIAL_STATE" || msg.type === "TOKEN_CALLED" || msg.type === "TOKEN_GENERATED" || msg.type === "TOKEN_COMPLETED" || msg.type === "TOKEN_IN_CONSULTATION" || msg.type === "TOKEN_RECALLED") {
+            if (
+              msg.type === "INITIAL_STATE" ||
+              msg.type === "TOKEN_CALLED" ||
+              msg.type === "TOKEN_GENERATED" ||
+              msg.type === "TOKEN_COMPLETED" ||
+              msg.type === "TOKEN_IN_CONSULTATION" ||
+              msg.type === "TOKEN_RECALLED" ||
+              msg.type === "ROOMS_UPDATED"
+            ) {
               if (msg.data?.display_state) {
                 setDisplayState(msg.data.display_state);
                 checkTokenChanges(msg.data.display_state);
@@ -186,6 +216,23 @@ export default function TokenDisplayPage() {
     }
   };
 
+  // Derive rooms array (dynamic rooms or 2 default columns)
+  const displayRooms: TokenColumnDisplay[] = (displayState.rooms && displayState.rooms.length > 0)
+    ? displayState.rooms
+    : [
+        displayState.column1 || { token_number: "", doctor_name: "Dr. Rahul Kumar", room_number: "Room A", status: "WAITING" },
+        displayState.column2 || { token_number: "", doctor_name: "Dr. Priya Sharma", room_number: "Room B", status: "WAITING" },
+      ];
+
+  // Dynamic grid column class based on count of consultation rooms
+  const getGridColsClass = (count: number) => {
+    if (count === 1) return "grid grid-cols-1 max-w-2xl mx-auto gap-6";
+    if (count === 2) return "grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8";
+    if (count === 3) return "grid grid-cols-1 md:grid-cols-3 gap-6";
+    if (count === 4) return "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6";
+    return "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6";
+  };
+
   return (
     <div className="min-h-[85vh] bg-white border border-slate-200 rounded-3xl p-6 md:p-8 flex flex-col justify-between shadow-sm font-sans select-none">
       {/* Top Header Bar */}
@@ -213,7 +260,7 @@ export default function TokenDisplayPage() {
               MediKiosk Token Call Board
             </h1>
             <p className="text-xs md:text-sm text-slate-500 font-medium">
-              Outpatient Department (OPD)
+              Outpatient Department (OPD) • {displayRooms.length} Active Consultation Rooms
             </p>
           </div>
         </div>
@@ -228,7 +275,7 @@ export default function TokenDisplayPage() {
           </div>
         </div>
 
-        {/* Right: Live Connection Indicator & Optional Controls */}
+        {/* Right: Live Connection Indicator & Sound Controls */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 text-sm font-semibold text-emerald-600">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
@@ -239,12 +286,16 @@ export default function TokenDisplayPage() {
             type="button"
             onClick={() => {
               setSoundEnabled(!soundEnabled);
-              if (!soundEnabled) playHospitalChime();
+              playHospitalChime();
             }}
-            className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:text-slate-700 transition text-xs"
-            title="Toggle Chime"
+            className={`py-1 px-2.5 rounded-lg border text-xs font-bold transition flex items-center gap-1.5 ${
+              soundEnabled
+                ? "bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100"
+                : "bg-slate-100 border-slate-300 text-slate-500"
+            }`}
+            title="Click to toggle or test audio chime"
           >
-            {soundEnabled ? "🔔" : "🔕"}
+            <span>{soundEnabled ? "🔔 Chime Active" : "🔕 Muted"}</span>
           </button>
 
           <button
@@ -258,24 +309,18 @@ export default function TokenDisplayPage() {
         </div>
       </header>
 
-      {/* Main 2-Column Section */}
+      {/* Main Dynamic Room Section */}
       <main className="my-auto py-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
-          {/* COLUMN 1: ROOM 1 */}
-          <RoomCard
-            roomTitle="ROOM 1"
-            defaultDoctor="Dr. Rahul Kumar"
-            data={displayState.column1}
-            isFlashing={col1Flash}
-          />
-
-          {/* COLUMN 2: ROOM 2 */}
-          <RoomCard
-            roomTitle="ROOM 2"
-            defaultDoctor="Dr. Priya Sharma"
-            data={displayState.column2}
-            isFlashing={col2Flash}
-          />
+        <div className={getGridColsClass(displayRooms.length)}>
+          {displayRooms.map((room, idx) => (
+            <RoomCard
+              key={room.room_number || idx}
+              roomTitle={room.room_number || `ROOM ${String.fromCharCode(65 + idx)}`}
+              defaultDoctor={room.doctor_name || "Consulting Physician"}
+              data={room}
+              isFlashing={Boolean(flashingRooms[room.room_number])}
+            />
+          ))}
         </div>
       </main>
 
@@ -326,7 +371,7 @@ interface RoomCardProps {
 }
 
 function RoomCard({ roomTitle, defaultDoctor, data, isFlashing }: RoomCardProps) {
-  const hasActivePatient = Boolean(data && data.token_number);
+  const hasActivePatient = Boolean(data && data.token_number && data.token_number.trim() !== "");
   const doctorName = data?.doctor_name || defaultDoctor;
   const departmentName = data?.department || "General Medicine";
 
@@ -340,36 +385,44 @@ function RoomCard({ roomTitle, defaultDoctor, data, isFlashing }: RoomCardProps)
           : "border-slate-200"
       }`}
     >
-      {/* Card Header: ROOM 1 / ROOM 2 */}
-      <div className="text-center py-4 border-b border-slate-100">
+      {/* Card Header: e.g. ROOM A / ROOM B / ROOM C */}
+      <div className="text-center py-4 border-b border-slate-100 bg-slate-50/50">
         <h2 className="text-sm md:text-base font-extrabold text-[#113a82] tracking-wider uppercase font-sans">
           {roomTitle}
         </h2>
       </div>
 
-      {/* Card Center: PATIENT TOKEN */}
-      <div className="py-12 md:py-16 text-center px-6">
-        <div className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">
+      {/* Card Center: PATIENT TOKEN & CONSULTATION STATUS */}
+      <div className="py-8 md:py-12 text-center px-6">
+        <div className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">
           PATIENT TOKEN
         </div>
 
         {hasActivePatient ? (
           <div>
             <div
-              className={`text-6xl md:text-7xl font-black tracking-tight font-sans text-slate-900 transition-transform ${
+              className={`text-5xl md:text-6xl lg:text-7xl font-black tracking-tight font-sans text-slate-900 transition-transform ${
                 isFlashing ? "scale-105 text-blue-700" : ""
               }`}
             >
               {data!.token_number}
             </div>
-            <div className="text-xs font-semibold text-blue-700 mt-3">
-              {data?.status === "CALLED" ? "Now Calling — Please Enter" : "In Consultation"}
-              {data?.patient_name ? ` • ${data.patient_name}` : ""}
+
+            {/* Active Consultation Info */}
+            <div className="mt-4 inline-flex items-center gap-2 px-3.5 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-full text-xs font-extrabold shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>In Active Consultation • {roomTitle}</span>
             </div>
+
+            {data?.patient_name && (
+              <div className="text-sm font-bold text-slate-700 mt-2 font-sans">
+                Patient: <span className="text-slate-900 font-extrabold">{data.patient_name}</span>
+              </div>
+            )}
           </div>
         ) : (
           <div>
-            <div className="text-4xl md:text-5xl font-bold tracking-widest text-slate-800 font-sans my-1">
+            <div className="text-3xl md:text-4xl font-bold tracking-widest text-slate-400 font-sans my-2">
               ─ ─ ─ ─
             </div>
             <p className="text-xs text-slate-400 font-medium mt-3">
@@ -380,12 +433,12 @@ function RoomCard({ roomTitle, defaultDoctor, data, isFlashing }: RoomCardProps)
       </div>
 
       {/* Card Footer: CONSULTING DOCTOR & DEPARTMENT */}
-      <div className="p-5 md:p-6 border-t border-slate-100 flex items-center justify-between gap-4 bg-white">
+      <div className="p-4 md:p-5 border-t border-slate-100 flex items-center justify-between gap-3 bg-white">
         {/* Left: Doctor */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 flex-shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 flex-shrink-0">
             <svg
-              className="w-5 h-5 text-slate-500"
+              className="w-4 h-4 text-slate-500"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -399,22 +452,22 @@ function RoomCard({ roomTitle, defaultDoctor, data, isFlashing }: RoomCardProps)
               />
             </svg>
           </div>
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          <div className="truncate">
+            <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
               CONSULTING DOCTOR
             </div>
-            <div className="text-sm md:text-base font-bold text-slate-800 tracking-tight">
+            <div className="text-xs md:text-sm font-bold text-slate-800 tracking-tight truncate">
               {doctorName}
             </div>
           </div>
         </div>
 
         {/* Right: Department */}
-        <div className="text-right">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+        <div className="text-right flex-shrink-0">
+          <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
             DEPARTMENT
           </div>
-          <div className="text-xs md:text-sm font-bold text-[#113a82] tracking-tight">
+          <div className="text-xs font-bold text-[#113a82] tracking-tight">
             {departmentName}
           </div>
         </div>

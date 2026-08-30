@@ -1,4 +1,5 @@
 from typing import Optional
+import time
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -47,7 +48,6 @@ def get_patient_treatments(patient_id: str, db: Session = Depends(get_db)):
 
 @router.post("/patients", response_model=PatientOut)
 def create_patient(payload: PatientCreate, db: Session = Depends(get_db)):
-    import time
     clean_pid = payload.patient_id.strip() if payload.patient_id else None
     
     if not clean_pid:

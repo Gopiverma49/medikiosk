@@ -108,6 +108,10 @@ export interface Summary {
   facts_needing_verification: number;
   contradictions_count: number;
   status: string;
+  version?: number;
+  draft_text?: string;
+  verification_status?: string;
+  facts?: ClinicalFact[];
 }
 
 export type TokenStatus = "WAITING" | "CALLED" | "IN_CONSULTATION" | "COMPLETED" | "CANCELLED";
@@ -148,9 +152,19 @@ export interface TokenColumnDisplay {
   called_at?: string | null;
 }
 
+export interface ConsultationRoomItem {
+  id: string;
+  name: string;
+  department: string;
+  default_doctor?: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface TokenDisplayState {
   column1: TokenColumnDisplay | null;
   column2: TokenColumnDisplay | null;
+  rooms?: TokenColumnDisplay[];
   waiting_count: number;
   upcoming_tokens: string[];
   recent_called: TokenColumnDisplay[];

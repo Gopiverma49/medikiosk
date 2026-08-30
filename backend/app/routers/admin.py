@@ -1,13 +1,15 @@
+import asyncio
 from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import User, Role, Patient, Encounter, AuditLog
-from ..schemas import DoctorCreate, DoctorUpdate, DoctorOut, PatientOut
+from ..models import User, Role, Patient, Encounter, AuditLog, ConsultationRoom, TokenQueue, TokenStatus, utcnow
+from ..schemas import DoctorCreate, DoctorUpdate, DoctorOut, PatientOut, RoomCreateIn, RoomOut
 from ..security import hash_password
 from ..services.audit import log_event
+from .tokens import _build_display_state, broadcast_token_event, ACTIVE_DOCTOR_ROOMS
 from ai.providers.factory import set_force_fail, _FORCE_FAIL
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -121,6 +123,93 @@ def delete_patient_admin(patient_id: str, db: Session = Depends(get_db)):
     log_event(db, "Patient Deleted", f"Admin deleted patient '{name}' (ID: {p_id})")
     db.commit()
     return {"ok": True, "message": f"Patient '{name}' deleted successfully"}
+
+
+# --- Consultation Rooms Management (Admin Only) ---
+@router.get("/rooms", response_model=List[RoomOut])
+def list_rooms_admin(db: Session = Depends(get_db)):
+    """List all consultation rooms."""
+    rooms = db.query(ConsultationRoom).order_by(ConsultationRoom.name.asc()).all()
+    # If empty, auto-seed default Room A and Room B
+    if not rooms:
+        r_a = ConsultationRoom(name="Room A", department="General Medicine", default_doctor="Dr. Rahul Kumar", is_active=True)
+        r_b = ConsultationRoom(name="Room B", department="General Medicine", default_doctor="Dr. Priya Sharma", is_active=True)
+        db.add(r_a)
+        db.add(r_b)
+        db.commit()
+        rooms = db.query(ConsultationRoom).order_by(ConsultationRoom.name.asc()).all()
+    return rooms
+
+
+@router.post("/rooms", response_model=RoomOut)
+def create_room_admin(payload: RoomCreateIn, db: Session = Depends(get_db)):
+    """Create a new consultation room (e.g. Room C, Room D)."""
+    clean_name = payload.name.strip()
+    if not clean_name:
+        raise HTTPException(status_code=400, detail="Room name is required")
+
+    existing = db.query(ConsultationRoom).filter(ConsultationRoom.name.ilike(clean_name)).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Room '{clean_name}' already exists")
+
+    room = ConsultationRoom(
+        name=clean_name,
+        department=payload.department.strip() if payload.department else "General Medicine",
+        default_doctor=payload.default_doctor.strip() if payload.default_doctor else None,
+        is_active=True,
+    )
+    db.add(room)
+    db.flush()
+    log_event(db, "Room Created", f"Admin created consultation room '{room.name}' ({room.department})")
+    db.commit()
+    db.refresh(room)
+    return room
+
+
+@router.delete("/rooms/{room_id}")
+def delete_room_admin(room_id: str, db: Session = Depends(get_db)):
+    """Delete a consultation room."""
+    room = db.query(ConsultationRoom).filter(ConsultationRoom.id == room_id).first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    name = room.name
+    db.delete(room)
+    log_event(db, "Room Deleted", f"Admin deleted consultation room '{name}'")
+    db.commit()
+    return {"ok": True, "message": f"Room '{name}' deleted successfully"}
+
+
+# --- Token System Reset (Admin Only) ---
+@router.post("/tokens/reset")
+async def reset_token_system_admin(db: Session = Depends(get_db)):
+    """
+    Admin manually resets the token queue and daily sequence counter.
+    Marks all active/waiting tokens as COMPLETED, clears doctor room presence,
+    and restarts token numbering from 1.
+    """
+    active_tokens = db.query(TokenQueue).filter(
+        TokenQueue.status.in_([TokenStatus.WAITING, TokenStatus.CALLED, TokenStatus.IN_CONSULTATION])
+    ).all()
+
+    for tok in active_tokens:
+        tok.status = TokenStatus.COMPLETED
+        tok.completed_at = utcnow()
+
+    ACTIVE_DOCTOR_ROOMS.clear()
+    log_event(db, "Token System Reset", "Admin manually reset token queue and sequence counter to 1.")
+    db.commit()
+
+    display_state = _build_display_state(db)
+    asyncio.create_task(broadcast_token_event("TOKEN_RESET", {
+        "message": "Token system was reset by administrator. Sequence restarted from 1.",
+        "display_state": display_state.model_dump(),
+    }))
+
+    return {
+        "ok": True,
+        "message": "Token system successfully reset. Next token will start from 1.",
+        "cleared_count": len(active_tokens),
+    }
 
 
 # --- Audit & System status ---

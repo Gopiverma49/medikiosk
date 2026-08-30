@@ -10,4 +10,5 @@ node_modules/
 .DS_Store
 evaluation/results.json
 evaluation/report.html
-
+*.tsbuildinfo
+.pytest_cache/

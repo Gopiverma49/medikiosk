@@ -5,15 +5,16 @@ and real-time WebSocket synchronization with hospital display boards.
 """
 import json
 import asyncio
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, timedelta
 from typing import Optional, List, Set
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, or_
 
 from ..database import get_db, SessionLocal
-from ..models import TokenQueue, TokenStatus, Patient, Encounter, TriageEvent, ClinicalFact, gen_uuid, utcnow
+from ..models import TokenQueue, TokenStatus, Patient, Encounter, TriageEvent, ClinicalFact, ConsultationRoom, gen_uuid, utcnow
 from ..schemas import (
     TokenGenerateIn, TokenCallIn, PatientTokenOut, TokenQueueItemOut,
     TokenDisplayStateOut, TokenColumnDisplay,
@@ -66,15 +67,44 @@ async def broadcast_token_event(event_type: str, payload: dict):
         print("WebSocket broadcast notice:", e)
 
 
-def _generate_next_token_number(db: Session, department: str = "General Medicine") -> str:
-    """Generate sequential daily token format containing only digits, e.g. 001, 002, 023, 101."""
-    today_start = datetime.combine(date.today(), datetime.min.time())
-    count = db.query(TokenQueue).filter(
-        TokenQueue.created_at >= today_start
-    ).count()
+def _get_current_cycle_start() -> datetime:
+    """
+    Returns the start datetime of the daily hospital token cycle (8:00 AM local time).
+    If current time is before 8:00 AM, the cycle started yesterday at 8:00 AM.
+    If current time is at or after 8:00 AM, the cycle started today at 8:00 AM.
+    """
+    now = datetime.now()
+    today_8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
+    if now >= today_8am:
+        return today_8am
+    else:
+        yesterday = now - timedelta(days=1)
+        return yesterday.replace(hour=8, minute=0, second=0, microsecond=0)
 
-    seq = count + 1
-    return f"{seq:03d}"
+
+def _generate_next_token_number(db: Session, department: str = "General Medicine") -> str:
+    """
+    Generate sequential daily token starting from 1 each day at 8:00 AM.
+    Format is digits only: 1, 2, 3, 4, 5...
+    """
+    cycle_start = _get_current_cycle_start()
+    last_token = db.query(TokenQueue).filter(
+        TokenQueue.created_at >= cycle_start
+    ).order_by(TokenQueue.created_at.desc()).first()
+
+    if not last_token or not last_token.token_number:
+        return "1"
+
+    digits = "".join(filter(str.isdigit, last_token.token_number))
+    if digits:
+        try:
+            next_seq = int(digits) + 1
+            return str(next_seq)
+        except ValueError:
+            pass
+
+    count = db.query(TokenQueue).filter(TokenQueue.created_at >= cycle_start).count()
+    return str(count + 1)
 
 
 def _get_symptoms_preview(db: Session, encounter_id: Optional[str]) -> Optional[str]:
@@ -91,60 +121,71 @@ def _get_symptoms_preview(db: Session, encounter_id: Optional[str]) -> Optional[
     return None
 
 
+def _get_or_create_default_rooms(db: Session) -> List[ConsultationRoom]:
+    """Retrieve all active consultation rooms, seeding Room A and Room B if empty."""
+    rooms = db.query(ConsultationRoom).filter(ConsultationRoom.is_active == True).order_by(ConsultationRoom.name.asc()).all()
+    if not rooms:
+        r_a = ConsultationRoom(name="Room A", department="General Medicine", default_doctor="Dr. Rahul Kumar", is_active=True)
+        r_b = ConsultationRoom(name="Room B", department="General Medicine", default_doctor="Dr. Priya Sharma", is_active=True)
+        db.add(r_a)
+        db.add(r_b)
+        db.commit()
+        rooms = db.query(ConsultationRoom).filter(ConsultationRoom.is_active == True).order_by(ConsultationRoom.name.asc()).all()
+    return rooms
+
+
 def _build_display_state(db: Session) -> TokenDisplayStateOut:
-    """Build the 2-column token display board state."""
-    # Active tokens: CALLED or IN_CONSULTATION
+    """Build dynamic room display state for all configured consultation rooms."""
+    db_rooms = _get_or_create_default_rooms(db)
+
+    # Active tokens in CALLED or IN_CONSULTATION
     active_tokens = db.query(TokenQueue).filter(
         TokenQueue.status.in_([TokenStatus.CALLED, TokenStatus.IN_CONSULTATION])
     ).order_by(desc(TokenQueue.called_at), desc(TokenQueue.updated_at)).all()
 
-    col1_item = None
-    col2_item = None
+    rooms_display: List[TokenColumnDisplay] = []
+    used_token_ids = set()
 
-    # First pass: Check if assigned specifically by room or doctor
-    used_ids = set()
-    for tok in active_tokens:
-        p = db.query(Patient).filter(Patient.id == tok.patient_id).first()
-        p_name = p.name if p else None
+    for room in db_rooms:
+        matched_token = None
+        for tok in active_tokens:
+            if tok.id in used_token_ids:
+                continue
+            r_num = (tok.room_number or "").strip().lower()
+            room_name_lower = room.name.strip().lower()
+            if (
+                r_num == room_name_lower
+                or (room.name == "Room A" and r_num == "room 1")
+                or (room.name == "Room B" and r_num == "room 2")
+            ):
+                matched_token = tok
+                used_token_ids.add(tok.id)
+                break
 
-        item = TokenColumnDisplay(
-            token_number=tok.token_number,
-            doctor_name=tok.doctor_name or "Consulting Physician",
-            room_number=tok.room_number or "Room 1",
-            status=tok.status.value,
-            patient_name=p_name,
-            department=tok.department,
-            called_at=tok.called_at,
-        )
+        if matched_token:
+            p = db.query(Patient).filter(Patient.id == matched_token.patient_id).first()
+            rooms_display.append(TokenColumnDisplay(
+                token_number=matched_token.token_number,
+                doctor_name=matched_token.doctor_name or room.default_doctor or "Consulting Physician",
+                room_number=room.name,
+                status=matched_token.status.value,
+                patient_name=p.name if p else None,
+                department=matched_token.department or room.department,
+                called_at=matched_token.called_at,
+            ))
+        else:
+            rooms_display.append(TokenColumnDisplay(
+                token_number="",
+                doctor_name=room.default_doctor or "Consulting Physician",
+                room_number=room.name,
+                status="WAITING",
+                patient_name=None,
+                department=room.department,
+                called_at=None,
+            ))
 
-        room_str = (tok.room_number or "").lower()
-        doc_str = (tok.doctor_name or "").lower()
-
-        if ("room 1" in room_str or "rahul" in doc_str or "station 1" in room_str) and col1_item is None:
-            col1_item = item
-            used_ids.add(tok.id)
-        elif ("room 2" in room_str or "priya" in doc_str or "station 2" in room_str) and col2_item is None:
-            col2_item = item
-            used_ids.add(tok.id)
-
-    # Second pass: Fill remaining columns from other active tokens
-    remaining_active = [tok for tok in active_tokens if tok.id not in used_ids]
-    for tok in remaining_active:
-        p = db.query(Patient).filter(Patient.id == tok.patient_id).first()
-        p_name = p.name if p else None
-        item = TokenColumnDisplay(
-            token_number=tok.token_number,
-            doctor_name=tok.doctor_name or "Consulting Physician",
-            room_number=tok.room_number or ("Room 1" if col1_item is None else "Room 2"),
-            status=tok.status.value,
-            patient_name=p_name,
-            department=tok.department,
-            called_at=tok.called_at,
-        )
-        if col1_item is None:
-            col1_item = item
-        elif col2_item is None:
-            col2_item = item
+    col1_item = rooms_display[0] if len(rooms_display) > 0 and rooms_display[0].token_number else None
+    col2_item = rooms_display[1] if len(rooms_display) > 1 and rooms_display[1].token_number else None
 
     # Waiting queue count and upcoming token numbers
     waiting_tokens = db.query(TokenQueue).filter(
@@ -152,7 +193,7 @@ def _build_display_state(db: Session) -> TokenDisplayStateOut:
     ).order_by(TokenQueue.created_at.asc()).all()
 
     waiting_count = len(waiting_tokens)
-    upcoming_tokens = [w.token_number for w in waiting_tokens[:6]]
+    upcoming_tokens = [w.token_number for w in waiting_tokens[:8]]
 
     # Recent called history (up to last 5 called / completed)
     recent_history = db.query(TokenQueue).filter(
@@ -163,10 +204,13 @@ def _build_display_state(db: Session) -> TokenDisplayStateOut:
     recent_called_list = []
     for r in recent_history:
         p = db.query(Patient).filter(Patient.id == r.patient_id).first()
+        r_name = r.room_number or "Room A"
+        if r_name == "Room 1": r_name = "Room A"
+        if r_name == "Room 2": r_name = "Room B"
         recent_called_list.append(TokenColumnDisplay(
             token_number=r.token_number,
             doctor_name=r.doctor_name or "Physician",
-            room_number=r.room_number or "Room 1",
+            room_number=r_name,
             status=r.status.value,
             patient_name=p.name if p else None,
             department=r.department,
@@ -176,6 +220,7 @@ def _build_display_state(db: Session) -> TokenDisplayStateOut:
     return TokenDisplayStateOut(
         column1=col1_item,
         column2=col2_item,
+        rooms=rooms_display,
         waiting_count=waiting_count,
         upcoming_tokens=upcoming_tokens,
         recent_called=recent_called_list,
@@ -261,6 +306,88 @@ def get_active_tokens(db: Session = Depends(get_db)):
     ).order_by(desc(TokenQueue.called_at)).all()
 
 
+# Active room claim tracking in-memory for active doctor sessions
+ACTIVE_DOCTOR_ROOMS: dict[str, str] = {}  # doctor_name -> room_number
+
+
+class RoomClaimIn(BaseModel):
+    doctor_name: str
+    room_number: str
+
+
+class RoomReleaseIn(BaseModel):
+    doctor_name: str
+
+
+@router.get("/tokens/rooms")
+def get_room_availability(db: Session = Depends(get_db)):
+    """Return all consultation rooms and their current occupancy."""
+    db_rooms = _get_or_create_default_rooms(db)
+    all_rooms = [r.name for r in db_rooms]
+
+    active_tokens = db.query(TokenQueue).filter(
+        TokenQueue.status.in_([TokenStatus.CALLED, TokenStatus.IN_CONSULTATION])
+    ).all()
+    
+    occupied: dict[str, str] = {}
+    for tok in active_tokens:
+        if tok.room_number and tok.doctor_name:
+            r_name = tok.room_number
+            if r_name == "Room 1": r_name = "Room A"
+            if r_name == "Room 2": r_name = "Room B"
+            occupied[r_name] = tok.doctor_name
+
+    # Merge with active doctor room claims
+    for doc, room in ACTIVE_DOCTOR_ROOMS.items():
+        if room:
+            r_name = room
+            if r_name == "Room 1": r_name = "Room A"
+            if r_name == "Room 2": r_name = "Room B"
+            occupied[r_name] = doc
+
+    return {
+        "all_rooms": all_rooms,
+        "occupied": occupied,
+    }
+
+
+@router.post("/tokens/rooms/claim")
+async def claim_room(payload: RoomClaimIn, db: Session = Depends(get_db)):
+    """Doctor claims an available consultation room upon login or room switch."""
+    db_rooms = _get_or_create_default_rooms(db)
+    valid_names = [r.name for r in db_rooms] + ["Room 1", "Room 2"]
+    if payload.room_number not in valid_names:
+        raise HTTPException(status_code=400, detail="Invalid room number")
+
+    norm_room = payload.room_number
+    if norm_room == "Room 1": norm_room = "Room A"
+    if norm_room == "Room 2": norm_room = "Room B"
+
+    ACTIVE_DOCTOR_ROOMS[payload.doctor_name] = norm_room
+
+    # Broadcast room update to all doctor stations and TV displays
+    asyncio.create_task(broadcast_token_event("ROOMS_UPDATED", {
+        "claimed_by": payload.doctor_name,
+        "room_number": norm_room,
+        "occupied": {r: d for d, r in ACTIVE_DOCTOR_ROOMS.items()}
+    }))
+
+    return {"ok": True, "room_number": norm_room, "doctor_name": payload.doctor_name}
+
+
+@router.post("/tokens/rooms/release")
+async def release_room(payload: RoomReleaseIn, db: Session = Depends(get_db)):
+    """Doctor logs out or leaves, freeing their assigned room for other doctors."""
+    if payload.doctor_name in ACTIVE_DOCTOR_ROOMS:
+        released_room = ACTIVE_DOCTOR_ROOMS.pop(payload.doctor_name)
+        asyncio.create_task(broadcast_token_event("ROOMS_UPDATED", {
+            "released_by": payload.doctor_name,
+            "room_number": released_room,
+            "occupied": {r: d for d, r in ACTIVE_DOCTOR_ROOMS.items()}
+        }))
+    return {"ok": True}
+
+
 @router.get("/tokens/queue", response_model=List[TokenQueueItemOut])
 def get_token_queue(
     status: Optional[str] = Query(None, description="Filter by status: WAITING, CALLED, IN_CONSULTATION, COMPLETED, ALL"),
@@ -335,16 +462,17 @@ async def call_patient_token(token_id: str, payload: TokenCallIn, db: Session = 
                 detail=f"Patient {token.token_number} was already called by {token.doctor_name}."
             )
 
-    token.status = TokenStatus.CALLED
+    token.status = TokenStatus.IN_CONSULTATION
     token.doctor_id = payload.doctor_id
     token.doctor_name = payload.doctor_name
     token.room_number = payload.room_number or "Room 1"
     token.called_at = utcnow()
+    token.started_at = utcnow()
 
     db.flush()
     patient = db.query(Patient).filter(Patient.id == token.patient_id).first()
     p_name = patient.name if patient else "Patient"
-    log_event(db, "Token called", f"Token {token.token_number} called by {token.doctor_name} ({token.room_number})", encounter_id=token.encounter_id)
+    log_event(db, "Token consultation started", f"Token {token.token_number} consultation started with {token.doctor_name} ({token.room_number})", encounter_id=token.encounter_id)
     db.commit()
     db.refresh(token)
 

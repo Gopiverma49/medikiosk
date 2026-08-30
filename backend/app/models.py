@@ -399,3 +399,14 @@ class TokenQueue(Base, TimestampMixin):
     patient = relationship("Patient", back_populates="tokens")
     encounter = relationship("Encounter", back_populates="tokens")
 
+
+class ConsultationRoom(Base, TimestampMixin):
+    """Consultation rooms created by Admin (e.g. Room A, Room B, Room C)."""
+    __tablename__ = "consultation_rooms"
+    id = Column(GUID(), primary_key=True, default=gen_uuid)
+    name = Column(String, unique=True, nullable=False, index=True)  # e.g. "Room A", "Room B", "Room C"
+    department = Column(String, default="General Medicine")
+    default_doctor = Column(String, nullable=True)  # e.g. "Dr. Rahul Kumar"
+    is_active = Column(Boolean, default=True, nullable=False)
+
+

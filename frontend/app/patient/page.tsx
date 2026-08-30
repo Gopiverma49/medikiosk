@@ -1192,7 +1192,7 @@ export default function PatientPage() {
       </main>
 
       <footer className="text-center text-xs text-slate-400 py-2">
-        MediKiosk v0.1.0 • AI-Assisted Multimodal Clinical Intake Platform • Synthetic Demo
+        MediKiosk • Hospital Outpatient Department Intake System
       </footer>
     </div>
   );

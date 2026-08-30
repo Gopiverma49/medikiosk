@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
-import type { DoctorAccount, AdminPatientRecord } from "../../lib/types";
+import type { DoctorAccount, AdminPatientRecord, ConsultationRoomItem } from "../../lib/types";
 
-type AdminSection = "doctors" | "patients";
+type AdminSection = "doctors" | "patients" | "rooms";
 
 function formatIndiaDateTime(dateStr?: string | null): string {
   if (!dateStr) return "—";
@@ -22,23 +22,6 @@ function formatIndiaDateTime(dateStr?: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
     hour12: true,
-  });
-}
-
-function formatIndiaDate(dateStr?: string | null): string {
-  if (!dateStr) return "—";
-  let iso = dateStr.trim();
-  if (!iso.endsWith("Z") && !iso.includes("+") && !iso.includes("-", 10)) {
-    iso = `${iso.replace(" ", "T")}Z`;
-  }
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return dateStr;
-
-  return d.toLocaleDateString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
   });
 }
 
@@ -67,6 +50,14 @@ export default function AdminPage() {
   const [patients, setPatients] = useState<AdminPatientRecord[]>([]);
   const [patientSearch, setPatientSearch] = useState("");
   const [patientLoading, setPatientLoading] = useState(false);
+
+  // --- Consultation Rooms Management State ---
+  const [rooms, setRooms] = useState<ConsultationRoomItem[]>([]);
+  const [roomNameInput, setRoomNameInput] = useState("");
+  const [roomDeptInput, setRoomDeptInput] = useState("General Medicine");
+  const [roomDoctorInput, setRoomDoctorInput] = useState("");
+  const [roomActionLoading, setRoomActionLoading] = useState(false);
+  const [roomActionError, setRoomActionError] = useState<string | null>(null);
 
   // --- Check Saved Admin Auth ---
   useEffect(() => {
@@ -120,7 +111,7 @@ export default function AdminPage() {
   }
 
   async function loadAllData() {
-    await Promise.all([loadDoctors(), loadPatients()]);
+    await Promise.all([loadDoctors(), loadPatients(), loadRooms()]);
   }
 
   async function loadDoctors() {
@@ -144,6 +135,15 @@ export default function AdminPage() {
     }
   }
 
+  async function loadRooms() {
+    try {
+      const rList = await api.listRoomsAdmin();
+      setRooms(rList);
+    } catch (err) {
+      console.error("Failed to load rooms:", err);
+    }
+  }
+
   // --- Doctor Modal Handlers ---
   function openCreateDoctorModal() {
     setEditingDoctor(null);
@@ -163,22 +163,14 @@ export default function AdminPage() {
     e.preventDefault();
     setDoctorActionError(null);
     setDoctorActionLoading(true);
-
     try {
       if (editingDoctor) {
-        // Edit existing doctor
         await api.updateDoctor(editingDoctor.id, {
           full_name: doctorForm.fullName.trim(),
           username: doctorForm.username.trim(),
           password: doctorForm.password.trim() || undefined,
         });
       } else {
-        // Create new doctor
-        if (!doctorForm.password.trim()) {
-          setDoctorActionError("Password is required for new doctor accounts.");
-          setDoctorActionLoading(false);
-          return;
-        }
         await api.createDoctor({
           full_name: doctorForm.fullName.trim(),
           username: doctorForm.username.trim(),
@@ -188,50 +180,122 @@ export default function AdminPage() {
       setIsDoctorModalOpen(false);
       await loadDoctors();
     } catch (err: any) {
-      setDoctorActionError(err.message || "Failed to save doctor account.");
+      setDoctorActionError(err.message || "Failed to save doctor details.");
     } finally {
       setDoctorActionLoading(false);
     }
   }
 
   async function handleDeleteDoctor(doc: DoctorAccount) {
-    if (confirm(`Are you sure you want to delete doctor '${doc.full_name || doc.username}'? This doctor will no longer be able to log in.`)) {
-      try {
-        await api.deleteDoctor(doc.id);
-        await loadDoctors();
-      } catch (err: any) {
-        alert("Failed to delete doctor: " + err.message);
-      }
+    if (!confirm(`Are you sure you want to permanently delete doctor account "${doc.full_name || doc.username}"?`)) {
+      return;
+    }
+    try {
+      await api.deleteDoctor(doc.id);
+      await loadDoctors();
+    } catch (err: any) {
+      alert("Failed to delete doctor: " + err.message);
     }
   }
 
   async function handleDeletePatient(pt: AdminPatientRecord) {
-    if (confirm(`Are you sure you want to delete patient '${pt.name}' (ID: ${pt.patient_id})? This will permanently remove their records and encounters.`)) {
-      try {
-        await api.deletePatientAdmin(pt.id);
-        await loadPatients();
-      } catch (err: any) {
-        alert("Failed to delete patient: " + err.message);
-      }
+    if (!confirm(`Are you sure you want to delete patient "${pt.name}" (ID: ${pt.patient_id}) and all associated records?`)) {
+      return;
+    }
+    try {
+      await api.deletePatientAdmin(pt.id);
+      await loadPatients();
+    } catch (err: any) {
+      alert("Failed to delete patient: " + err.message);
     }
   }
 
+  // --- Room Handlers ---
+  async function handleCreateRoom(e: React.FormEvent) {
+    e.preventDefault();
+    setRoomActionError(null);
+    if (!roomNameInput.trim()) {
+      setRoomActionError("Please enter a room name (e.g. Room C).");
+      return;
+    }
+    setRoomActionLoading(true);
+    try {
+      await api.createRoomAdmin({
+        name: roomNameInput.trim(),
+        department: roomDeptInput.trim() || "General Medicine",
+        default_doctor: roomDoctorInput.trim() || undefined,
+      });
+      setRoomNameInput("");
+      setRoomDoctorInput("");
+      await loadRooms();
+    } catch (err: any) {
+      setRoomActionError(err.message || "Failed to create room.");
+    } finally {
+      setRoomActionLoading(false);
+    }
+  }
+
+  async function handleDeleteRoom(room: ConsultationRoomItem) {
+    if (!confirm(`Are you sure you want to delete "${room.name}"?`)) {
+      return;
+    }
+    try {
+      await api.deleteRoomAdmin(room.id);
+      await loadRooms();
+    } catch (err: any) {
+      alert("Failed to delete room: " + err.message);
+    }
+  }
+
+  // --- Token Reset Handler ---
+  const [tokenResetLoading, setTokenResetLoading] = useState(false);
+
+  async function handleResetTokenSystem() {
+    if (!confirm("Are you sure you want to reset the Token System? This will clear all active queues and restart numbering from Token 1.")) {
+      return;
+    }
+    setTokenResetLoading(true);
+    try {
+      const res = await api.resetTokenSystemAdmin();
+      alert(`Token System successfully reset! ${res.cleared_count} active token(s) cleared. Next token will be 1.`);
+      await loadRooms();
+    } catch (err: any) {
+      alert("Failed to reset token system: " + err.message);
+    } finally {
+      setTokenResetLoading(false);
+    }
+  }
+
+  // --- Filtered Views ---
+  const filteredDoctors = doctors.filter(
+    (d) =>
+      d.username.toLowerCase().includes(doctorSearch.toLowerCase()) ||
+      (d.full_name && d.full_name.toLowerCase().includes(doctorSearch.toLowerCase()))
+  );
+
+  const filteredPatients = patients.filter(
+    (p) =>
+      p.name.toLowerCase().includes(patientSearch.toLowerCase()) ||
+      (p.patient_id && p.patient_id.toLowerCase().includes(patientSearch.toLowerCase())) ||
+      (p.phone && p.phone.includes(patientSearch))
+  );
+
   if (authLoading) {
-    return <div className="text-center py-20 text-slate-400 font-bold">Loading Admin Console…</div>;
+    return <div className="text-center py-20 text-slate-400 font-bold">Checking Administrator Privileges…</div>;
   }
 
   // --- Admin Login Screen ---
   if (!isAuthenticated) {
     return (
       <div className="max-w-md mx-auto my-12 bg-white border-2 border-slate-200 rounded-3xl p-8 shadow-xl">
-        <div className="w-16 h-16 bg-slate-900 text-white rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4 shadow">
-          ⚙️
+        <div className="w-16 h-16 bg-teal-100 text-teal-800 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4 shadow-inner">
+          🔒
         </div>
         <h1 className="text-2xl font-black text-slate-900 text-center mb-1">
           Hospital Admin Portal
         </h1>
         <p className="text-slate-500 text-xs text-center mb-6">
-          Sign in with administrator credentials to manage doctors and patient data.
+          Authorized personnel only. Manage doctor IDs, patient records, and consultation rooms.
         </p>
 
         {authError && (
@@ -250,8 +314,8 @@ export default function AdminPage() {
               required
               value={usernameInput}
               onChange={(e) => setUsernameInput(e.target.value)}
-              placeholder="e.g. gopi"
-              className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-slate-800 rounded-xl text-sm font-semibold text-slate-800 outline-none"
+              placeholder="e.g. gopi or admin"
+              className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-teal-600 rounded-xl text-sm font-semibold text-slate-800 outline-none"
             />
           </div>
 
@@ -265,88 +329,48 @@ export default function AdminPage() {
               value={passwordInput}
               onChange={(e) => setPasswordInput(e.target.value)}
               placeholder="••••••••"
-              className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-slate-800 rounded-xl text-sm font-semibold text-slate-800 outline-none"
+              className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-teal-600 rounded-xl text-sm font-semibold text-slate-800 outline-none"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full py-3.5 bg-slate-900 hover:bg-black active:scale-98 text-white font-black text-base rounded-xl shadow-lg transition"
+            className="w-full py-3.5 bg-teal-800 hover:bg-teal-900 active:scale-98 text-white font-black text-base rounded-xl shadow-lg transition"
           >
-            Sign In to Admin Console →
+            Access Admin Management →
           </button>
         </form>
-
-        <div className="mt-6 pt-4 border-t border-slate-200 text-center">
-          <div className="text-[11px] text-slate-500 bg-slate-100 py-2 px-3 rounded-lg font-mono">
-            Default credentials: <b>gopi</b> / <b>gopi</b>
-          </div>
-        </div>
       </div>
     );
   }
 
-  const filteredDoctors = doctors.filter(
-    (d) =>
-      (d.full_name || "").toLowerCase().includes(doctorSearch.toLowerCase()) ||
-      d.username.toLowerCase().includes(doctorSearch.toLowerCase())
-  );
-
-  const filteredPatients = patients.filter(
-    (p) =>
-      p.name.toLowerCase().includes(patientSearch.toLowerCase()) ||
-      p.patient_id.toLowerCase().includes(patientSearch.toLowerCase()) ||
-      (p.phone || "").includes(patientSearch)
-  );
-
   // --- Authenticated Admin Dashboard ---
   return (
-    <div className="space-y-6">
-      {/* Top Header Navigation & Status */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-mono uppercase tracking-wider text-slate-500 font-extrabold">
-              Hospital Admin Console
-            </span>
-            <span className="text-xs text-slate-300">•</span>
-            <span className="text-xs font-bold text-slate-700">
-              Logged in as: {currentUser?.username}
-            </span>
+    <div className="space-y-6 max-w-6xl mx-auto pb-12">
+      {/* Top Header */}
+      <div className="bg-white border border-slate-200 rounded-2xl px-6 py-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-800 font-black text-xl">
+            ⚙️
           </div>
-          <h1 className="text-2xl font-black text-slate-900">
-            System Administration & Control
-          </h1>
+          <div>
+            <h1 className="text-lg font-black text-slate-900 leading-tight">
+              Hospital Administrator Console
+            </h1>
+            <p className="text-xs text-slate-500 font-medium">
+              Doctor Credentials • Patient Directory • Consultation Rooms
+            </p>
+          </div>
         </div>
 
-        {/* Global Quick Action Links for Admin */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <a
-            href="/"
-            className="py-2 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition"
-          >
-            ← Portals Home
-          </a>
-          <a
-            href="/patient"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="py-2 px-3.5 bg-teal-50 border border-teal-200 hover:bg-teal-100 text-teal-800 font-bold rounded-xl text-xs transition flex items-center gap-1"
-          >
-            <span>🏥</span> Patient Kiosk ↗
-          </a>
-          <a
-            href="/doctor"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="py-2 px-3.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-800 font-bold rounded-xl text-xs transition flex items-center gap-1"
-          >
-            <span>👨‍⚕️</span> Doctor Station ↗
-          </a>
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+          <span className="text-xs font-bold font-mono bg-slate-100 px-3 py-1.5 rounded-lg text-slate-700">
+            Admin: {currentUser?.username}
+          </span>
           <button
             type="button"
             onClick={handleAdminLogout}
-            className="py-2 px-3 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-xs font-bold transition"
+            className="py-1.5 px-3.5 bg-slate-100 hover:bg-red-50 hover:text-red-700 border border-slate-300 rounded-xl text-xs font-bold text-slate-600 transition flex items-center gap-1"
             title="Sign out of admin"
           >
             Sign Out ⎋
@@ -354,29 +378,40 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Two Main Columns / Sections Switcher */}
-      <div className="flex gap-3 bg-slate-200/70 p-1.5 rounded-2xl max-w-md">
+      {/* Main Sections Switcher (3 Tabs) */}
+      <div className="flex gap-2 bg-slate-200/70 p-1.5 rounded-2xl max-w-xl flex-wrap">
         <button
           type="button"
           onClick={() => setActiveSection("doctors")}
-          className={`flex-1 py-3 rounded-xl font-bold text-sm transition flex items-center justify-center gap-2 ${
+          className={`flex-1 py-3 px-3 rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-1.5 ${
             activeSection === "doctors"
               ? "bg-white text-slate-900 shadow-md border border-slate-200"
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          <span>👨‍⚕️</span> Doctors Management ({doctors.length})
+          <span>👨‍⚕️</span> Doctors ({doctors.length})
         </button>
         <button
           type="button"
           onClick={() => setActiveSection("patients")}
-          className={`flex-1 py-3 rounded-xl font-bold text-sm transition flex items-center justify-center gap-2 ${
+          className={`flex-1 py-3 px-3 rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-1.5 ${
             activeSection === "patients"
               ? "bg-white text-slate-900 shadow-md border border-slate-200"
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          <span>🏥</span> Patients Directory ({patients.length})
+          <span>🏥</span> Patients ({patients.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveSection("rooms")}
+          className={`flex-1 py-3 px-3 rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-1.5 ${
+            activeSection === "rooms"
+              ? "bg-white text-slate-900 shadow-md border border-slate-200"
+              : "text-slate-600 hover:text-slate-900"
+          }`}
+        >
+          <span>🚪</span> Rooms ({rooms.length})
         </button>
       </div>
 
@@ -421,32 +456,25 @@ export default function AdminPage() {
                   <th className="py-3.5 px-4">Username / ID</th>
                   <th className="py-3.5 px-4">Role</th>
                   <th className="py-3.5 px-4">Created Date</th>
-                  <th className="py-3.5 px-4">Updated On</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredDoctors.map((doc) => (
                   <tr key={doc.id} className="hover:bg-slate-50/80 transition">
-                    <td className="py-4 px-4 font-bold text-slate-900 flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-800 font-black text-xs flex items-center justify-center">
-                        Dr
-                      </div>
-                      {doc.full_name || "Doctor"}
+                    <td className="py-4 px-4 font-bold text-slate-900">
+                      {doc.full_name || `Dr. ${doc.username}`}
                     </td>
                     <td className="py-4 px-4 font-mono font-bold text-teal-800 text-xs">
                       {doc.username}
                     </td>
                     <td className="py-4 px-4">
-                      <span className="inline-block px-2.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-xs font-bold">
+                      <span className="inline-block px-2.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-xs font-bold font-mono">
                         {doc.role}
                       </span>
                     </td>
-                    <td className="py-4 px-4 text-xs text-slate-600 font-medium">
-                      {formatIndiaDate(doc.created_at)}
-                    </td>
-                    <td className="py-4 px-4 text-xs text-slate-700 font-mono font-medium">
-                      {formatIndiaDateTime(doc.updated_at || doc.created_at)}
+                    <td className="py-4 px-4 text-xs text-slate-600 font-mono">
+                      {formatIndiaDateTime(doc.created_at)}
                     </td>
                     <td className="py-4 px-4 text-right space-x-2">
                       <button
@@ -468,7 +496,7 @@ export default function AdminPage() {
                 ))}
                 {filteredDoctors.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-400 font-medium">
+                    <td colSpan={5} className="py-8 text-center text-slate-400 font-medium">
                       No doctor accounts found. Click &quot;Create Doctor ID&quot; to add one.
                     </td>
                   </tr>
@@ -568,6 +596,168 @@ export default function AdminPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* SECTION 3: CONSULTATION ROOMS MANAGEMENT */}
+      {activeSection === "rooms" && (
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                <span>🚪</span> Consultation Rooms Management
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Add, manage, and configure consultation rooms (e.g. Room A, Room B, Room C). The Token Call Board dynamically displays all active rooms.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={loadRooms}
+              className="py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition"
+            >
+              ↻ Refresh Rooms
+            </button>
+          </div>
+
+          {/* Add New Room Form */}
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5">
+            <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-1.5">
+              <span>+</span> Add New Consultation Room
+            </h3>
+
+            {roomActionError && (
+              <div className="bg-red-50 border-2 border-red-300 text-red-700 text-xs font-bold p-3 rounded-xl mb-3">
+                ⚠ {roomActionError}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateRoom} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Room Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={roomNameInput}
+                  onChange={(e) => setRoomNameInput(e.target.value)}
+                  placeholder="e.g. Room C or Room D"
+                  className="w-full p-2.5 bg-white border border-slate-300 focus:border-teal-600 rounded-xl text-sm font-semibold text-slate-800 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Department
+                </label>
+                <input
+                  type="text"
+                  value={roomDeptInput}
+                  onChange={(e) => setRoomDeptInput(e.target.value)}
+                  placeholder="e.g. General Medicine"
+                  className="w-full p-2.5 bg-white border border-slate-300 focus:border-teal-600 rounded-xl text-sm font-semibold text-slate-800 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Default Doctor (Optional)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={roomDoctorInput}
+                    onChange={(e) => setRoomDoctorInput(e.target.value)}
+                    placeholder="e.g. Dr. Vikram"
+                    className="w-full p-2.5 bg-white border border-slate-300 focus:border-teal-600 rounded-xl text-sm font-semibold text-slate-800 outline-none"
+                  />
+                  <button
+                    type="submit"
+                    disabled={roomActionLoading}
+                    className="py-2.5 px-5 bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs rounded-xl shadow transition flex-shrink-0"
+                  >
+                    {roomActionLoading ? "Adding..." : "Add Room"}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+
+          {/* Rooms Table */}
+          <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 text-slate-500 font-bold text-xs uppercase border-b border-slate-200">
+                <tr>
+                  <th className="py-3.5 px-4">Room Name</th>
+                  <th className="py-3.5 px-4">Department</th>
+                  <th className="py-3.5 px-4">Default Doctor</th>
+                  <th className="py-3.5 px-4">Status</th>
+                  <th className="py-3.5 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {rooms.map((room) => (
+                  <tr key={room.id} className="hover:bg-slate-50/80 transition">
+                    <td className="py-4 px-4 font-bold text-slate-900 font-mono text-sm">
+                      {room.name}
+                    </td>
+                    <td className="py-4 px-4 font-semibold text-slate-700">
+                      {room.department}
+                    </td>
+                    <td className="py-4 px-4 text-xs text-slate-600 font-medium">
+                      {room.default_doctor || "—"}
+                    </td>
+                    <td className="py-4 px-4">
+                      <span className="inline-block px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold font-mono">
+                        Active on Display Board
+                      </span>
+                    </td>
+                    <td className="py-4 px-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteRoom(room)}
+                        className="py-1.5 px-3 bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs rounded-lg transition"
+                      >
+                        Delete Room
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {rooms.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-slate-400 font-medium">
+                      No consultation rooms created. Use the form above to add a room.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Daily Token Reset & Administrative Control */}
+          <div className="bg-amber-50/70 border-2 border-amber-200 rounded-2xl p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🔄</span>
+                <h4 className="text-base font-black text-slate-900">
+                  Daily Token System & Counter Reset
+                </h4>
+              </div>
+              <p className="text-xs text-slate-600 mt-1 max-w-xl">
+                The token numbering automatically resets to <span className="font-mono font-bold text-slate-900">1</span> every day at <span className="font-bold text-slate-900">8:00 AM</span>. You can also manually reset all active queues and restart token numbers from <span className="font-mono font-bold text-slate-900">1</span> right now.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              disabled={tokenResetLoading}
+              onClick={handleResetTokenSystem}
+              className="py-3 px-5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md transition flex items-center gap-2 flex-shrink-0"
+            >
+              <span>{tokenResetLoading ? "Resetting..." : "⚡ Reset Token System (Start from 1)"}</span>
+            </button>
           </div>
         </div>
       )}
