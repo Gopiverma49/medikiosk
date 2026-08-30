@@ -5,14 +5,27 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import User, Role, Patient, Encounter, AuditLog, ConsultationRoom, TokenQueue, TokenStatus, utcnow
-from ..schemas import DoctorCreate, DoctorUpdate, DoctorOut, PatientOut, RoomCreateIn, RoomOut
+from ..models import (
+    User, Role, Patient, Encounter, AuditLog, ConsultationRoom, TokenQueue, TokenStatus, utcnow,
+    Consent, HistoryAnswer, ClinicalFact, Medication, Allergy, Document, DocumentExtraction,
+    LabResult, ClinicalSummary, RedFlagEvent, TriageEvent, Contradiction, ContradictionResolution,
+    AIProvenance, HumanVerification, TreatmentRecord
+)
+from ..schemas import DoctorCreate, DoctorUpdate, DoctorOut, PatientOut, RoomCreateIn, RoomUpdateIn, RoomOut
 from ..security import hash_password
 from ..services.audit import log_event
 from .tokens import _build_display_state, broadcast_token_event, ACTIVE_DOCTOR_ROOMS
 from ai.providers.factory import set_force_fail, _FORCE_FAIL
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+def _safe_broadcast(event_type: str, payload: dict):
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(broadcast_token_event(event_type, payload))
+    except RuntimeError:
+        pass
 
 
 # --- Doctor Management (Admin Only) ---
@@ -82,9 +95,26 @@ def delete_doctor(doctor_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Doctor not found")
     
     doc_name = doc.full_name or doc.username
+    doc_username = doc.username
+
+    # Remove active room assignment if logged in
+    for d_key in list(ACTIVE_DOCTOR_ROOMS.keys()):
+        if d_key == doc_username or d_key == doc_name or d_key == f"Dr. {doc_username}":
+            del ACTIVE_DOCTOR_ROOMS[d_key]
+
     db.delete(doc)
     log_event(db, "Doctor Deleted", f"Admin deleted doctor account '{doc.username}' ({doc_name})")
     db.commit()
+
+    try:
+        display_state = _build_display_state(db)
+        _safe_broadcast("ROOMS_UPDATED", {
+            "message": f"Doctor '{doc_name}' account deleted.",
+            "display_state": display_state.model_dump(),
+        })
+    except Exception:
+        pass
+
     return {"ok": True, "message": f"Doctor '{doc_name}' deleted successfully"}
 
 
@@ -113,16 +143,75 @@ def list_all_patients_admin(db: Session = Depends(get_db)):
 
 @router.delete("/patients/{patient_id}")
 def delete_patient_admin(patient_id: str, db: Session = Depends(get_db)):
-    """Delete a patient record and cascade associated encounters."""
+    """Delete a patient record and completely cascade all associated encounters and clinical data from database."""
     p = db.query(Patient).filter((Patient.id == patient_id) | (Patient.patient_id == patient_id)).first()
     if not p:
         raise HTTPException(status_code=404, detail="Patient not found")
+    
     name = p.name
     p_id = p.patient_id or p.id
+    patient_uuid = p.id
+
+    # 1. Find all encounters for this patient
+    encounters = db.query(Encounter).filter(Encounter.patient_id == patient_uuid).all()
+    enc_ids = [e.id for e in encounters]
+
+    if enc_ids:
+        # Find facts in encounters
+        facts = db.query(ClinicalFact).filter(ClinicalFact.encounter_id.in_(enc_ids)).all()
+        fact_ids = [f.id for f in facts]
+        if fact_ids:
+            db.query(HumanVerification).filter(HumanVerification.fact_id.in_(fact_ids)).delete(synchronize_session=False)
+
+        # Find contradictions in encounters
+        contradictions = db.query(Contradiction).filter(Contradiction.encounter_id.in_(enc_ids)).all()
+        contra_ids = [c.id for c in contradictions]
+        if contra_ids:
+            db.query(ContradictionResolution).filter(ContradictionResolution.contradiction_id.in_(contra_ids)).delete(synchronize_session=False)
+        db.query(Contradiction).filter(Contradiction.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
+
+        # Find documents in encounters
+        docs = db.query(Document).filter(Document.encounter_id.in_(enc_ids)).all()
+        doc_ids = [d.id for d in docs]
+        if doc_ids:
+            db.query(DocumentExtraction).filter(DocumentExtraction.document_id.in_(doc_ids)).delete(synchronize_session=False)
+        db.query(Document).filter(Document.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
+
+        # Delete facts and remaining clinical items
+        db.query(ClinicalFact).filter(ClinicalFact.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
+        db.query(Medication).filter(Medication.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
+        db.query(Allergy).filter(Allergy.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
+        db.query(LabResult).filter(LabResult.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
+        db.query(HistoryAnswer).filter(HistoryAnswer.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
+        db.query(Consent).filter(Consent.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
+        db.query(ClinicalSummary).filter(ClinicalSummary.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
+        db.query(RedFlagEvent).filter(RedFlagEvent.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
+        db.query(TriageEvent).filter(TriageEvent.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
+        db.query(AIProvenance).filter(AIProvenance.encounter_id.in_(enc_ids)).delete(synchronize_session=False)
+
+    # Delete tokens and treatment records
+    db.query(TokenQueue).filter(TokenQueue.patient_id == patient_uuid).delete(synchronize_session=False)
+    db.query(TreatmentRecord).filter(TreatmentRecord.patient_id == patient_uuid).delete(synchronize_session=False)
+    
+    # Delete encounters
+    if enc_ids:
+        db.query(Encounter).filter(Encounter.id.in_(enc_ids)).delete(synchronize_session=False)
+
+    # Finally delete patient
     db.delete(p)
-    log_event(db, "Patient Deleted", f"Admin deleted patient '{name}' (ID: {p_id})")
+    log_event(db, "Patient Deleted", f"Admin deleted patient '{name}' (ID: {p_id}) from database")
     db.commit()
-    return {"ok": True, "message": f"Patient '{name}' deleted successfully"}
+
+    try:
+        display_state = _build_display_state(db)
+        _safe_broadcast("TOKEN_COMPLETED", {
+            "message": f"Patient '{name}' record deleted.",
+            "display_state": display_state.model_dump(),
+        })
+    except Exception:
+        pass
+
+    return {"ok": True, "message": f"Patient '{name}' permanently deleted from database"}
 
 
 # --- Consultation Rooms Management (Admin Only) ---
@@ -132,8 +221,8 @@ def list_rooms_admin(db: Session = Depends(get_db)):
     rooms = db.query(ConsultationRoom).order_by(ConsultationRoom.name.asc()).all()
     # If empty, auto-seed default Room A and Room B
     if not rooms:
-        r_a = ConsultationRoom(name="Room A", department="General Medicine", default_doctor="Dr. Rahul Kumar", is_active=True)
-        r_b = ConsultationRoom(name="Room B", department="General Medicine", default_doctor="Dr. Priya Sharma", is_active=True)
+        r_a = ConsultationRoom(name="Room A", department="General Medicine", default_doctor=None, is_active=True)
+        r_b = ConsultationRoom(name="Room B", department="General Medicine", default_doctor=None, is_active=True)
         db.add(r_a)
         db.add(r_b)
         db.commit()
@@ -163,6 +252,66 @@ def create_room_admin(payload: RoomCreateIn, db: Session = Depends(get_db)):
     log_event(db, "Room Created", f"Admin created consultation room '{room.name}' ({room.department})")
     db.commit()
     db.refresh(room)
+
+    try:
+        display_state = _build_display_state(db)
+        _safe_broadcast("ROOMS_UPDATED", {
+            "message": f"Room '{room.name}' was created.",
+            "display_state": display_state.model_dump(),
+        })
+    except Exception:
+        pass
+
+    return room
+
+
+@router.put("/rooms/{room_id}", response_model=RoomOut)
+def update_room_admin(room_id: str, payload: RoomUpdateIn, db: Session = Depends(get_db)):
+    """Modify an existing consultation room (e.g. room name, department, default doctor, active status)."""
+    room = db.query(ConsultationRoom).filter(ConsultationRoom.id == room_id).first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Consultation room not found")
+
+    old_name = room.name
+    if payload.name and payload.name.strip():
+        clean_name = payload.name.strip()
+        if clean_name.lower() != room.name.lower():
+            existing = db.query(ConsultationRoom).filter(
+                ConsultationRoom.name.ilike(clean_name),
+                ConsultationRoom.id != room.id
+            ).first()
+            if existing:
+                raise HTTPException(status_code=400, detail=f"A room named '{clean_name}' already exists")
+            room.name = clean_name
+            # If active doctor rooms had old name, update it
+            for doc, r_name in list(ACTIVE_DOCTOR_ROOMS.items()):
+                if r_name == old_name:
+                    ACTIVE_DOCTOR_ROOMS[doc] = clean_name
+
+    if payload.department is not None:
+        room.department = payload.department.strip() or "General Medicine"
+
+    if payload.default_doctor is not None:
+        room.default_doctor = payload.default_doctor.strip() or None
+
+    if payload.is_active is not None:
+        room.is_active = payload.is_active
+
+    room.updated_at = datetime.now(timezone.utc)
+    log_event(db, "Room Modified", f"Admin updated room '{old_name}' -> '{room.name}' ({room.department})")
+    db.commit()
+    db.refresh(room)
+
+    # Broadcast updated room state to WebSocket clients
+    try:
+        display_state = _build_display_state(db)
+        _safe_broadcast("ROOMS_UPDATED", {
+            "message": f"Room '{room.name}' was updated by administrator.",
+            "display_state": display_state.model_dump(),
+        })
+    except Exception as e:
+        print("Room update broadcast error:", e)
+
     return room
 
 
@@ -173,9 +322,25 @@ def delete_room_admin(room_id: str, db: Session = Depends(get_db)):
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     name = room.name
+
+    # Remove active room assignment if any doctor was assigned
+    for doc, r_name in list(ACTIVE_DOCTOR_ROOMS.items()):
+        if r_name == name:
+            del ACTIVE_DOCTOR_ROOMS[doc]
+
     db.delete(room)
     log_event(db, "Room Deleted", f"Admin deleted consultation room '{name}'")
     db.commit()
+
+    try:
+        display_state = _build_display_state(db)
+        _safe_broadcast("ROOMS_UPDATED", {
+            "message": f"Room '{name}' was deleted by administrator.",
+            "display_state": display_state.model_dump(),
+        })
+    except Exception as e:
+        print("Room delete broadcast error:", e)
+
     return {"ok": True, "message": f"Room '{name}' deleted successfully"}
 
 
@@ -200,10 +365,10 @@ async def reset_token_system_admin(db: Session = Depends(get_db)):
     db.commit()
 
     display_state = _build_display_state(db)
-    asyncio.create_task(broadcast_token_event("TOKEN_RESET", {
+    _safe_broadcast("TOKEN_RESET", {
         "message": "Token system was reset by administrator. Sequence restarted from 1.",
         "display_state": display_state.model_dump(),
-    }))
+    })
 
     return {
         "ok": True,

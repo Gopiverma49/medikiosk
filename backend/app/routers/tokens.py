@@ -122,15 +122,21 @@ def _get_symptoms_preview(db: Session, encounter_id: Optional[str]) -> Optional[
 
 
 def _get_or_create_default_rooms(db: Session) -> List[ConsultationRoom]:
-    """Retrieve all active consultation rooms, seeding Room A and Room B if empty."""
+    """Retrieve all active consultation rooms, seeding Room A and Room B without hardcoded doctors."""
     rooms = db.query(ConsultationRoom).filter(ConsultationRoom.is_active == True).order_by(ConsultationRoom.name.asc()).all()
     if not rooms:
-        r_a = ConsultationRoom(name="Room A", department="General Medicine", default_doctor="Dr. Rahul Kumar", is_active=True)
-        r_b = ConsultationRoom(name="Room B", department="General Medicine", default_doctor="Dr. Priya Sharma", is_active=True)
+        r_a = ConsultationRoom(name="Room A", department="General Medicine", default_doctor=None, is_active=True)
+        r_b = ConsultationRoom(name="Room B", department="General Medicine", default_doctor=None, is_active=True)
         db.add(r_a)
         db.add(r_b)
         db.commit()
         rooms = db.query(ConsultationRoom).filter(ConsultationRoom.is_active == True).order_by(ConsultationRoom.name.asc()).all()
+    else:
+        # Clear legacy seeded doctor names if any
+        for r in rooms:
+            if r.default_doctor in ["Dr. Rahul Kumar", "Dr. Priya Sharma", "Dr. Rahul"]:
+                r.default_doctor = None
+        db.commit()
     return rooms
 
 
@@ -162,11 +168,23 @@ def _build_display_state(db: Session) -> TokenDisplayStateOut:
                 used_token_ids.add(tok.id)
                 break
 
+        # Check which doctor is currently logged in and assigned to this room
+        logged_in_doctor = None
+        for doc, r_name in ACTIVE_DOCTOR_ROOMS.items():
+            if (
+                r_name == room.name
+                or (room.name == "Room A" and r_name == "Room 1")
+                or (room.name == "Room B" and r_name == "Room 2")
+            ):
+                logged_in_doctor = doc
+                break
+
         if matched_token:
             p = db.query(Patient).filter(Patient.id == matched_token.patient_id).first()
+            doc_display = matched_token.doctor_name or logged_in_doctor or "—"
             rooms_display.append(TokenColumnDisplay(
                 token_number=matched_token.token_number,
-                doctor_name=matched_token.doctor_name or room.default_doctor or "Consulting Physician",
+                doctor_name=doc_display,
                 room_number=room.name,
                 status=matched_token.status.value,
                 patient_name=p.name if p else None,
@@ -174,11 +192,12 @@ def _build_display_state(db: Session) -> TokenDisplayStateOut:
                 called_at=matched_token.called_at,
             ))
         else:
+            doc_display = logged_in_doctor or "—"
             rooms_display.append(TokenColumnDisplay(
                 token_number="",
-                doctor_name=room.default_doctor or "Consulting Physician",
+                doctor_name=doc_display,
                 room_number=room.name,
-                status="WAITING",
+                status="IN_ROOM" if logged_in_doctor else "UNASSIGNED",
                 patient_name=None,
                 department=room.department,
                 called_at=None,
@@ -365,11 +384,13 @@ async def claim_room(payload: RoomClaimIn, db: Session = Depends(get_db)):
 
     ACTIVE_DOCTOR_ROOMS[payload.doctor_name] = norm_room
 
+    display_state = _build_display_state(db)
     # Broadcast room update to all doctor stations and TV displays
     asyncio.create_task(broadcast_token_event("ROOMS_UPDATED", {
         "claimed_by": payload.doctor_name,
         "room_number": norm_room,
-        "occupied": {r: d for d, r in ACTIVE_DOCTOR_ROOMS.items()}
+        "occupied": {r: d for d, r in ACTIVE_DOCTOR_ROOMS.items()},
+        "display_state": display_state.model_dump(),
     }))
 
     return {"ok": True, "room_number": norm_room, "doctor_name": payload.doctor_name}
@@ -379,12 +400,16 @@ async def claim_room(payload: RoomClaimIn, db: Session = Depends(get_db)):
 async def release_room(payload: RoomReleaseIn, db: Session = Depends(get_db)):
     """Doctor logs out or leaves, freeing their assigned room for other doctors."""
     if payload.doctor_name in ACTIVE_DOCTOR_ROOMS:
-        released_room = ACTIVE_DOCTOR_ROOMS.pop(payload.doctor_name)
-        asyncio.create_task(broadcast_token_event("ROOMS_UPDATED", {
-            "released_by": payload.doctor_name,
-            "room_number": released_room,
-            "occupied": {r: d for d, r in ACTIVE_DOCTOR_ROOMS.items()}
-        }))
+        del ACTIVE_DOCTOR_ROOMS[payload.doctor_name]
+
+    display_state = _build_display_state(db)
+    # Broadcast room release to all doctor stations and TV displays
+    asyncio.create_task(broadcast_token_event("ROOMS_UPDATED", {
+        "released_by": payload.doctor_name,
+        "occupied": {r: d for d, r in ACTIVE_DOCTOR_ROOMS.items()},
+        "display_state": display_state.model_dump(),
+    }))
+
     return {"ok": True}
 
 

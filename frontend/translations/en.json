@@ -41,7 +41,7 @@
   "not_found_desc": "Let's create your new patient record.",
   "register_title": "New Patient Registration",
   "full_name": "Full Name",
-  "full_name_placeholder": "e.g. Rahul Kumar",
+  "full_name_placeholder": "Enter patient's full name",
   "phone_number": "Phone Number (10 digits)",
   "phone_placeholder": "e.g. 9876543210",
   "age": "Age",

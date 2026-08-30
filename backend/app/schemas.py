@@ -212,8 +212,8 @@ class TokenGenerateIn(BaseModel):
 
 class TokenCallIn(BaseModel):
     doctor_id: Optional[str] = None
-    doctor_name: str = "Dr. Rahul"
-    room_number: Optional[str] = "Room 1"
+    doctor_name: str
+    room_number: Optional[str] = None
 
 
 class PatientTokenOut(BaseModel):
@@ -257,6 +257,13 @@ class RoomCreateIn(BaseModel):
     name: str  # e.g. "Room C"
     department: Optional[str] = "General Medicine"
     default_doctor: Optional[str] = None
+
+
+class RoomUpdateIn(BaseModel):
+    name: Optional[str] = None
+    department: Optional[str] = None
+    default_doctor: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
 class RoomOut(BaseModel):

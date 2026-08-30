@@ -1078,37 +1078,39 @@ export default function PatientPage() {
         {step === "documents_upload" && (
           <div className="max-w-xl mx-auto bg-white border-2 border-slate-200 rounded-3xl p-8 shadow-xl text-center">
             <h2 className="text-2xl md:text-3xl font-black text-slate-900 mb-2">
-              {lang === "hi" ? "पुराने दस्तावेज स्कैन करें" : "Scan Prior Documents"}
+              {lang === "hi" ? "रिपोर्ट अपलोड / स्कैन करें" : "Upload / Scan Reports"}
             </h2>
             <p className="text-slate-500 mb-6 text-sm">
               {lang === "hi"
-                ? "यदि आपके पास कोई पुराना पर्चा या लैब रिपोर्ट है, तो स्कैन करें।"
-                : "Upload or scan previous prescriptions, lab reports, or discharge slips (optional)."}
+                ? "यदि आपके पास कोई पुराना पर्चा, लैब रिपोर्ट या मेडिकल रिपोर्ट है, तो स्कैन या अपलोड करें (वैकल्पिक)।"
+                : "Upload or scan previous medical records, prescriptions, or lab reports (optional)."}
             </p>
 
-            <div className="grid grid-cols-3 gap-3 mb-8">
-              {[
-                { type: "prescription", label: lang === "hi" ? "पर्चा" : "Prescription", file: "sample_prescription.png" },
-                { type: "lab", label: lang === "hi" ? "लैब रिपोर्ट" : "Lab Report", file: "sample_lab_report.png" },
-                { type: "discharge", label: lang === "hi" ? "डिस्चार्ज कार्ड" : "Discharge Slip", file: "sample_discharge_summary.png" },
-              ].map((d) => (
-                <div key={d.type} className="border-2 border-slate-200 rounded-2xl p-4 text-center bg-slate-50">
-                  <div className="text-sm font-bold text-slate-800 mb-2">{d.label}</div>
-                  {docStatus[d.type] ? (
-                    <span className="inline-block py-1 px-2 rounded bg-teal-100 text-teal-800 text-xs font-mono font-bold">
-                      {docStatus[d.type].toUpperCase()}
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => uploadAndProcessDoc(d.type, d.file)}
-                      className="py-2 px-3 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold w-full transition shadow"
-                    >
-                      📎 {lang === "hi" ? "स्कैन करें" : "Scan / Add"}
-                    </button>
-                  )}
+            <div className="max-w-md mx-auto mb-8">
+              <div className="border-2 border-slate-200 hover:border-teal-500 rounded-3xl p-6 text-center bg-slate-50 transition shadow-sm">
+                <div className="text-4xl mb-3">📄</div>
+                <div className="text-lg font-black text-slate-900 mb-1">
+                  {lang === "hi" ? "दस्तावेज / रिपोर्ट अपलोड करें" : "Upload / Scan Reports"}
                 </div>
-              ))}
+                <p className="text-xs text-slate-500 font-medium mb-4">
+                  {lang === "hi" ? "पर्चा, लैब रिपोर्ट या डिस्चार्ज समरी" : "Prescriptions, Lab Reports, or Discharge Summary"}
+                </p>
+
+                {docStatus["prescription"] || docStatus["report"] ? (
+                  <div className="inline-flex items-center gap-2 py-2 px-4 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-mono font-bold">
+                    <span>✓</span>
+                    <span>{docStatus["prescription"] ? docStatus["prescription"].toUpperCase() : "PROCESSED"}</span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => uploadAndProcessDoc("prescription", "sample_prescription.png")}
+                    className="py-3 px-6 bg-teal-700 hover:bg-teal-800 active:scale-98 text-white rounded-2xl text-sm font-extrabold shadow-md transition flex items-center justify-center gap-2 mx-auto"
+                  >
+                    <span>📎</span> {lang === "hi" ? "रिपोर्ट अपलोड / स्कैन करें" : "Upload / Scan Reports"}
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4">

@@ -444,7 +444,7 @@ export default function DoctorPage() {
               required
               value={usernameInput}
               onChange={(e) => setUsernameInput(e.target.value)}
-              placeholder="e.g. doctor (Dr. Rahul) or doctor2 (Dr. Priya)"
+              placeholder="Enter physician username / login ID"
               className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-blue-600 rounded-xl text-sm font-semibold text-slate-800 outline-none"
             />
           </div>
@@ -470,12 +470,6 @@ export default function DoctorPage() {
             Sign In to Consultation Portal →
           </button>
         </form>
-
-        <div className="mt-6 pt-4 border-t border-slate-200 text-center">
-          <p className="text-[11px] text-slate-500 font-medium">
-            Authorized Hospital Staff: <span className="font-mono font-bold text-slate-700">doctor / doctor123</span> (Dr. Rahul) • <span className="font-mono font-bold text-slate-700">doctor2 / doctor123</span> (Dr. Priya)
-          </p>
-        </div>
       </div>
     );
   }

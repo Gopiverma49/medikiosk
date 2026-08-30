@@ -6,9 +6,11 @@
 import type { ClinicalFact, Patient, Encounter, Contradiction, RedFlagRule, Summary } from "./types";
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const { headers, ...restOptions } = options;
   const res = await fetch(`/api${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
+    cache: "no-store",
+    headers: { "Content-Type": "application/json", ...(headers as Record<string, string> || {}) },
+    ...restOptions,
   });
   if (!res.ok) {
     const detail = await res.text();
@@ -138,6 +140,11 @@ export const api = {
   createRoomAdmin: (data: { name: string; department?: string; default_doctor?: string }) =>
     request<import("./types").ConsultationRoomItem>("/admin/rooms", {
       method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateRoomAdmin: (id: string, data: { name?: string; department?: string; default_doctor?: string; is_active?: boolean }) =>
+    request<import("./types").ConsultationRoomItem>(`/admin/rooms/${id}`, {
+      method: "PUT",
       body: JSON.stringify(data),
     }),
   deleteRoomAdmin: (id: string) =>

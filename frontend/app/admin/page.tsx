@@ -59,6 +59,18 @@ export default function AdminPage() {
   const [roomActionLoading, setRoomActionLoading] = useState(false);
   const [roomActionError, setRoomActionError] = useState<string | null>(null);
 
+  // Edit Room Modal State
+  const [isRoomEditModalOpen, setIsRoomEditModalOpen] = useState(false);
+  const [editingRoom, setEditingRoom] = useState<ConsultationRoomItem | null>(null);
+  const [editRoomForm, setEditRoomForm] = useState({
+    name: "",
+    department: "General Medicine",
+    default_doctor: "",
+    is_active: true,
+  });
+  const [editRoomLoading, setEditRoomLoading] = useState(false);
+  const [editRoomError, setEditRoomError] = useState<string | null>(null);
+
   // --- Check Saved Admin Auth ---
   useEffect(() => {
     const savedToken = sessionStorage.getItem("medikiosk_admin_token");
@@ -97,7 +109,7 @@ export default function AdminPage() {
       setIsAuthenticated(true);
       await loadAllData();
     } catch (err: any) {
-      setAuthError("Invalid admin credentials. (Default username: gopi, password: gopi)");
+      setAuthError("Invalid admin credentials.");
     }
   }
 
@@ -235,6 +247,43 @@ export default function AdminPage() {
     }
   }
 
+  function openEditRoomModal(room: ConsultationRoomItem) {
+    setEditingRoom(room);
+    setEditRoomForm({
+      name: room.name,
+      department: room.department || "General Medicine",
+      default_doctor: room.default_doctor || "",
+      is_active: room.is_active ?? true,
+    });
+    setEditRoomError(null);
+    setIsRoomEditModalOpen(true);
+  }
+
+  async function handleEditRoomSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingRoom) return;
+    setEditRoomError(null);
+    if (!editRoomForm.name.trim()) {
+      setEditRoomError("Please enter a room name.");
+      return;
+    }
+    setEditRoomLoading(true);
+    try {
+      await api.updateRoomAdmin(editingRoom.id, {
+        name: editRoomForm.name.trim(),
+        department: editRoomForm.department.trim() || "General Medicine",
+        default_doctor: editRoomForm.default_doctor.trim() || undefined,
+        is_active: editRoomForm.is_active,
+      });
+      setIsRoomEditModalOpen(false);
+      await loadRooms();
+    } catch (err: any) {
+      setEditRoomError(err.message || "Failed to update room.");
+    } finally {
+      setEditRoomLoading(false);
+    }
+  }
+
   async function handleDeleteRoom(room: ConsultationRoomItem) {
     if (!confirm(`Are you sure you want to delete "${room.name}"?`)) {
       return;
@@ -314,7 +363,7 @@ export default function AdminPage() {
               required
               value={usernameInput}
               onChange={(e) => setUsernameInput(e.target.value)}
-              placeholder="e.g. gopi or admin"
+              placeholder="Enter administrator username"
               className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-teal-600 rounded-xl text-sm font-semibold text-slate-800 outline-none"
             />
           </div>
@@ -670,7 +719,7 @@ export default function AdminPage() {
                     type="text"
                     value={roomDoctorInput}
                     onChange={(e) => setRoomDoctorInput(e.target.value)}
-                    placeholder="e.g. Dr. Vikram"
+                    placeholder="Enter physician name"
                     className="w-full p-2.5 bg-white border border-slate-300 focus:border-teal-600 rounded-xl text-sm font-semibold text-slate-800 outline-none"
                   />
                   <button
@@ -714,7 +763,14 @@ export default function AdminPage() {
                         Active on Display Board
                       </span>
                     </td>
-                    <td className="py-4 px-4 text-right">
+                    <td className="py-4 px-4 text-right space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => openEditRoomModal(room)}
+                        className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg transition"
+                      >
+                        Edit Room
+                      </button>
                       <button
                         type="button"
                         onClick={() => handleDeleteRoom(room)}
@@ -794,7 +850,7 @@ export default function AdminPage() {
                   required
                   value={doctorForm.fullName}
                   onChange={(e) => setDoctorForm({ ...doctorForm, fullName: e.target.value })}
-                  placeholder="e.g. Dr. Anjali Mehta"
+                  placeholder="Enter doctor's full name"
                   className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-teal-600 rounded-xl text-sm font-semibold text-slate-800 outline-none"
                 />
               </div>
@@ -808,7 +864,7 @@ export default function AdminPage() {
                   required
                   value={doctorForm.username}
                   onChange={(e) => setDoctorForm({ ...doctorForm, username: e.target.value.toLowerCase() })}
-                  placeholder="e.g. dr.anjali"
+                  placeholder="Enter login username"
                   className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-teal-600 rounded-xl text-sm font-semibold text-slate-800 outline-none font-mono"
                 />
               </div>
@@ -841,6 +897,102 @@ export default function AdminPage() {
                   className="flex-1 py-3 bg-teal-700 hover:bg-teal-800 text-white rounded-xl font-black text-sm shadow transition"
                 >
                   {doctorActionLoading ? "Saving..." : editingDoctor ? "Update Doctor" : "Create Doctor"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Consultation Room Edit Modal */}
+      {isRoomEditModalOpen && editingRoom && (
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm"
+          onClick={(e) => e.target === e.currentTarget && setIsRoomEditModalOpen(false)}
+        >
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl">
+            <h3 className="text-xl font-black text-slate-900 mb-1">
+              Edit Consultation Room
+            </h3>
+            <p className="text-xs text-slate-500 mb-4">
+              Update details for &quot;{editingRoom.name}&quot;. Changes are saved directly to the database and sync live to all Token display boards.
+            </p>
+
+            {editRoomError && (
+              <div className="bg-red-50 border-2 border-red-300 text-red-700 text-xs font-bold p-3 rounded-xl mb-4">
+                ⚠ {editRoomError}
+              </div>
+            )}
+
+            <form onSubmit={handleEditRoomSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Room Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editRoomForm.name}
+                  onChange={(e) => setEditRoomForm({ ...editRoomForm, name: e.target.value })}
+                  placeholder="e.g. Room A or Room C"
+                  className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-teal-600 rounded-xl text-sm font-semibold text-slate-800 outline-none font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Department
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editRoomForm.department}
+                  onChange={(e) => setEditRoomForm({ ...editRoomForm, department: e.target.value })}
+                  placeholder="e.g. General Medicine, Pediatrics, AYUSH"
+                  className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-teal-600 rounded-xl text-sm font-semibold text-slate-800 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Default Doctor (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={editRoomForm.default_doctor}
+                  onChange={(e) => setEditRoomForm({ ...editRoomForm, default_doctor: e.target.value })}
+                  placeholder="Leave empty or enter physician name"
+                  className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-teal-600 rounded-xl text-sm font-semibold text-slate-800 outline-none"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="room_active_check"
+                  checked={editRoomForm.is_active}
+                  onChange={(e) => setEditRoomForm({ ...editRoomForm, is_active: e.target.checked })}
+                  className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500"
+                />
+                <label htmlFor="room_active_check" className="text-xs font-bold text-slate-700 cursor-pointer">
+                  Active (Show on live Token Call Board)
+                </label>
+              </div>
+
+              <div className="flex gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsRoomEditModalOpen(false)}
+                  className="flex-1 py-3 border-2 border-slate-300 hover:bg-slate-100 rounded-xl font-bold text-slate-700 text-sm transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editRoomLoading}
+                  className="flex-1 py-3 bg-teal-700 hover:bg-teal-800 text-white rounded-xl font-black text-sm shadow transition"
+                >
+                  {editRoomLoading ? "Saving..." : "Save Room Changes"}
                 </button>
               </div>
             </form>
