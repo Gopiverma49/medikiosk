@@ -170,3 +170,12 @@ export interface TokenDisplayState {
   recent_called: TokenColumnDisplay[];
 }
 
+export interface TokenDisplayState {
+  column1: TokenColumnDisplay | null;
+  column2: TokenColumnDisplay | null;
+  rooms?: TokenColumnDisplay[];
+  waiting_count: number;
+  upcoming_tokens: string[];
+  recent_called: TokenColumnDisplay[];
+}
+

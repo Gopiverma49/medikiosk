@@ -103,7 +103,7 @@ export default function DoctorPage() {
           body: payload,
           keepalive: true,
           headers: { "Content-Type": "application/json" },
-        }).catch(() => {});
+        }).catch(() => { });
       }
     };
 
@@ -136,7 +136,7 @@ export default function DoctorPage() {
           const firstAvailable = roomList.find((r) => !occupied[r] || occupied[r] === docName) || roomList[0] || "Room A";
           sessionStorage.setItem("medikiosk_doctor_room", firstAvailable);
           if (docName) {
-            api.claimRoom(docName, firstAvailable).catch(() => {});
+            api.claimRoom(docName, firstAvailable).catch(() => { });
           }
           return firstAvailable;
         }
@@ -147,7 +147,7 @@ export default function DoctorPage() {
       if (docName) {
         const activeForDoc = q.find(
           (t) => (t.status === "CALLED" || t.status === "IN_CONSULTATION") &&
-                 (t.doctor_name === docName || (currentUser?.username && t.doctor_id === currentUser.username))
+            (t.doctor_name === docName || (currentUser?.username && t.doctor_id === currentUser.username))
         );
         if (activeForDoc) {
           setActiveToken(activeForDoc);
@@ -224,7 +224,7 @@ export default function DoctorPage() {
       setIsAuthenticated(true);
 
       // Claim the room
-      await api.claimRoom(docName, chosenRoom).catch(() => {});
+      await api.claimRoom(docName, chosenRoom).catch(() => { });
       await loadDoctorDashboard(userObj);
     } catch (err: any) {
       setAuthError(err.message || "Invalid doctor credentials.");
@@ -235,14 +235,14 @@ export default function DoctorPage() {
     setAssignedRoom(newRoom);
     sessionStorage.setItem("medikiosk_doctor_room", newRoom);
     if (doctorDisplayName) {
-      await api.claimRoom(doctorDisplayName, newRoom).catch(() => {});
+      await api.claimRoom(doctorDisplayName, newRoom).catch(() => { });
       await loadTokenQueue();
     }
   }
 
   async function handleLogout() {
     if (doctorDisplayName) {
-      api.releaseRoom(doctorDisplayName).catch(() => {});
+      api.releaseRoom(doctorDisplayName).catch(() => { });
     }
     sessionStorage.removeItem("medikiosk_doctor_token");
     sessionStorage.removeItem("medikiosk_doctor_user");
@@ -762,11 +762,10 @@ export default function DoctorPage() {
                 <button
                   key={t}
                   onClick={() => setTab(t)}
-                  className={`pb-3 text-sm font-black capitalize transition border-b-2 ${
-                    tab === t
+                  className={`pb-3 text-sm font-black capitalize transition border-b-2 ${tab === t
                       ? "border-blue-600 text-blue-600"
                       : "border-transparent text-slate-400 hover:text-slate-700"
-                  }`}
+                    }`}
                 >
                   {t}
                 </button>
