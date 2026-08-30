@@ -8,7 +8,7 @@ import { KioskKeypad } from "../../components/KioskKeypad";
 import { KioskScanner } from "../../components/KioskScanner";
 import { KioskVoiceIndicator } from "../../components/KioskVoiceIndicator";
 import AdaptiveSymptomEngine, { SymptomAnswerRecord } from "../../components/symptoms/AdaptiveSymptomEngine";
-import type { Patient, TreatmentRecord } from "../../lib/types";
+import type { Patient, TreatmentRecord, TokenItem } from "../../lib/types";
 
 type FlowStep =
   | "lang_mode" // Step 1: Language & Interaction Mode
@@ -38,6 +38,7 @@ export default function PatientPage() {
   const [treatments, setTreatments] = useState<TreatmentRecord[]>([]);
   const [selectedIllnessId, setSelectedIllnessId] = useState<string | null>(null);
   const [encounterId, setEncounterId] = useState<string | null>(null);
+  const [generatedToken, setGeneratedToken] = useState<TokenItem | null>(null);
 
   // New Patient Form State
   const [regForm, setRegForm] = useState({
@@ -93,6 +94,7 @@ export default function PatientPage() {
     setPatientIdInput("");
     setSelectedIllnessId(null);
     setEncounterId(null);
+    setGeneratedToken(null);
     setDocStatus({});
     setHistoryStack([]);
     setStep("lang_mode");
@@ -313,10 +315,11 @@ export default function PatientPage() {
   const saveNewPatientToDB = async () => {
     setIsLoading(true);
     try {
+      const pid = patientIdInput?.trim() ? patientIdInput.trim() : undefined;
       const created = await api.createPatient({
-        patient_id: patientIdInput || `P${Date.now().toString().slice(-9)}`,
+        patient_id: pid,
         name: regForm.name.trim(),
-        phone: regForm.phone.trim(),
+        phone: regForm.phone.trim() || undefined,
         age: parseInt(regForm.age, 10),
         gender: regForm.gender,
         preferred_language: lang,
@@ -326,10 +329,10 @@ export default function PatientPage() {
       setTreatments([]);
       setIsLoading(false);
       goTo("history_auto_skip");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error creating patient:", err);
       setIsLoading(false);
-      alert("Failed to save patient. Please retry.");
+      alert(err.message || "Failed to save patient. Please retry.");
     }
   };
 
@@ -395,15 +398,31 @@ export default function PatientPage() {
   };
 
   const finishKioskIntake = async () => {
+    setIsLoading(true);
     if (encounterId) {
-      setIsLoading(true);
       try {
         await api.generateSummary(encounterId);
       } catch (e) {
         console.warn("Summary generation error:", e);
       }
-      setIsLoading(false);
     }
+
+    if (patient) {
+      try {
+        const tok = await api.generateToken(patient.id, encounterId || undefined, patient.department || "General Medicine");
+        setGeneratedToken(tok);
+        if (interactionMode === "voice") {
+          const tokenDigits = tok.token_number.split("").join(" ");
+          const prompt = lang === "hi"
+            ? `आपका टोकन नंबर है ${tok.token_number}। कृपया प्रतीक्षा कक्ष में बैठें।`
+            : `Your consultation token number is ${tokenDigits}. Please proceed to the waiting area.`;
+          VoiceService.speak(prompt, lang);
+        }
+      } catch (err) {
+        console.error("Error generating token:", err);
+      }
+    }
+    setIsLoading(false);
     goTo("completed");
   };
 
@@ -1112,18 +1131,42 @@ export default function PatientPage() {
           </div>
         )}
 
-        {/* COMPLETED SCREEN */}
+        {/* COMPLETED SCREEN WITH TOKEN NUMBER */}
         {step === "completed" && (
           <div className="max-w-xl mx-auto bg-white border-2 border-slate-200 rounded-3xl p-8 md:p-12 shadow-xl text-center">
-            <div className="w-20 h-20 bg-teal-100 text-teal-800 rounded-full flex items-center justify-center text-4xl font-black mx-auto mb-4">
+            <div className="w-16 h-16 bg-teal-100 text-teal-800 rounded-2xl flex items-center justify-center text-3xl font-black mx-auto mb-3 shadow-inner">
               ✓
             </div>
-            <h2 className="text-3xl font-black text-slate-900 mb-2">
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 mb-1">
               {t("all_done_title", lang)}
             </h2>
-            <p className="text-slate-500 mb-6 text-base">
+            <p className="text-slate-500 mb-4 text-sm">
               {t("all_done_desc", lang)}
             </p>
+
+            {/* Prominent Consultation Token Badge */}
+            {generatedToken ? (
+              <div className="bg-gradient-to-br from-teal-50 to-emerald-50 border-3 border-teal-500 rounded-3xl p-6 my-6 shadow-md relative overflow-hidden">
+                <div className="text-xs font-mono uppercase font-black tracking-widest text-teal-800 bg-teal-200/80 px-3 py-1 rounded-full inline-block mb-2">
+                  {lang === "hi" ? "आपका टोकन नंबर" : "YOUR CONSULTATION TOKEN"}
+                </div>
+                <div className="text-6xl sm:text-7xl font-black font-mono tracking-wider text-teal-950 my-1 drop-shadow-sm">
+                  {generatedToken.token_number}
+                </div>
+                <div className="text-sm font-bold text-slate-800 mt-1">
+                  {patient?.name} {patient?.patient_id ? `(ID: ${patient.patient_id})` : ""}
+                </div>
+                <div className="text-xs font-semibold text-teal-800 mt-2 bg-white/80 border border-teal-200 rounded-xl py-2 px-3">
+                  {lang === "hi"
+                    ? "कृपया प्रतीक्षा क्षेत्र में बैठें और मुख्य डिस्प्ले स्क्रीन देखें।"
+                    : "Please take a seat in the waiting area and watch the main Token Display."}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 my-4 text-xs font-semibold text-slate-600">
+                {lang === "hi" ? "पंजीकरण सफल रहा। कृपया प्रतीक्षा क्षेत्र में बैठें।" : "Intake registration completed successfully. Please take a seat in the waiting area."}
+              </div>
+            )}
 
             {/* Auto-Refresh Countdown Badge */}
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 border border-slate-300 rounded-full text-xs font-bold text-slate-600 mb-6 shadow-inner">

@@ -18,6 +18,7 @@ from . import models  # noqa: F401 - ensures models are registered on Base.metad
 from .routers import (
     auth, patients, history, clinical_facts, documents, timeline,
     contradictions, red_flags, summaries, fhir, evaluation, ayush, admin,
+    tokens,
 )
 
 from .seed import seed
@@ -75,3 +76,5 @@ app.include_router(fhir.router)
 app.include_router(evaluation.router)
 app.include_router(ayush.router)
 app.include_router(admin.router)
+app.include_router(tokens.router)
+

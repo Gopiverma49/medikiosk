@@ -47,18 +47,51 @@ def get_patient_treatments(patient_id: str, db: Session = Depends(get_db)):
 
 @router.post("/patients", response_model=PatientOut)
 def create_patient(payload: PatientCreate, db: Session = Depends(get_db)):
+    import time
+    clean_pid = payload.patient_id.strip() if payload.patient_id else None
+    
+    if not clean_pid:
+        clean_pid = f"10{int(time.time() * 1000) % 100000000:08d}"
+    
     # Check if patient_id is already registered
-    if payload.patient_id:
-        existing = db.query(Patient).filter(Patient.patient_id == payload.patient_id).first()
-        if existing:
-            return existing
-    patient = Patient(**payload.model_dump())
-    db.add(patient)
-    db.flush()
-    log_event(db, "Patient created", f"{patient.name} ({patient.patient_id or patient.id})")
-    db.commit()
-    db.refresh(patient)
-    return patient
+    existing = db.query(Patient).filter(Patient.patient_id == clean_pid).first()
+    if existing:
+        # Update existing record with the newly submitted details
+        existing.name = payload.name.strip()
+        if payload.phone:
+            existing.phone = payload.phone.strip()
+        if payload.age is not None:
+            existing.age = payload.age
+        if payload.gender:
+            existing.gender = payload.gender
+        if payload.preferred_language:
+            existing.preferred_language = payload.preferred_language
+        if payload.department:
+            existing.department = payload.department
+        db.commit()
+        db.refresh(existing)
+        log_event(db, "Patient updated", f"{existing.name} ({existing.patient_id or existing.id})")
+        return existing
+    
+    patient_data = payload.model_dump()
+    patient_data["patient_id"] = clean_pid
+    patient = Patient(**patient_data)
+    try:
+        db.add(patient)
+        db.flush()
+        log_event(db, "Patient created", f"{patient.name} ({patient.patient_id or patient.id})")
+        db.commit()
+        db.refresh(patient)
+        return patient
+    except Exception as e:
+        db.rollback()
+        # Fallback with guaranteed unique timestamp ID if unique conflict occurred
+        patient_data["patient_id"] = f"10{int(time.time() * 1000) % 100000000:08d}"
+        patient = Patient(**patient_data)
+        db.add(patient)
+        db.commit()
+        db.refresh(patient)
+        return patient
 
 
 @router.get("/patients/{patient_id}", response_model=PatientOut)

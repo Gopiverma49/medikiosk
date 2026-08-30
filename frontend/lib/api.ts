@@ -139,5 +139,30 @@ export const api = {
   getAuditLog: () => request("/admin/audit-log"),
   toggleAIStatus: (provider: string) => request(`/admin/ai-status/${provider}/toggle`, { method: "POST" }),
   getAIStatus: () => request("/admin/ai-status"),
+
+  // --- tokens ---
+  generateToken: (patient_id: string, encounter_id?: string, department?: string) =>
+    request<import("./types").TokenItem>("/tokens/generate", {
+      method: "POST",
+      body: JSON.stringify({ patient_id, encounter_id, department }),
+    }),
+  getDisplayState: () => request<import("./types").TokenDisplayState>("/tokens/display-state"),
+  getActiveTokens: () => request<import("./types").TokenItem[]>("/tokens/active"),
+  getTokenQueue: (status?: string) =>
+    request<import("./types").TokenQueueItem[]>(`/tokens/queue${status ? `?status=${status}` : ""}`),
+  callToken: (token_id: string, payload: { doctor_id?: string; doctor_name: string; room_number?: string }) =>
+    request<import("./types").TokenItem>(`/tokens/${token_id}/call`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  startConsultation: (token_id: string) =>
+    request<import("./types").TokenItem>(`/tokens/${token_id}/start-consultation`, { method: "POST" }),
+  completeToken: (token_id: string) =>
+    request<import("./types").TokenItem>(`/tokens/${token_id}/complete`, { method: "POST" }),
+  recallToken: (token_id: string) =>
+    request<import("./types").TokenItem>(`/tokens/${token_id}/recall`, { method: "POST" }),
+  getPatientActiveToken: (patient_id: string) =>
+    request<import("./types").TokenItem | null>(`/tokens/patient/${patient_id}`),
 };
+
 

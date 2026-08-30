@@ -109,3 +109,50 @@ export interface Summary {
   contradictions_count: number;
   status: string;
 }
+
+export type TokenStatus = "WAITING" | "CALLED" | "IN_CONSULTATION" | "COMPLETED" | "CANCELLED";
+
+export interface TokenItem {
+  id: string;
+  token_number: string;
+  patient_id: string;
+  encounter_id?: string | null;
+  status: TokenStatus;
+  doctor_id?: string | null;
+  doctor_name?: string | null;
+  room_number?: string | null;
+  department?: string | null;
+  triage_priority?: string | null;
+  called_at?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+}
+
+export interface TokenQueueItem extends TokenItem {
+  patient_name?: string | null;
+  patient_identifier?: string | null;
+  patient_age?: number | null;
+  patient_gender?: string | null;
+  patient_phone?: string | null;
+  symptoms_preview?: string | null;
+}
+
+export interface TokenColumnDisplay {
+  token_number: string;
+  doctor_name: string;
+  room_number: string;
+  status: string;
+  patient_name?: string | null;
+  department?: string | null;
+  called_at?: string | null;
+}
+
+export interface TokenDisplayState {
+  column1: TokenColumnDisplay | null;
+  column2: TokenColumnDisplay | null;
+  waiting_count: number;
+  upcoming_tokens: string[];
+  recent_called: TokenColumnDisplay[];
+}
+

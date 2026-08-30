@@ -200,3 +200,63 @@ class DoctorOut(BaseModel):
     role: str
     created_at: datetime
     updated_at: Optional[datetime] = None
+
+
+# --- Token Management Schemas ---
+
+class TokenGenerateIn(BaseModel):
+    patient_id: str
+    encounter_id: Optional[str] = None
+    department: Optional[str] = "General Medicine"
+
+
+class TokenCallIn(BaseModel):
+    doctor_id: Optional[str] = None
+    doctor_name: str = "Dr. Rahul"
+    room_number: Optional[str] = "Room 1"
+
+
+class PatientTokenOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    token_number: str
+    patient_id: str
+    encounter_id: Optional[str] = None
+    status: str
+    doctor_id: Optional[str] = None
+    doctor_name: Optional[str] = None
+    room_number: Optional[str] = None
+    department: Optional[str] = None
+    triage_priority: Optional[str] = None
+    called_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    created_at: datetime
+
+
+class TokenQueueItemOut(PatientTokenOut):
+    patient_name: Optional[str] = None
+    patient_identifier: Optional[str] = None
+    patient_age: Optional[int] = None
+    patient_gender: Optional[str] = None
+    patient_phone: Optional[str] = None
+    symptoms_preview: Optional[str] = None
+
+
+class TokenColumnDisplay(BaseModel):
+    token_number: str
+    doctor_name: str
+    room_number: str
+    status: str  # CALLED | IN_CONSULTATION
+    patient_name: Optional[str] = None
+    department: Optional[str] = None
+    called_at: Optional[datetime] = None
+
+
+class TokenDisplayStateOut(BaseModel):
+    column1: Optional[TokenColumnDisplay] = None  # Doctor 1 / Room 1
+    column2: Optional[TokenColumnDisplay] = None  # Doctor 2 / Room 2
+    waiting_count: int = 0
+    upcoming_tokens: List[str] = []
+    recent_called: List[TokenColumnDisplay] = []
+

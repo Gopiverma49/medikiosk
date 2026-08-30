@@ -11,7 +11,7 @@ Demo credentials (synthetic, prototype-only — see docs/SECURITY.md):
     admin    / admin123     (role: ADMIN)
 """
 from .database import SessionLocal, Base, engine
-from .models import User, Role, RedFlagRule, RedFlagRuleVersion, Patient, TreatmentRecord
+from .models import User, Role, RedFlagRule, RedFlagRuleVersion, Patient, TreatmentRecord, TokenQueue, TokenStatus
 from .security import hash_password
 
 DEFAULT_RULES = [
@@ -68,7 +68,8 @@ def seed():
         demo_users = [
             ("gopi", "gopi", Role.ADMIN, "Gopi (Administrator)"),
             ("admin", "admin123", Role.ADMIN, "System Admin (demo)"),
-            ("doctor", "doctor123", Role.DOCTOR, "Dr. (demo) Physician"),
+            ("doctor", "doctor123", Role.DOCTOR, "Dr. Rahul (Physician)"),
+            ("doctor2", "doctor123", Role.DOCTOR, "Dr. Priya (Physician)"),
             ("triage", "triage123", Role.TRIAGE, "Triage Nurse (demo)"),
             ("patient", "patient123", Role.PATIENT, "Rahul Kumar (demo patient login)"),
         ]
@@ -81,7 +82,7 @@ def seed():
                 # Update password to ensure it matches
                 existing.hashed_password = hash_password(password)
                 existing.role = role
-                if not existing.full_name:
+                if not existing.full_name or "demo" in existing.full_name:
                     existing.full_name = full_name
         db.commit()
 
@@ -135,9 +136,21 @@ def seed():
                 is_synthetic=True,
             )
             db.add(p2)
+            db.flush()
+
+        # Seed initial token for demo queue if empty
+        if db.query(TokenQueue).count() == 0 and p1:
+            tok1 = TokenQueue(
+                token_number="001",
+                patient_id=p1.id,
+                status=TokenStatus.WAITING,
+                department="General Medicine",
+                triage_priority="ROUTINE",
+            )
+            db.add(tok1)
 
         db.commit()
-        print("Seed complete: 4 demo users, 2 demo patients (with/without history) + default red-flag rules.")
+        print("Seed complete: Demo users, demo patients, rules, and token queue verified.")
     finally:
         db.close()
 

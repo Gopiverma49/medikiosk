@@ -10,7 +10,15 @@ settings = get_settings()
 DEFAULT_SQLITE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "medikiosk.db"))
 DEFAULT_SQLITE_URL = f"sqlite:///{DEFAULT_SQLITE_PATH.replace(os.sep, '/')}"
 
-db_url = settings.DATABASE_URL
+db_url = settings.DATABASE_URL or DEFAULT_SQLITE_URL
+
+# In local dev or if postgres driver isn't installed, smoothly use SQLite
+if not db_url.startswith("sqlite"):
+    try:
+        import psycopg2  # noqa: F401
+    except ImportError:
+        db_url = DEFAULT_SQLITE_URL
+
 connect_args = {}
 engine_kwargs = {}
 
@@ -21,8 +29,7 @@ else:
 
 try:
     engine = create_engine(db_url, connect_args=connect_args, **engine_kwargs)
-except Exception as e:
-    logging.warning(f"Could not initialize database with {db_url}: {e}. Falling back to SQLite.")
+except Exception:
     engine = create_engine(DEFAULT_SQLITE_URL, connect_args={"check_same_thread": False})
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

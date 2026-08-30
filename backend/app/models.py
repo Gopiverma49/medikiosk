@@ -87,6 +87,7 @@ class Patient(Base, TimestampMixin):
 
     encounters = relationship("Encounter", back_populates="patient")
     treatment_records = relationship("TreatmentRecord", back_populates="patient", cascade="all, delete-orphan")
+    tokens = relationship("TokenQueue", back_populates="patient", cascade="all, delete-orphan")
 
 
 class TreatmentRecord(Base, TimestampMixin):
@@ -117,6 +118,7 @@ class Encounter(Base, TimestampMixin):
     consents = relationship("Consent", back_populates="encounter")
     facts = relationship("ClinicalFact", back_populates="encounter")
     documents = relationship("Document", back_populates="encounter")
+    tokens = relationship("TokenQueue", back_populates="encounter")
 
 
 class Consent(Base, TimestampMixin):
@@ -365,3 +367,35 @@ class AuditLog(Base):
     detail = Column(String, nullable=True)
     actor = Column(String, nullable=True)
     encounter_id = Column(GUID(), nullable=True)
+
+
+class TokenStatus(str, enum.Enum):
+    WAITING = "WAITING"
+    CALLED = "CALLED"
+    IN_CONSULTATION = "IN_CONSULTATION"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+
+
+class TokenQueue(Base, TimestampMixin):
+    """Token assigned to patient for waiting queue and doctor consultation flow."""
+    __tablename__ = "token_queue"
+    id = Column(GUID(), primary_key=True, default=gen_uuid)
+    token_number = Column(String, nullable=False, index=True)  # e.g. "A001", "A023", "B017"
+    patient_id = Column(GUID(), ForeignKey("patients.id"), nullable=False, index=True)
+    encounter_id = Column(GUID(), ForeignKey("encounters.id"), nullable=True, index=True)
+    status = Column(Enum(TokenStatus), default=TokenStatus.WAITING, nullable=False, index=True)
+
+    doctor_id = Column(GUID(), ForeignKey("users.id"), nullable=True)
+    doctor_name = Column(String, nullable=True)  # e.g. "Dr. Rahul", "Dr. Priya"
+    room_number = Column(String, nullable=True)  # e.g. "Room 1", "Room 2", "Station 1"
+    department = Column(String, default="General Medicine")
+    triage_priority = Column(String, default="ROUTINE")  # HIGH | MEDIUM | ROUTINE
+
+    called_at = Column(DateTime, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+
+    patient = relationship("Patient", back_populates="tokens")
+    encounter = relationship("Encounter", back_populates="tokens")
+
