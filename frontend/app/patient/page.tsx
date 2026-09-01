@@ -1045,10 +1045,16 @@ export default function PatientPage() {
                           ⏱️ {durationLabel}
                         </span>
 
-                        {/* 3. REST INFORMATION IN SHORT (Third) */}
-                        <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-200">
-                          💊 {shortInfo}
-                        </span>
+                        {/* 3. REST INFORMATION OR PRESCRIBED MEDICINES */}
+                        {tr.prescribed_medicines && tr.prescribed_medicines.length > 0 ? (
+                          <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 border border-blue-200">
+                            💊 Rx: {tr.prescribed_medicines.map((m) => m.name).join(", ")}
+                          </span>
+                        ) : (
+                          <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-200">
+                            💊 {shortInfo}
+                          </span>
+                        )}
                       </div>
                     </div>
 

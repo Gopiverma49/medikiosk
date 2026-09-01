@@ -9,6 +9,14 @@ class PatientLookupIn(BaseModel):
     patient_id: str  # 10-digit Patient ID
 
 
+class PrescribedMedicineItem(BaseModel):
+    name: str
+    dosage: Optional[str] = None        # e.g. "500 mg", "650 mg", "5 ml"
+    frequency: Optional[str] = None     # e.g. "1-0-1 (Twice daily)", "1-1-1 (Thrice daily)"
+    duration: Optional[str] = None      # e.g. "5 days", "1 week"
+    instructions: Optional[str] = None  # e.g. "After meals", "Before food"
+
+
 class TreatmentRecordOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
@@ -18,8 +26,20 @@ class TreatmentRecordOut(BaseModel):
     symptoms: Optional[str] = None
     diagnosis: Optional[str] = None
     treatment: Optional[str] = None
+    prescribed_medicines: Optional[List[PrescribedMedicineItem]] = None
+    doctor_notes: Optional[str] = None
+    doctor_name: Optional[str] = None
     visit_date: Optional[str] = None
     created_at: datetime
+
+
+class PrescriptionSaveIn(BaseModel):
+    patient_id: str
+    encounter_id: Optional[str] = None
+    diagnosis: Optional[str] = None
+    doctor_notes: Optional[str] = None
+    doctor_name: Optional[str] = None
+    prescribed_medicines: List[PrescribedMedicineItem] = []
 
 
 class PatientCreate(BaseModel):

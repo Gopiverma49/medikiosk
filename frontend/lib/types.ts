@@ -26,6 +26,14 @@ export interface ClinicalFact {
   timestamp?: string | null;
 }
 
+export interface PrescribedMedicine {
+  name: string;
+  dosage?: string | null;
+  frequency?: string | null;
+  duration?: string | null;
+  instructions?: string | null;
+}
+
 export interface TreatmentRecord {
   id: string;
   patient_id: string;
@@ -34,6 +42,9 @@ export interface TreatmentRecord {
   symptoms?: string | null;
   diagnosis?: string | null;
   treatment?: string | null;
+  prescribed_medicines?: PrescribedMedicine[] | null;
+  doctor_notes?: string | null;
+  doctor_name?: string | null;
   visit_date?: string | null;
   created_at: string;
 }

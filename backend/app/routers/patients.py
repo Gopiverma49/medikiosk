@@ -7,7 +7,7 @@ from ..database import get_db
 from ..models import Patient, Encounter, Consent, TreatmentRecord, ClinicalFact, ClinicalSummary
 from ..schemas import (
     PatientCreate, PatientOut, EncounterCreate, EncounterOut, ConsentCreate,
-    PatientLookupIn, TreatmentRecordOut,
+    PatientLookupIn, TreatmentRecordOut, PrescriptionSaveIn,
 )
 from ..services.audit import log_event
 from datetime import datetime, timezone
@@ -261,3 +261,80 @@ def record_consent(payload: ConsentCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(consent)
     return {"id": consent.id, "granted": consent.granted}
+
+
+@router.post("/patients/{patient_id}/prescriptions", response_model=TreatmentRecordOut)
+def save_patient_prescription(patient_id: str, payload: PrescriptionSaveIn, db: Session = Depends(get_db)):
+    """Save or update prescribed medicines, diagnosis, and review notes for a patient encounter."""
+    patient = _get_patient(db, patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    enc_id = payload.encounter_id
+    illness_key = f"VISIT_{enc_id[:8].upper()}" if enc_id else f"RX_{patient.id[:8].upper()}"
+
+    tr = None
+    if enc_id:
+        tr = db.query(TreatmentRecord).filter(
+            TreatmentRecord.patient_id == patient.id,
+            TreatmentRecord.illness_id == illness_key
+        ).first()
+
+    if not tr:
+        # Check by patient_id and today's date if no encounter
+        tr = db.query(TreatmentRecord).filter(
+            TreatmentRecord.patient_id == patient.id,
+            TreatmentRecord.visit_date == datetime.now(timezone.utc).strftime("%d %b %Y")
+        ).first()
+
+    meds_data = [m.model_dump() for m in payload.prescribed_medicines]
+
+    if not tr:
+        # Determine illness name from facts or default
+        facts = db.query(ClinicalFact).filter(ClinicalFact.encounter_id == enc_id).all() if enc_id else []
+        cc = next((f.label for f in facts if f.concept == "chief_complaint" and f.label), None)
+        symptom_labels = [f.label for f in facts if f.label and (f.category in ("symptom", "chief_complaint") or f.concept in ("chief_complaint", "location", "character"))]
+        symptoms_str = ", ".join(symptom_labels[:4]) if symptom_labels else (cc or "OPD Consultation")
+        illness_name = payload.diagnosis or cc or (symptom_labels[0] if symptom_labels else "OPD Medical Consultation")
+
+        tr = TreatmentRecord(
+            patient_id=patient.id,
+            illness_id=illness_key,
+            illness_name=illness_name,
+            symptoms=symptoms_str,
+            diagnosis=payload.diagnosis or "Consultation Completed",
+            treatment="Prescribed Treatment & Medical Advice",
+            prescribed_medicines=meds_data,
+            doctor_notes=payload.doctor_notes,
+            doctor_name=payload.doctor_name,
+            visit_date=datetime.now(timezone.utc).strftime("%d %b %Y"),
+        )
+        db.add(tr)
+    else:
+        if payload.diagnosis:
+            tr.diagnosis = payload.diagnosis
+            tr.illness_name = payload.diagnosis
+        tr.prescribed_medicines = meds_data
+        if payload.doctor_notes is not None:
+            tr.doctor_notes = payload.doctor_notes
+        if payload.doctor_name:
+            tr.doctor_name = payload.doctor_name
+
+    db.flush()
+    log_event(
+        db,
+        "Prescription saved",
+        f"Prescription saved ({len(meds_data)} medicines) for {patient.name} by {payload.doctor_name or 'Doctor'}",
+        encounter_id=enc_id
+    )
+    db.commit()
+    db.refresh(tr)
+    return tr
+
+
+@router.get("/encounters/{encounter_id}/prescription", response_model=Optional[TreatmentRecordOut])
+def get_encounter_prescription(encounter_id: str, db: Session = Depends(get_db)):
+    """Retrieve prescription and treatment record for a specific encounter."""
+    illness_key = f"VISIT_{encounter_id[:8].upper()}"
+    tr = db.query(TreatmentRecord).filter(TreatmentRecord.illness_id == illness_key).first()
+    return tr

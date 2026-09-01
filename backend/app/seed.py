@@ -117,6 +117,31 @@ def seed():
                 symptoms="Fever, Body pain, Weakness",
                 diagnosis="Acute Viral Syndrome",
                 treatment="Paracetamol 650mg, ORS, Bed rest for 3 days",
+                prescribed_medicines=[
+                    {
+                        "name": "Paracetamol (Dolo 650)",
+                        "dosage": "650 mg",
+                        "frequency": "1-0-1 (Twice daily)",
+                        "duration": "3 days",
+                        "instructions": "After food with water"
+                    },
+                    {
+                        "name": "ORS Hydration Sachet",
+                        "dosage": "1 sachet in 1L water",
+                        "frequency": "Throughout the day",
+                        "duration": "2 days",
+                        "instructions": "Drink sip by sip"
+                    },
+                    {
+                        "name": "Vitamin C 500mg (Limcee)",
+                        "dosage": "500 mg",
+                        "frequency": "0-1-0 (Once daily)",
+                        "duration": "5 days",
+                        "instructions": "Chewable after lunch"
+                    }
+                ],
+                doctor_notes="Patient presented with mild fever (100.4°F) and body ache for 2 days. Vitals stable. Advised rest, adequate hydration, and light diet. Review if fever exceeds 102°F or persists past 3 days.",
+                doctor_name="Dr. Rahul Kumar",
                 visit_date="12 Aug 2026",
             )
             db.add(t1)

@@ -67,19 +67,34 @@ async def broadcast_token_event(event_type: str, payload: dict):
         print("WebSocket broadcast notice:", e)
 
 
-def _get_current_cycle_start() -> datetime:
+def _get_current_cycle_start(db: Optional[Session] = None) -> datetime:
     """
-    Returns the start datetime of the daily hospital token cycle (8:00 AM local time).
-    If current time is before 8:00 AM, the cycle started yesterday at 8:00 AM.
-    If current time is at or after 8:00 AM, the cycle started today at 8:00 AM.
+    Returns the start datetime of the daily hospital token cycle (8:00 AM local time),
+    converted to UTC naive datetime to match TokenQueue.created_at stored in SQLite.
+    If current local time is before 8:00 AM, the cycle started yesterday at 8:00 AM local time.
+    If current local time is at or after 8:00 AM, the cycle started today at 8:00 AM local time.
+    Also respects any manual administrator token resets performed during the cycle.
     """
-    now = datetime.now()
-    today_8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
-    if now >= today_8am:
-        return today_8am
+    local_now = datetime.now().astimezone()
+    local_8am = local_now.replace(hour=8, minute=0, second=0, microsecond=0)
+    if local_now >= local_8am:
+        cycle_start_local = local_8am
     else:
-        yesterday = now - timedelta(days=1)
-        return yesterday.replace(hour=8, minute=0, second=0, microsecond=0)
+        cycle_start_local = local_8am - timedelta(days=1)
+
+    cycle_start_utc = cycle_start_local.astimezone(timezone.utc).replace(tzinfo=None)
+
+    if db is not None:
+        from ..models import AuditLog
+        last_admin_reset = db.query(AuditLog).filter(
+            AuditLog.event == "Token System Reset",
+            AuditLog.timestamp >= cycle_start_utc
+        ).order_by(desc(AuditLog.timestamp)).first()
+        if last_admin_reset and last_admin_reset.timestamp:
+            if last_admin_reset.timestamp > cycle_start_utc:
+                cycle_start_utc = last_admin_reset.timestamp
+
+    return cycle_start_utc
 
 
 def _generate_next_token_number(db: Session, department: str = "General Medicine") -> str:
@@ -87,24 +102,27 @@ def _generate_next_token_number(db: Session, department: str = "General Medicine
     Generate sequential daily token starting from 1 each day at 8:00 AM.
     Format is digits only: 1, 2, 3, 4, 5...
     """
-    cycle_start = _get_current_cycle_start()
-    last_token = db.query(TokenQueue).filter(
+    cycle_start = _get_current_cycle_start(db)
+    tokens_in_cycle = db.query(TokenQueue).filter(
         TokenQueue.created_at >= cycle_start
-    ).order_by(TokenQueue.created_at.desc()).first()
+    ).all()
 
-    if not last_token or not last_token.token_number:
+    if not tokens_in_cycle:
         return "1"
 
-    digits = "".join(filter(str.isdigit, last_token.token_number))
-    if digits:
-        try:
-            next_seq = int(digits) + 1
-            return str(next_seq)
-        except ValueError:
-            pass
+    max_num = 0
+    for tok in tokens_in_cycle:
+        if tok.token_number:
+            digits = "".join(filter(str.isdigit, tok.token_number))
+            if digits:
+                try:
+                    num = int(digits)
+                    if num > max_num:
+                        max_num = num
+                except ValueError:
+                    pass
 
-    count = db.query(TokenQueue).filter(TokenQueue.created_at >= cycle_start).count()
-    return str(count + 1)
+    return str(max_num + 1)
 
 
 def _get_symptoms_preview(db: Session, encounter_id: Optional[str]) -> Optional[str]:
@@ -142,10 +160,12 @@ def _get_or_create_default_rooms(db: Session) -> List[ConsultationRoom]:
 
 def _build_display_state(db: Session) -> TokenDisplayStateOut:
     """Build dynamic room display state for all configured consultation rooms."""
+    cycle_start = _get_current_cycle_start(db)
     db_rooms = _get_or_create_default_rooms(db)
 
-    # Active tokens in CALLED or IN_CONSULTATION
+    # Active tokens in CALLED or IN_CONSULTATION from current cycle
     active_tokens = db.query(TokenQueue).filter(
+        TokenQueue.created_at >= cycle_start,
         TokenQueue.status.in_([TokenStatus.CALLED, TokenStatus.IN_CONSULTATION])
     ).order_by(desc(TokenQueue.called_at), desc(TokenQueue.updated_at)).all()
 
@@ -206,16 +226,18 @@ def _build_display_state(db: Session) -> TokenDisplayStateOut:
     col1_item = rooms_display[0] if len(rooms_display) > 0 and rooms_display[0].token_number else None
     col2_item = rooms_display[1] if len(rooms_display) > 1 and rooms_display[1].token_number else None
 
-    # Waiting queue count and upcoming token numbers
+    # Waiting queue count and upcoming token numbers for current cycle
     waiting_tokens = db.query(TokenQueue).filter(
+        TokenQueue.created_at >= cycle_start,
         TokenQueue.status == TokenStatus.WAITING
     ).order_by(TokenQueue.created_at.asc()).all()
 
     waiting_count = len(waiting_tokens)
     upcoming_tokens = [w.token_number for w in waiting_tokens[:8]]
 
-    # Recent called history (up to last 5 called / completed)
+    # Recent called history (up to last 5 called / completed in current cycle)
     recent_history = db.query(TokenQueue).filter(
+        TokenQueue.created_at >= cycle_start,
         TokenQueue.status.in_([TokenStatus.CALLED, TokenStatus.IN_CONSULTATION, TokenStatus.COMPLETED]),
         TokenQueue.called_at.isnot(None)
     ).order_by(desc(TokenQueue.called_at)).limit(5).all()
@@ -257,24 +279,25 @@ async def generate_patient_token(payload: TokenGenerateIn, db: Session = Depends
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    # Check for existing active token for this patient / encounter
-    query = db.query(TokenQueue).filter(
-        TokenQueue.patient_id == patient.id,
-        TokenQueue.status.in_([TokenStatus.WAITING, TokenStatus.CALLED, TokenStatus.IN_CONSULTATION])
-    )
+    # If this exact encounter already generated a token, return it (idempotency for network retries/double clicks)
     if payload.encounter_id:
-        existing_enc_token = query.filter(TokenQueue.encounter_id == payload.encounter_id).first()
+        existing_enc_token = db.query(TokenQueue).filter(
+            TokenQueue.patient_id == patient.id,
+            TokenQueue.encounter_id == payload.encounter_id,
+            TokenQueue.status != TokenStatus.CANCELLED
+        ).first()
         if existing_enc_token:
             return existing_enc_token
 
-    existing_token = query.order_by(TokenQueue.created_at.desc()).first()
-    if existing_token:
-        # Link encounter if missing
-        if payload.encounter_id and not existing_token.encounter_id:
-            existing_token.encounter_id = payload.encounter_id
-            db.commit()
-            db.refresh(existing_token)
-        return existing_token
+    # Supersede/cancel any stale WAITING tokens for this patient from earlier encounters so old visits don't linger
+    stale_tokens = db.query(TokenQueue).filter(
+        TokenQueue.patient_id == patient.id,
+        TokenQueue.status == TokenStatus.WAITING
+    ).all()
+    for st in stale_tokens:
+        st.status = TokenStatus.CANCELLED
+    if stale_tokens:
+        db.flush()
 
     # Check triage priority if encounter provided
     priority = "ROUTINE"
@@ -419,7 +442,8 @@ def get_token_queue(
     db: Session = Depends(get_db)
 ):
     """Retrieve queue list for doctor station with enriched patient info."""
-    query = db.query(TokenQueue)
+    cycle_start = _get_current_cycle_start(db)
+    query = db.query(TokenQueue).filter(TokenQueue.created_at >= cycle_start)
     if status and status.upper() != "ALL":
         try:
             status_enum = TokenStatus(status.upper())
@@ -557,7 +581,11 @@ async def complete_token(token_id: str, db: Session = Depends(get_db)):
             TreatmentRecord.patient_id == token.patient_id,
             TreatmentRecord.illness_id == f"VISIT_{token.encounter_id[:8].upper()}"
         ).first()
-        if not existing_tr:
+        if existing_tr:
+            if token.doctor_name and not existing_tr.doctor_name:
+                existing_tr.doctor_name = token.doctor_name
+                db.flush()
+        else:
             facts = db.query(ClinicalFact).filter(ClinicalFact.encounter_id == token.encounter_id).all()
             cc = next((f.label for f in facts if f.concept == "chief_complaint" and f.label), None)
             symptom_labels = [f.label for f in facts if f.label and (f.category in ("symptom", "chief_complaint") or f.concept in ("chief_complaint", "location", "character"))]
@@ -573,6 +601,7 @@ async def complete_token(token_id: str, db: Session = Depends(get_db)):
                 symptoms=symptoms_str,
                 diagnosis="Consultation Completed",
                 treatment="Prescribed Treatment & Medical Advice",
+                doctor_name=token.doctor_name,
                 visit_date=datetime.now(timezone.utc).strftime("%d %b %Y"),
             )
             db.add(tr)

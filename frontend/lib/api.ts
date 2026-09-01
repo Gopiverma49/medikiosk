@@ -13,8 +13,21 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     ...restOptions,
   });
   if (!res.ok) {
-    const detail = await res.text();
-    throw new Error(`API ${path} failed: ${res.status} ${detail}`);
+    const raw = await res.text();
+    let message = raw;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.detail === "string") {
+        message = parsed.detail;
+      } else if (parsed && typeof parsed.message === "string") {
+        message = parsed.message;
+      }
+    } catch {
+      // keep raw string
+    }
+    const err: any = new Error(message || `API ${path} failed: ${res.status}`);
+    err.status = res.status;
+    throw err;
   }
   return res.json();
 }
@@ -28,6 +41,13 @@ export const api = {
     }),
   getPatientTreatments: (patient_id: string) =>
     request<import("./types").TreatmentRecord[]>(`/patients/${patient_id}/treatments`),
+  savePrescription: (patient_id: string, payload: { encounter_id?: string; diagnosis?: string; doctor_notes?: string; doctor_name?: string; prescribed_medicines: import("./types").PrescribedMedicine[] }) =>
+    request<import("./types").TreatmentRecord>(`/patients/${patient_id}/prescriptions`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  getEncounterPrescription: (encounter_id: string) =>
+    request<import("./types").TreatmentRecord | null>(`/encounters/${encounter_id}/prescription`),
   createPatient: (data: Partial<Patient>) =>
     request<Patient>("/patients", { method: "POST", body: JSON.stringify(data) }),
   getPatient: (id: string) => request<Patient>(`/patients/${id}`),

@@ -5,9 +5,9 @@ import {
   PriorityPill,
   VerificationBadge,
 } from "../../components/ClinicalComponents";
-import type { Summary, Patient, TokenQueueItem, TokenItem } from "../../lib/types";
+import type { Summary, Patient, TokenQueueItem, TokenItem, TreatmentRecord, PrescribedMedicine } from "../../lib/types";
 
-const TABS = ["summary", "documents"] as const;
+const TABS = ["summary", "prescription", "past_records", "documents"] as const;
 type Tab = (typeof TABS)[number];
 
 // Crisp audio chime feedback for doctor station
@@ -111,6 +111,21 @@ export default function DoctorPage() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [documents, setDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // --- Prescription & Past Medical Records State ---
+  const [prescribedMedicines, setPrescribedMedicines] = useState<PrescribedMedicine[]>([]);
+  const [doctorNotes, setDoctorNotes] = useState<string>("");
+  const [diagnosisInput, setDiagnosisInput] = useState<string>("");
+  const [pastTreatments, setPastTreatments] = useState<TreatmentRecord[]>([]);
+  const [prescriptionSavedStatus, setPrescriptionSavedStatus] = useState<string | null>(null);
+  const [isSavingPrescription, setIsSavingPrescription] = useState(false);
+
+  // New Medicine Input Form State
+  const [newMedName, setNewMedName] = useState("");
+  const [newMedDosage, setNewMedDosage] = useState("500 mg");
+  const [newMedFrequency, setNewMedFrequency] = useState("1-0-1 (Twice daily)");
+  const [newMedDuration, setNewMedDuration] = useState("5 days");
+  const [newMedInstructions, setNewMedInstructions] = useState("After meals");
 
   // --- Token Management State ---
   const [tokenQueue, setTokenQueue] = useState<TokenQueueItem[]>([]);
@@ -283,7 +298,11 @@ export default function DoctorPage() {
       await api.claimRoom(docName, chosenRoom).catch(() => { });
       await loadDoctorDashboard(userObj);
     } catch (err: any) {
-      setAuthError(err.message || "Invalid doctor credentials.");
+      if (err.status === 401 || (err.message && err.message.toLowerCase().includes("invalid"))) {
+        setAuthError("Invalid username or password.");
+      } else {
+        setAuthError(err.message || "Invalid username or password.");
+      }
     }
   }
 
@@ -325,6 +344,10 @@ export default function DoctorPage() {
       setSummary(null);
       setDocuments([]);
       setActiveToken(null);
+      setPrescribedMedicines([]);
+      setDoctorNotes("");
+      setDiagnosisInput("");
+      setPastTreatments([]);
 
       const [pList] = await Promise.all([
         api.listPatients(),
@@ -373,6 +396,12 @@ export default function DoctorPage() {
         p = await api.getPatient(pId);
       }
       setPatient(p);
+
+      if (p) {
+        const past = await api.getPatientTreatments(p.id).catch(() => []);
+        setPastTreatments(past);
+      }
+
       let targetEncId = encIdOverride;
       if (!targetEncId) {
         const encounters = await api.listPatientEncounters(p.id);
@@ -383,13 +412,76 @@ export default function DoctorPage() {
       if (targetEncId) {
         setEncounterId(targetEncId);
         await loadEncounterData(targetEncId);
+        const existingRx = await api.getEncounterPrescription(targetEncId).catch(() => null);
+        if (existingRx) {
+          setPrescribedMedicines(existingRx.prescribed_medicines || []);
+          setDoctorNotes(existingRx.doctor_notes || "");
+          setDiagnosisInput(existingRx.diagnosis || "");
+        } else {
+          setPrescribedMedicines([]);
+          setDoctorNotes("");
+          setDiagnosisInput("");
+        }
       } else {
         setEncounterId(null);
         setDocuments([]);
         setSummary(null);
+        setPrescribedMedicines([]);
+        setDoctorNotes("");
+        setDiagnosisInput("");
       }
     } catch (e) {
       console.warn("Error loading patient record:", e);
+    }
+  }
+
+  // --- Prescription Helpers ---
+  function handleAddMedicine() {
+    if (!newMedName.trim()) return;
+    const med: PrescribedMedicine = {
+      name: newMedName.trim(),
+      dosage: newMedDosage.trim() || undefined,
+      frequency: newMedFrequency.trim() || undefined,
+      duration: newMedDuration.trim() || undefined,
+      instructions: newMedInstructions.trim() || undefined,
+    };
+    setPrescribedMedicines((prev) => [...prev, med]);
+    setNewMedName("");
+    setPrescriptionSavedStatus(null);
+  }
+
+  function handleRemoveMedicine(index: number) {
+    setPrescribedMedicines((prev) => prev.filter((_, i) => i !== index));
+    setPrescriptionSavedStatus(null);
+  }
+
+  function handleQuickAddMedicine(name: string, dose: string, freq: string, dur: string, inst: string) {
+    setNewMedName(name);
+    setNewMedDosage(dose);
+    setNewMedFrequency(freq);
+    setNewMedDuration(dur);
+    setNewMedInstructions(inst);
+  }
+
+  async function handleSavePrescription() {
+    if (!patient) return;
+    setIsSavingPrescription(true);
+    try {
+      await api.savePrescription(patient.id, {
+        encounter_id: encounterId || undefined,
+        diagnosis: diagnosisInput.trim() || undefined,
+        doctor_notes: doctorNotes.trim() || undefined,
+        doctor_name: doctorDisplayName || "Doctor",
+        prescribed_medicines: prescribedMedicines,
+      });
+      setPrescriptionSavedStatus("✓ Prescription saved to patient medical record!");
+      const updatedPast = await api.getPatientTreatments(patient.id).catch(() => []);
+      setPastTreatments(updatedPast);
+      setTimeout(() => setPrescriptionSavedStatus(null), 4000);
+    } catch (err: any) {
+      alert("Failed to save prescription: " + err.message);
+    } finally {
+      setIsSavingPrescription(false);
     }
   }
 
@@ -408,7 +500,6 @@ export default function DoctorPage() {
       await loadTokenQueue();
       await selectPatient(tokenItem.patient_id, tokenItem.encounter_id);
     } catch (err: any) {
-      // If claimed by another doctor simultaneously, refresh queue gracefully
       await loadTokenQueue();
       console.warn("Token claim note:", err.message);
     } finally {
@@ -433,6 +524,17 @@ export default function DoctorPage() {
     if (!activeToken) return;
     setTokenActionLoading("complete");
     try {
+      // Auto-save prescription if medicines or notes are entered
+      if (patient && (prescribedMedicines.length > 0 || doctorNotes.trim() || diagnosisInput.trim())) {
+        await api.savePrescription(patient.id, {
+          encounter_id: encounterId || undefined,
+          diagnosis: diagnosisInput.trim() || undefined,
+          doctor_notes: doctorNotes.trim() || undefined,
+          doctor_name: doctorDisplayName || "Doctor",
+          prescribed_medicines: prescribedMedicines,
+        }).catch((e) => console.warn("Auto-save Rx note:", e));
+      }
+
       await api.completeToken(activeToken.id);
       setActiveToken(null);
       // Clean workspace after completion
@@ -440,6 +542,11 @@ export default function DoctorPage() {
       setEncounterId(null);
       setSummary(null);
       setDocuments([]);
+      setPrescribedMedicines([]);
+      setDoctorNotes("");
+      setDiagnosisInput("");
+      setPastTreatments([]);
+      setPrescriptionSavedStatus(null);
       await loadTokenQueue();
     } catch (err: any) {
       alert("Failed to complete token: " + err.message);
@@ -785,23 +892,60 @@ export default function DoctorPage() {
         ) : (
           <>
             {/* Navigation Tabs */}
-            <div className="flex border-b border-slate-200 mb-6 gap-6">
+            <div className="flex border-b border-slate-200 mb-6 gap-2 sm:gap-6 overflow-x-auto">
               {TABS.map((t) => {
-                const label = t === "documents"
-                  ? (documents.length > 0 ? `Documents (${documents.length})` : "Documents")
-                  : "Summary";
+                let label = "Summary";
+                let icon = "📋";
+                let badge: React.ReactNode = null;
+
+                if (t === "summary") {
+                  label = "AI Summary";
+                  icon = "📋";
+                } else if (t === "prescription") {
+                  label = "Prescription & Medicines";
+                  icon = "💊";
+                  if (prescribedMedicines.length > 0) {
+                    badge = (
+                      <span className="ml-1.5 px-2 py-0.5 text-[10px] font-black rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                        {prescribedMedicines.length}
+                      </span>
+                    );
+                  }
+                } else if (t === "past_records") {
+                  label = "Past Medical History";
+                  icon = "📜";
+                  if (pastTreatments.length > 0) {
+                    badge = (
+                      <span className="ml-1.5 px-2 py-0.5 text-[10px] font-black rounded-full bg-slate-100 text-slate-700 border border-slate-300">
+                        {pastTreatments.length}
+                      </span>
+                    );
+                  }
+                } else if (t === "documents") {
+                  label = "Documents";
+                  icon = "📄";
+                  if (documents.length > 0) {
+                    badge = (
+                      <span className="ml-1.5 px-2 py-0.5 text-[10px] font-black rounded-full bg-slate-100 text-slate-700 border border-slate-300">
+                        {documents.length}
+                      </span>
+                    );
+                  }
+                }
 
                 return (
                   <button
                     key={t}
                     onClick={() => setTab(t)}
-                    className={`pb-3 text-sm font-black capitalize transition border-b-2 flex items-center gap-1.5 ${
+                    className={`pb-3.5 text-xs sm:text-sm font-black capitalize transition border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${
                       tab === t
                         ? "border-blue-600 text-blue-600"
                         : "border-transparent text-slate-400 hover:text-slate-700"
                     }`}
                   >
+                    <span>{icon}</span>
                     <span>{label}</span>
+                    {badge}
                   </button>
                 );
               })}
@@ -879,7 +1023,7 @@ export default function DoctorPage() {
                             <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
                               <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5">
                                 <span>💊</span>
-                                <span>MEDICATIONS</span>
+                                <span>CURRENT MEDICATIONS</span>
                               </div>
                               <div className="text-sm font-bold text-slate-800">
                                 {parsed.medications}
@@ -900,8 +1044,8 @@ export default function DoctorPage() {
                               </div>
                               <div className={`text-sm font-bold ${
                                 !parsed.allergies.toLowerCase().includes("none") && !parsed.allergies.toLowerCase().includes("no known")
-                                  ? "text-red-900"
-                                  : "text-slate-800"
+                                ? "text-red-900"
+                                : "text-slate-800"
                               }`}>
                                 {parsed.allergies}
                               </div>
@@ -982,7 +1126,478 @@ export default function DoctorPage() {
               </div>
             )}
 
-            {/* Tab 2: Uploaded Clinical Documents */}
+            {/* Tab 2: Prescribe Medicines & Doctor Review */}
+            {tab === "prescription" && (
+              <div className="space-y-6">
+                {/* Header Banner */}
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-2xl shadow-md font-serif font-black">
+                      ℞
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-slate-900">
+                        Doctor Consultation & Prescription Pad
+                      </h3>
+                      <p className="text-xs text-slate-500 font-medium">
+                        Prescribe medications, dosage, frequency, and clinical reviews. Saved automatically upon completion.
+                      </p>
+                    </div>
+                  </div>
+                  {prescriptionSavedStatus && (
+                    <div className="bg-emerald-100 border border-emerald-300 text-emerald-800 px-3.5 py-1.5 rounded-xl text-xs font-bold animate-fade-in flex items-center gap-1.5 shadow-sm">
+                      <span>✓</span>
+                      <span>{prescriptionSavedStatus}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 1. Diagnosis / Clinical Impression */}
+                <div className="bg-white border-2 border-slate-200 rounded-2xl p-5 space-y-3 shadow-2xs">
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-600">
+                    🩺 Diagnosis / Clinical Impression
+                  </label>
+                  <input
+                    type="text"
+                    value={diagnosisInput}
+                    onChange={(e) => setDiagnosisInput(e.target.value)}
+                    placeholder="e.g. Acute Viral Syndrome, Gastroenteritis, Upper Respiratory Infection"
+                    className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-blue-600 rounded-xl text-sm font-bold text-slate-800 outline-none"
+                  />
+                  {/* Quick Suggested Diagnosis Chips */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[11px] font-bold text-slate-400 mr-1">Quick Select:</span>
+                    {[
+                      "Viral Fever",
+                      "Acute Bronchitis & Cough",
+                      "Gastritis & Acidity",
+                      "Hypertension Review",
+                      "Gastroenteritis",
+                      "Allergic Rhinitis",
+                      "Migraine & Headache",
+                      "General Body Ache",
+                    ].map((diag) => (
+                      <button
+                        key={diag}
+                        type="button"
+                        onClick={() => setDiagnosisInput(diag)}
+                        className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-100 text-slate-700 hover:text-blue-800 border border-slate-200 hover:border-blue-300 transition"
+                      >
+                        + {diag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2. Active Prescribed Medicines List */}
+                <div className="bg-white border-2 border-slate-200 rounded-2xl p-5 space-y-4 shadow-2xs">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">💊</span>
+                      <h4 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                        Prescribed Medicines ({prescribedMedicines.length})
+                      </h4>
+                    </div>
+                    <span className="text-xs text-slate-400 font-semibold">
+                      {prescribedMedicines.length === 0 ? "No medicines added yet" : "Ready for patient record"}
+                    </span>
+                  </div>
+
+                  {prescribedMedicines.length === 0 ? (
+                    <div className="text-center py-8 bg-slate-50/70 border border-dashed border-slate-200 rounded-xl">
+                      <div className="text-3xl mb-1.5">💊</div>
+                      <div className="text-sm font-bold text-slate-700">No Medicines Added Yet</div>
+                      <p className="text-xs text-slate-400 mt-0.5">Use the medicine builder below to add prescribed medications.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-200 text-slate-500 font-black uppercase text-[10px]">
+                            <th className="py-2.5 px-3">#</th>
+                            <th className="py-2.5 px-3">Medicine Name</th>
+                            <th className="py-2.5 px-3">Dosage</th>
+                            <th className="py-2.5 px-3">Frequency (Times / Day)</th>
+                            <th className="py-2.5 px-3">Duration</th>
+                            <th className="py-2.5 px-3">Instructions</th>
+                            <th className="py-2.5 px-3 text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+                          {prescribedMedicines.map((med, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50 transition">
+                              <td className="py-3 px-3 font-mono font-bold text-slate-400">{idx + 1}</td>
+                              <td className="py-3 px-3 font-extrabold text-slate-900 text-sm">{med.name}</td>
+                              <td className="py-3 px-3">
+                                <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded font-bold">
+                                  {med.dosage || "As advised"}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3">
+                                <span className="bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded font-bold">
+                                  {med.frequency || "1-0-1 (Twice daily)"}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 font-mono font-bold text-slate-600">{med.duration || "5 days"}</td>
+                              <td className="py-3 px-3 text-slate-600">{med.instructions || "After food"}</td>
+                              <td className="py-3 px-3 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveMedicine(idx)}
+                                  className="text-red-500 hover:text-red-700 p-1.5 hover:bg-red-50 rounded-lg transition"
+                                  title="Remove medicine"
+                                >
+                                  🗑️
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Add Medicine Builder Form */}
+                <div className="bg-slate-50 border-2 border-slate-300 rounded-2xl p-5 space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
+                    <span className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                      <span>➕</span>
+                      <span>Add Medicine to Prescription</span>
+                    </span>
+                    <span className="text-[11px] font-bold text-slate-400">Specify drug, dose, and daily schedule</span>
+                  </div>
+
+                  {/* Common Medicine Quick Fill Suggestions */}
+                  <div>
+                    <span className="text-[11px] font-bold text-slate-500 block mb-1.5">Common Medicines (Click to quick-fill):</span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {[
+                        { name: "Paracetamol (Dolo 650)", dose: "650 mg", freq: "1-0-1 (Twice daily)", dur: "3 days", inst: "After meals" },
+                        { name: "Amoxicillin + Clavulanate", dose: "625 mg", freq: "1-0-1 (Twice daily)", dur: "5 days", inst: "After food" },
+                        { name: "Cetirizine Hydrochloride", dose: "10 mg", freq: "0-0-1 (Once at night)", dur: "5 days", inst: "Before sleep" },
+                        { name: "Pantoprazole (Pan 40)", dose: "40 mg", freq: "1-0-0 (Once in morning)", dur: "7 days", inst: "Before breakfast (Empty stomach)" },
+                        { name: "Azithromycin 500mg", dose: "500 mg", freq: "1-0-0 (Once daily)", dur: "3 days", inst: "1 hour before meal" },
+                        { name: "Ibuprofen 400mg", dose: "400 mg", freq: "1-0-1 (Twice daily / SOS)", dur: "3 days", inst: "After food" },
+                        { name: "ORS Hydration Sachet", dose: "1 sachet in 1L", freq: "Throughout the day", dur: "2 days", inst: "Sip by sip" },
+                        { name: "Cough Syrup (Ascoril D)", dose: "10 ml", freq: "1-1-1 (Thrice daily)", dur: "5 days", inst: "After meals" },
+                      ].map((item) => (
+                        <button
+                          key={item.name}
+                          type="button"
+                          onClick={() => handleQuickAddMedicine(item.name, item.dose, item.freq, item.dur, item.inst)}
+                          className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white hover:bg-blue-600 hover:text-white text-slate-700 border border-slate-200 shadow-2xs transition"
+                        >
+                          + {item.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {/* Medicine Name */}
+                    <div className="sm:col-span-2">
+                      <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
+                        Medicine / Syrup Name *
+                      </label>
+                      <input
+                        type="text"
+                        value={newMedName}
+                        onChange={(e) => setNewMedName(e.target.value)}
+                        placeholder="e.g. Paracetamol 650mg, Amoxicillin 500mg, Cough Syrup"
+                        className="w-full p-2.5 bg-white border border-slate-300 focus:border-blue-600 rounded-xl text-xs font-bold text-slate-800 outline-none"
+                      />
+                    </div>
+
+                    {/* Dosage */}
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
+                        Dosage (e.g. 500 mg, 10 ml)
+                      </label>
+                      <input
+                        type="text"
+                        value={newMedDosage}
+                        onChange={(e) => setNewMedDosage(e.target.value)}
+                        placeholder="500 mg"
+                        className="w-full p-2.5 bg-white border border-slate-300 focus:border-blue-600 rounded-xl text-xs font-bold text-slate-800 outline-none"
+                      />
+                      {/* Dosage Quick Chips */}
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {["250 mg", "500 mg", "650 mg", "1 tab", "5 ml", "10 ml"].map((d) => (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => setNewMedDosage(d)}
+                            className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 hover:bg-blue-100 hover:text-blue-800"
+                          >
+                            {d}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Frequency (Times a day) */}
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
+                        Frequency (Times a Day)
+                      </label>
+                      <select
+                        value={newMedFrequency}
+                        onChange={(e) => setNewMedFrequency(e.target.value)}
+                        className="w-full p-2.5 bg-white border border-slate-300 focus:border-blue-600 rounded-xl text-xs font-bold text-slate-800 outline-none"
+                      >
+                        <option value="1-0-1 (Twice daily)">1-0-1 (Twice daily - Morning & Night)</option>
+                        <option value="1-1-1 (Thrice daily)">1-1-1 (Thrice daily - Morning, Noon & Night)</option>
+                        <option value="1-0-0 (Once daily - Morning)">1-0-0 (Once in Morning)</option>
+                        <option value="0-0-1 (Once daily - Night)">0-0-1 (Once at Night / Bedtime)</option>
+                        <option value="SOS (As and when needed)">SOS (As and when needed / Pain)</option>
+                        <option value="Every 6 hours">Every 6 hours (4 times daily)</option>
+                        <option value="Once weekly">Once weekly</option>
+                      </select>
+                    </div>
+
+                    {/* Duration */}
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
+                        Duration (Days / Weeks)
+                      </label>
+                      <input
+                        type="text"
+                        value={newMedDuration}
+                        onChange={(e) => setNewMedDuration(e.target.value)}
+                        placeholder="5 days"
+                        className="w-full p-2.5 bg-white border border-slate-300 focus:border-blue-600 rounded-xl text-xs font-bold text-slate-800 outline-none"
+                      />
+                      {/* Duration Quick Chips */}
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {["3 days", "5 days", "7 days", "10 days", "14 days", "1 month"].map((dur) => (
+                          <button
+                            key={dur}
+                            type="button"
+                            onClick={() => setNewMedDuration(dur)}
+                            className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 hover:bg-blue-100 hover:text-blue-800"
+                          >
+                            {dur}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Instructions */}
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
+                        Timing / Food Instructions
+                      </label>
+                      <input
+                        type="text"
+                        value={newMedInstructions}
+                        onChange={(e) => setNewMedInstructions(e.target.value)}
+                        placeholder="After food"
+                        className="w-full p-2.5 bg-white border border-slate-300 focus:border-blue-600 rounded-xl text-xs font-bold text-slate-800 outline-none"
+                      />
+                      {/* Instructions Quick Chips */}
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {["After food", "Before food (Empty stomach)", "With warm water", "At bedtime"].map((inst) => (
+                          <button
+                            key={inst}
+                            type="button"
+                            onClick={() => setNewMedInstructions(inst)}
+                            className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 hover:bg-blue-100 hover:text-blue-800"
+                          >
+                            {inst}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleAddMedicine}
+                    disabled={!newMedName.trim()}
+                    className="py-2.5 px-5 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white rounded-xl font-bold text-xs shadow transition flex items-center gap-1.5"
+                  >
+                    <span>➕</span>
+                    <span>Add Medicine to Prescription</span>
+                  </button>
+                </div>
+
+                {/* 4. Doctor Review Notes & Clinical Advice */}
+                <div className="bg-white border-2 border-slate-200 rounded-2xl p-5 space-y-2.5 shadow-2xs">
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-600">
+                    📝 Doctor Review, Dietary Advice & Follow-up Notes
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={doctorNotes}
+                    onChange={(e) => setDoctorNotes(e.target.value)}
+                    placeholder="Enter doctor clinical review, dietary instructions, precautions, and follow-up timeline (e.g. Advised plenty of fluids, rest for 3 days. Review if fever exceeds 102°F or persists after 5 days)..."
+                    className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-blue-600 rounded-xl text-xs font-semibold text-slate-800 outline-none leading-relaxed"
+                  />
+                </div>
+
+                {/* 5. Prescription Action Buttons */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 border-t border-slate-200">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={isSavingPrescription}
+                      onClick={handleSavePrescription}
+                      className="py-3 px-6 bg-blue-700 hover:bg-blue-800 active:scale-98 text-white rounded-xl text-xs font-black shadow-md transition flex items-center gap-2"
+                    >
+                      <span>💾</span>
+                      <span>{isSavingPrescription ? "Saving Record…" : "Save Prescription"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={tokenActionLoading === "complete"}
+                      onClick={handleCompleteConsultation}
+                      className="py-3 px-6 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white rounded-xl text-xs font-black shadow-md transition flex items-center gap-2"
+                    >
+                      <span>✓</span>
+                      <span>Complete Consultation & Save</span>
+                    </button>
+                  </div>
+
+                  <span className="text-xs text-slate-400 font-semibold">
+                    Saved medicines will be stored in the patient's record for all future visits.
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 3: Past Medical Records & Historical Prescriptions */}
+            {tab === "past_records" && (
+              <div className="space-y-6">
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-600" />
+                    <span className="text-xs font-bold text-slate-800">
+                      Past Consultations & Prescriptions for {patient?.name} ({pastTreatments.length})
+                    </span>
+                  </div>
+                  <span className="text-xs text-slate-400 font-semibold">
+                    Historical patient records
+                  </span>
+                </div>
+
+                {pastTreatments.length === 0 ? (
+                  <div className="text-center py-12 px-6 bg-slate-50/50 border border-dashed border-slate-300 rounded-2xl">
+                    <div className="text-3xl mb-2">📜</div>
+                    <div className="text-sm font-bold text-slate-700 mb-1">
+                      No Past Medical Records
+                    </div>
+                    <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                      This is the first recorded hospital consultation for this patient. Future visits will show complete historical records here.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {pastTreatments.map((rec, idx) => (
+                      <div
+                        key={rec.id || idx}
+                        className="bg-white border-2 border-slate-200 hover:border-blue-400 rounded-2xl p-5 shadow-2xs space-y-3.5 transition"
+                      >
+                        {/* Visit Header */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-xl">🩺</span>
+                            <div>
+                              <h4 className="text-base font-black text-slate-900 leading-tight">
+                                {rec.illness_name || rec.diagnosis || "Medical Consultation"}
+                              </h4>
+                              {rec.doctor_name && (
+                                <span className="text-xs text-blue-700 font-bold">
+                                  👨‍⚕️ {rec.doctor_name}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold font-mono px-3 py-1 bg-slate-100 text-slate-700 border border-slate-200 rounded-xl self-start sm:self-auto">
+                            📅 {rec.visit_date || "Past Visit"}
+                          </span>
+                        </div>
+
+                        {/* Symptoms & Diagnosis */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                          {rec.symptoms && (
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                              <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">
+                                Reported Symptoms
+                              </span>
+                              <span className="font-bold text-slate-800">{rec.symptoms}</span>
+                            </div>
+                          )}
+
+                          {rec.diagnosis && (
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                              <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">
+                                Diagnosis / Summary
+                              </span>
+                              <span className="font-bold text-slate-800">{rec.diagnosis}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Prescribed Medicines Section */}
+                        {rec.prescribed_medicines && rec.prescribed_medicines.length > 0 ? (
+                          <div className="space-y-2 pt-1">
+                            <span className="text-[11px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                              <span>💊</span>
+                              <span>Prescribed Medicines ({rec.prescribed_medicines.length}):</span>
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                              {rec.prescribed_medicines.map((med, mIdx) => (
+                                <div
+                                  key={mIdx}
+                                  className="bg-blue-50/50 border border-blue-200 rounded-xl p-3 space-y-1"
+                                >
+                                  <div className="font-black text-slate-900 text-xs">{med.name}</div>
+                                  <div className="text-[11px] text-blue-800 font-bold">
+                                    {med.dosage ? `Dose: ${med.dosage}` : ""}
+                                    {med.frequency ? ` • ${med.frequency}` : ""}
+                                  </div>
+                                  {med.duration && (
+                                    <div className="text-[10px] font-mono text-slate-500">
+                                      Duration: {med.duration}
+                                    </div>
+                                  )}
+                                  {med.instructions && (
+                                    <div className="text-[10px] text-slate-600 italic">
+                                      {med.instructions}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : rec.treatment && rec.treatment !== "OPD Consultation" ? (
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+                            <span className="text-[10px] font-black uppercase text-slate-400 block mb-0.5">
+                              Treatment / Medication Summary
+                            </span>
+                            <span className="font-semibold text-slate-700">{rec.treatment}</span>
+                          </div>
+                        ) : null}
+
+                        {/* Doctor Notes / Clinical Review */}
+                        {rec.doctor_notes && (
+                          <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-3 text-xs">
+                            <span className="text-[10px] font-black uppercase text-amber-800 block mb-0.5">
+                              Doctor Clinical Notes & Review
+                            </span>
+                            <span className="text-slate-800 font-medium">{rec.doctor_notes}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab 4: Uploaded Clinical Documents */}
             {tab === "documents" && (
               <div className="space-y-6 min-h-[320px]">
                 {/* Header matching Summary tab height and layout */}

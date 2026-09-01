@@ -29,6 +29,22 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    # Check and add any missing columns in existing SQLite database
+    try:
+        with engine.connect() as conn:
+            if engine.dialect.name == "sqlite":
+                res = conn.exec_driver_sql("PRAGMA table_info(treatment_records)").fetchall()
+                cols = [r[1] for r in res] if res else []
+                if cols and "prescribed_medicines" not in cols:
+                    conn.exec_driver_sql("ALTER TABLE treatment_records ADD COLUMN prescribed_medicines JSON")
+                if cols and "doctor_notes" not in cols:
+                    conn.exec_driver_sql("ALTER TABLE treatment_records ADD COLUMN doctor_notes TEXT")
+                if cols and "doctor_name" not in cols:
+                    conn.exec_driver_sql("ALTER TABLE treatment_records ADD COLUMN doctor_name VARCHAR")
+                conn.commit()
+    except Exception as e:
+        print("Schema migration notice:", e)
+
     try:
         seed()
     except Exception as e:

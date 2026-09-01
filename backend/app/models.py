@@ -100,6 +100,9 @@ class TreatmentRecord(Base, TimestampMixin):
     symptoms = Column(Text, nullable=True)
     diagnosis = Column(String, nullable=True)
     treatment = Column(Text, nullable=True)
+    prescribed_medicines = Column(JSON, nullable=True)  # List of {name, dosage, frequency, duration, instructions}
+    doctor_notes = Column(Text, nullable=True)
+    doctor_name = Column(String, nullable=True)
     visit_date = Column(String, nullable=True)  # Human readable e.g. "12 Aug 2026"
 
     patient = relationship("Patient", back_populates="treatment_records")
