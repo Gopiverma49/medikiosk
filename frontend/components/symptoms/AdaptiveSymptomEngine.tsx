@@ -116,6 +116,22 @@ export default function AdaptiveSymptomEngine({
     if (!addedQuestions.has("general_meds")) queue.push("general_meds");
     if (!addedQuestions.has("general_allergies")) queue.push("general_allergies");
 
+    // Formally record chief complaint
+    const selectedLabels = selectedCategories.map((catId) => {
+      const cat = SYMPTOM_CATEGORIES.find((c) => c.id === catId);
+      return cat ? (cat.label[lang] || cat.label.en) : catId;
+    });
+
+    const ccRecord: SymptomAnswerRecord = {
+      questionId: "chief_complaint",
+      concept: "chief_complaint",
+      category: "chief_complaint",
+      value: selectedCategories,
+      certainty: "confirmed",
+      displayLabel: selectedLabels.join(", "),
+    };
+
+    setAnswers((prev) => ({ ...prev, chief_complaint: ccRecord }));
     setQuestionQueue(queue);
     setCurrentQueueIndex(0);
     setHistoryIndexes([]);
@@ -125,6 +141,15 @@ export default function AdaptiveSymptomEngine({
   // Handle "I DON'T KNOW" on category select
   const handleUnknownCategories = () => {
     setSelectedCategories(["unknown_complaint"]);
+    const ccRecord: SymptomAnswerRecord = {
+      questionId: "chief_complaint",
+      concept: "chief_complaint",
+      category: "chief_complaint",
+      value: null,
+      certainty: "unknown",
+      displayLabel: lang === "hi" ? "अज्ञात / सामान्य जांच" : "General Evaluation",
+    };
+    setAnswers((prev) => ({ ...prev, chief_complaint: ccRecord }));
     setQuestionQueue(["general_meds", "general_allergies"]);
     setCurrentQueueIndex(0);
     setHistoryIndexes([]);
@@ -270,7 +295,26 @@ export default function AdaptiveSymptomEngine({
   const buildSummaryItems = (): SymptomSummaryItem[] => {
     const items: SymptomSummaryItem[] = [];
 
-    // Group answers by category
+    // 1. First Row / Step: Selected Symptoms (Chief Complaints)
+    const selectedLabels = selectedCategories.map((catId) => {
+      const cat = SYMPTOM_CATEGORIES.find((c) => c.id === catId);
+      return cat ? (cat.label[lang] || cat.label.en) : catId;
+    });
+
+    if (selectedLabels.length > 0) {
+      items.push({
+        category: "chief_complaint",
+        categoryLabel: lang === "hi" ? "चयनित मुख्य लक्षण" : "Selected Symptoms",
+        details: [
+          {
+            label: lang === "hi" ? "मुख्य लक्षण" : "Reported Complaints",
+            value: selectedLabels.join(", "),
+          },
+        ],
+      });
+    }
+
+    // 2. Question responses by category
     selectedCategories.forEach((catId) => {
       const cat = SYMPTOM_CATEGORIES.find((c) => c.id === catId);
       if (!cat) return;
@@ -310,7 +354,7 @@ export default function AdaptiveSymptomEngine({
       }
     });
 
-    // Medications & Allergies summary
+    // 3. Medications & Allergies summary
     const medAns = answers["general_meds"];
     const allAns = answers["general_allergies"];
     if (medAns || allAns) {

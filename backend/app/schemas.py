@@ -34,7 +34,7 @@ class TreatmentRecordOut(BaseModel):
 
 
 class PrescriptionSaveIn(BaseModel):
-    patient_id: str
+    patient_id: Optional[str] = None
     encounter_id: Optional[str] = None
     diagnosis: Optional[str] = None
     doctor_notes: Optional[str] = None

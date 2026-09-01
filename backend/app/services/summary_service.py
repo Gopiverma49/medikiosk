@@ -80,13 +80,13 @@ def render_continuing_illness_summary(tr: TreatmentRecord, facts: list) -> str:
 def render_template_summary(facts) -> str:
     # General / core facts
     cc = _latest(facts, "chief_complaint")
-    onset = _latest(facts, "symptom_onset")
-    location = _latest(facts, "location")
-    character = _latest(facts, "character")
-    severity = _latest(facts, "severity")
-    radiation = _latest(facts, "radiation_to_arm")
-    dyspnea = _latest(facts, "dyspnea")
-    sweating = _latest(facts, "sweating")
+    onset = _latest(facts, "symptom_onset") or _latest(facts, "fever_duration") or _latest(facts, "pain_duration") or _latest(facts, "cough_duration") or _latest(facts, "headache_duration") or _latest(facts, "stomach_duration") or _latest(facts, "breathing_onset") or _latest(facts, "skin_duration") or _latest(facts, "injury_duration") or _latest(facts, "dental_duration") or _latest(facts, "urine_duration") or _latest(facts, "other_duration")
+    location = _latest(facts, "location") or _latest(facts, "pain_location") or _latest(facts, "injury_location")
+    character = _latest(facts, "character") or _latest(facts, "pain_character")
+    severity = _latest(facts, "severity") or _latest(facts, "pain_severity") or _latest(facts, "headache_severity") or _latest(facts, "stomach_severity") or _latest(facts, "dental_severity")
+    radiation = _latest(facts, "radiation_to_arm") or _latest(facts, "chest_radiation")
+    dyspnea = _latest(facts, "dyspnea") or _latest(facts, "chest_dyspnea")
+    sweating = _latest(facts, "sweating") or _latest(facts, "chest_sweating")
     
     # Specific symptom group facts
     fever_assoc = _latest(facts, "fever_associated_symptoms")
@@ -96,83 +96,119 @@ def render_template_summary(facts) -> str:
     eye_side = _latest(facts, "eye_side")
     eye_sym = _latest(facts, "eye_symptoms_list")
     injury_cause = _latest(facts, "injury_cause")
-    active_bleeding = _latest(facts, "active_bleeding")
+    active_bleeding = _latest(facts, "active_bleeding") or _latest(facts, "injury_bleeding") or _latest(facts, "animal_bleeding")
     cough_char = _latest(facts, "cough_character")
     stomach_sym = _latest(facts, "stomach_symptoms_list")
     skin_sym = _latest(facts, "skin_symptoms_list")
     dental_sym = _latest(facts, "dental_symptoms_list")
     urine_sym = _latest(facts, "urine_symptoms_list")
+    other_desc = _latest(facts, "other_description")
 
-    meds = [f for f in facts if f.concept == "medication"]
-    allergies = [f for f in facts if f.concept == "allergy"]
+    meds = [f for f in facts if f.concept in ("medication", "general_meds")]
+    allergies = [f for f in facts if f.concept in ("allergy", "general_allergies")]
     pmh = [f for f in facts if f.concept == "past_medical_history"]
     treatment = [f for f in facts if f.concept in ("treatment", "previous_treatment", "past_treatment")]
     investigations = [f for f in facts if f.category == "investigation"]
 
-    # Assemble Key Symptoms list with clean formatting
-    symptom_items = []
+    # 1. Selected Symptoms (Chief Complaints)
+    selected_symptoms = []
     if cc and cc.label:
-        symptom_items.append(_clean_label(cc.label))
+        selected_symptoms.append(_clean_label(cc.label))
+    elif any(f.category in ("symptom", "chief_complaint") for f in facts):
+        sym_facts = [f for f in facts if f.category in ("symptom", "chief_complaint") and f.label]
+        for sf in sym_facts:
+            lbl = _clean_label(sf.label)
+            if lbl and lbl not in selected_symptoms:
+                selected_symptoms.append(lbl)
+    
+    chief_str = ", ".join(selected_symptoms) if selected_symptoms else "General medical evaluation"
+
+    # 2. Associated Symptoms
+    assoc_items = []
     if fever_assoc and fever_assoc.label:
-        cleaned_assoc = _clean_label(fever_assoc.label)
-        if cleaned_assoc:
-            symptom_items.append(f"Fever with {cleaned_assoc}")
-    if cough_char and cough_char.label:
-        cleaned_cough = _clean_label(cough_char.label)
-        if "Cough" not in " ".join(symptom_items):
-            symptom_items.append(f"Cough ({cleaned_cough})")
-        else:
-            symptom_items.append(f"Character: {cleaned_cough}")
+        cleaned = _clean_label(fever_assoc.label)
+        if cleaned:
+            assoc_items.append(cleaned)
     if stomach_sym and stomach_sym.label:
-        symptom_items.append(_clean_label(stomach_sym.label))
+        assoc_items.append(_clean_label(stomach_sym.label))
     if skin_sym and skin_sym.label:
-        symptom_items.append(_clean_label(skin_sym.label))
+        assoc_items.append(_clean_label(skin_sym.label))
     if eye_sym and eye_sym.label:
-        symptom_items.append(f"Eye: {_clean_label(eye_sym.label)}")
+        assoc_items.append(f"Eye: {_clean_label(eye_sym.label)}")
     if dental_sym and dental_sym.label:
-        symptom_items.append(_clean_label(dental_sym.label))
+        assoc_items.append(_clean_label(dental_sym.label))
     if urine_sym and urine_sym.label:
-        symptom_items.append(_clean_label(urine_sym.label))
-    if location and location.label:
-        symptom_items.append(f"Location: {_clean_label(location.label)}")
-    if character and character.label:
-        symptom_items.append(f"Character: {_clean_label(character.label)}")
-    if severity and severity.label and severity.certainty != "unknown":
-        symptom_items.append(f"Severity: {severity.label}/10")
-    if injury_cause and injury_cause.label:
-        symptom_items.append(f"Injury Mechanism: {_clean_label(injury_cause.label)}")
-    if active_bleeding and active_bleeding.label:
-        symptom_items.append(f"Active Bleeding: {_clean_label(active_bleeding.label)}")
-    if dyspnea and dyspnea.label and str(dyspnea.label).lower() not in ("no", "none", "false"):
-        symptom_items.append("Breathlessness")
-    if sweating and sweating.label and str(sweating.label).lower() not in ("no", "none", "false"):
-        symptom_items.append("Diaphoresis / Sweating")
-    if animal_type and animal_type.label:
-        symptom_items.append(f"Animal Exposure: {_clean_label(animal_type.label)}")
+        assoc_items.append(_clean_label(urine_sym.label))
+    if cough_char and cough_char.label:
+        assoc_items.append(f"Cough ({_clean_label(cough_char.label)})")
+    if dyspnea and dyspnea.label and str(dyspnea.label).lower() not in ("no", "none", "false", "unknown"):
+        assoc_items.append("Breathlessness")
+    if sweating and sweating.label and str(sweating.label).lower() not in ("no", "none", "false", "unknown"):
+        assoc_items.append("Sweating")
 
-    # Deduplicate while preserving order
+    # Deduplicate associated items
     seen = set()
-    cleaned_symptoms = []
-    for sym in symptom_items:
-        if sym and sym.lower() not in seen:
-            seen.add(sym.lower())
-            cleaned_symptoms.append(sym)
+    cleaned_assoc = []
+    for item in assoc_items:
+        for sub in item.split(","):
+            s = sub.strip()
+            if s and s.lower() not in seen:
+                seen.add(s.lower())
+                cleaned_assoc.append(s)
+    
+    assoc_str = ", ".join(cleaned_assoc) if cleaned_assoc else "None reported"
 
-    key_symptoms_str = "   • ".join(cleaned_symptoms) if cleaned_symptoms else "None reported"
+    # 3. Key Symptoms summary line
+    key_symptoms_list = []
+    if selected_symptoms:
+        key_symptoms_list.append(", ".join(selected_symptoms))
+    if cleaned_assoc:
+        key_symptoms_list.append(f"Associated: {', '.join(cleaned_assoc)}")
+    key_symptoms_str = " • ".join(key_symptoms_list) if key_symptoms_list else chief_str
+
     duration_str = onset.label if (onset and onset.label) else "Not specified"
-    chief_str = cc.label if (cc and cc.label) else "General medical evaluation"
+
+    # Additional question answers
+    extra_lines = []
+    if location and location.label:
+        extra_lines.append(f"Location: {_clean_label(location.label)}")
+    if severity and severity.label and severity.certainty != "unknown":
+        sev_val = str(severity.label).strip()
+        sev_display = f"{sev_val}/10" if "/10" not in sev_val else sev_val
+        extra_lines.append(f"Severity: {sev_display}")
+    if character and character.label:
+        extra_lines.append(f"Character: {_clean_label(character.label)}")
+    if radiation and radiation.label and str(radiation.label).lower() not in ("no", "none", "false"):
+        extra_lines.append(f"Radiation: {_clean_label(radiation.label)}")
+    if injury_cause and injury_cause.label:
+        extra_lines.append(f"Injury Mechanism: {_clean_label(injury_cause.label)}")
+    if active_bleeding and active_bleeding.label:
+        extra_lines.append(f"Active Bleeding: {_clean_label(active_bleeding.label)}")
+    if animal_type and animal_type.label:
+        extra_lines.append(f"Animal Exposure: {_clean_label(animal_type.label)}")
+    if other_desc and other_desc.label:
+        extra_lines.append(f"Patient Note: {_clean_label(other_desc.label)}")
 
     parts = [
         "CLINICAL SUMMARY",
         "",
-        "Key Symptoms",
-        f"• {key_symptoms_str}",
+        "Chief Complaint",
+        chief_str,
         "",
         "Duration",
         duration_str,
         "",
-        "Chief Complaint",
-        chief_str,
+        "Associated Symptoms",
+        assoc_str,
+        "",
+        "Key Symptoms",
+        f"• {key_symptoms_str}",
+    ]
+
+    if extra_lines:
+        parts.extend(["", "Additional Details", "\n".join(f"• {line}" for line in extra_lines)])
+
+    parts.extend([
         "",
         "MEDICATIONS",
         ", ".join(m.label for m in meds) if meds else "None reported",
@@ -188,7 +224,7 @@ def render_template_summary(facts) -> str:
         "",
         "INVESTIGATIONS",
         ", ".join(i.label for i in investigations) if investigations else "No reports available",
-    ]
+    ])
     return "\n".join(parts)
 
 

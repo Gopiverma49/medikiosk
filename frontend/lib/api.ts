@@ -44,7 +44,7 @@ export const api = {
   savePrescription: (patient_id: string, payload: { encounter_id?: string; diagnosis?: string; doctor_notes?: string; doctor_name?: string; prescribed_medicines: import("./types").PrescribedMedicine[] }) =>
     request<import("./types").TreatmentRecord>(`/patients/${patient_id}/prescriptions`, {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ patient_id, ...payload }),
     }),
   getEncounterPrescription: (encounter_id: string) =>
     request<import("./types").TreatmentRecord | null>(`/encounters/${encounter_id}/prescription`),

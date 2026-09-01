@@ -33,15 +33,25 @@ function playDoctorChime() {
   }
 }
 
-interface ParsedClinicalSummary {
-  chiefComplaint: string;
-  duration: string;
-  keySymptoms: string;
+export interface ClinicalStepDetail {
+  stepNumber: number;
+  label: string;
+  value: string;
+  icon: string;
+  highlight?: "danger" | "warning" | "info" | "neutral" | "success";
+}
+
+export interface DoctorClinicalSummary {
+  selectedSymptoms: string[];
+  onsetDuration: string;
+  associatedSymptoms: string;
+  location?: string;
+  severity?: string;
+  character?: string;
   medications: string;
   allergies: string;
-  pmh: string;
-  previousTreatment: string;
-  investigations: string;
+  pastMedicalHistory?: string;
+  stepDetails: ClinicalStepDetail[];
 }
 
 function cleanSymptomText(str: string): string {
@@ -55,38 +65,310 @@ function cleanSymptomText(str: string): string {
     .trim();
 }
 
-function parseStructuredSummary(rawText: string): ParsedClinicalSummary {
+function formatShortIllnessName(rec: TreatmentRecord): string {
+  let name = (rec.illness_name || rec.diagnosis || "Medical Consultation").trim();
+  name = name.replace(/^follow[- ]up:\s*/i, "").replace(/^past\s+/i, "");
+  if (name.includes("Duration:")) {
+    name = name.split("Duration:")[0].trim();
+  }
+  if (!name && rec.symptoms) {
+    name = rec.symptoms.split(",")[0].trim();
+  }
+  const words = (name || "Medical Consultation").split(/\s+/);
+  if (words.length > 5) {
+    name = words.slice(0, 4).join(" ");
+  }
+  return cleanSymptomText(name) || "Medical Consultation";
+}
+
+function getPastAssociatedSymptoms(rec: TreatmentRecord): string {
+  if (!rec.symptoms) return "";
+  const shortName = formatShortIllnessName(rec).toLowerCase();
+  const parts = rec.symptoms
+    .split(",")
+    .map((s) => cleanSymptomText(s))
+    .filter((s) => {
+      const low = s.toLowerCase();
+      return (
+        s &&
+        low !== "none reported" &&
+        low !== "general symptoms" &&
+        low !== "general consultation" &&
+        !shortName.includes(low)
+      );
+    });
+  return parts.join(", ");
+}
+
+function extractDoctorSummary(rawText: string, facts: any[] = []): DoctorClinicalSummary {
   const text = (rawText || "").trim();
 
-  const extractSection = (heading: string, nextHeadings: string[]): string => {
-    const pattern = new RegExp(
-      `(?:##\\s*|###\\s*|^|\\n)\\s*${heading}[:\\s]*\\n+([\\s\\S]*?)(?=(?:\\n+\\s*(?:##\\s*|###\\s*)?(?:${nextHeadings.join("|")})[:\\s]*\\n)|$)`,
-      "i"
-    );
-    const match = text.match(pattern);
-    return match && match[1] ? match[1].trim() : "";
+  const getFact = (concept: string) => {
+    return facts.filter((x) => x.concept === concept).pop();
   };
 
-  const keySymptoms = extractSection("Key Symptoms", ["Duration", "Chief Complaint", "History of Present Illness", "MEDICATIONS", "ALLERGIES", "PAST MEDICAL HISTORY", "PREVIOUS TREATMENT", "INVESTIGATIONS"]);
-  const duration = extractSection("Duration", ["Chief Complaint", "Key Symptoms", "History of Present Illness", "MEDICATIONS", "ALLERGIES"]);
-  const chief = extractSection("Chief Complaint", ["Duration", "Key Symptoms", "History of Present Illness", "MEDICATIONS", "ALLERGIES"]);
-  const hpi = extractSection("History of Present Illness", ["Exposure", "MEDICATIONS", "ALLERGIES"]);
-  const medications = extractSection("MEDICATIONS", ["ALLERGIES", "PAST MEDICAL HISTORY", "PREVIOUS TREATMENT", "INVESTIGATIONS"]);
-  const allergies = extractSection("ALLERGIES", ["PAST MEDICAL HISTORY", "PREVIOUS TREATMENT", "INVESTIGATIONS"]);
-  const pmh = extractSection("PAST MEDICAL HISTORY", ["PREVIOUS TREATMENT", "INVESTIGATIONS"]);
-  const treatment = extractSection("PREVIOUS TREATMENT", ["INVESTIGATIONS"]);
-  const investigations = extractSection("INVESTIGATIONS", []);
+  const getFactVal = (concept: string): string => {
+    const f = getFact(concept);
+    if (!f) return "";
+    return cleanSymptomText(f.label || (typeof f.value === "string" ? f.value : ""));
+  };
+
+  // 1. Selected Symptoms (Chief Complaints)
+  let selectedSymptomsList: string[] = [];
+  const ccFact = getFact("chief_complaint");
+  if (ccFact && ccFact.label) {
+    const cleaned = cleanSymptomText(ccFact.label);
+    if (cleaned && cleaned !== "None reported") {
+      cleaned.split(",").forEach((s) => {
+        const item = s.trim();
+        if (item && !selectedSymptomsList.includes(item)) selectedSymptomsList.push(item);
+      });
+    }
+  }
+
+  // Fallback check for any symptom category facts if ccFact was not explicit
+  if (selectedSymptomsList.length === 0) {
+    facts.filter((x) => x.category === "chief_complaint" || x.category === "symptom").forEach((f) => {
+      const cleaned = cleanSymptomText(f.label || f.concept);
+      if (cleaned && cleaned !== "None reported" && !selectedSymptomsList.includes(cleaned)) {
+        selectedSymptomsList.push(cleaned);
+      }
+    });
+  }
+
+  // Fallback to text parsing if needed
+  if (selectedSymptomsList.length === 0) {
+    const match = text.match(/Chief Complaint[:\s]*([^\n]+)/i);
+    if (match && match[1] && cleanSymptomText(match[1]) !== "None reported") {
+      cleanSymptomText(match[1]).split(",").forEach((s) => {
+        const item = s.trim();
+        if (item && !selectedSymptomsList.includes(item)) selectedSymptomsList.push(item);
+      });
+    }
+  }
+
+  if (selectedSymptomsList.length === 0) {
+    selectedSymptomsList = ["General Medical Evaluation"];
+  }
+
+  // 2. Duration / Onset
+  const onsetFact = getFactVal("symptom_onset") ||
+    getFactVal("fever_duration") ||
+    getFactVal("pain_duration") ||
+    getFactVal("cough_duration") ||
+    getFactVal("headache_duration") ||
+    getFactVal("stomach_duration") ||
+    getFactVal("breathing_onset") ||
+    getFactVal("skin_duration") ||
+    getFactVal("injury_duration") ||
+    getFactVal("dental_duration") ||
+    getFactVal("urine_duration") ||
+    getFactVal("other_duration");
+
+  let finalDuration = onsetFact;
+  if (!finalDuration || finalDuration === "None reported") {
+    const durMatch = text.match(/Duration[:\s]*([^\n]+)/i);
+    finalDuration = durMatch ? cleanSymptomText(durMatch[1]) : "Not specified";
+  }
+
+  // 3. Associated Symptoms
+  const associatedList: string[] = [];
+  const feverAssoc = getFactVal("fever_associated_symptoms");
+  if (feverAssoc && feverAssoc !== "None reported") {
+    feverAssoc.split(",").forEach((s) => {
+      const item = s.trim();
+      if (item && !associatedList.includes(item)) associatedList.push(item);
+    });
+  }
+
+  [
+    "stomach_symptoms_list",
+    "skin_symptoms_list",
+    "eye_symptoms_list",
+    "dental_symptoms_list",
+    "urine_symptoms_list",
+  ].forEach((concept) => {
+    const val = getFactVal(concept);
+    if (val && val !== "None reported") {
+      val.split(",").forEach((s) => {
+        const item = s.trim();
+        if (item && !associatedList.includes(item)) associatedList.push(item);
+      });
+    }
+  });
+
+  const coughChar = getFactVal("cough_character");
+  if (coughChar && coughChar !== "None reported") {
+    const coughLabel = `Cough (${coughChar})`;
+    if (!associatedList.some((s) => s.toLowerCase().includes("cough"))) associatedList.push(coughLabel);
+  }
+
+  const sweating = getFact("sweating") || getFact("chest_sweating");
+  if (sweating && (sweating.value === true || String(sweating.label).toLowerCase().includes("sweat"))) {
+    if (!associatedList.includes("Sweating")) associatedList.push("Sweating");
+  }
+
+  const dyspnea = getFact("dyspnea") || getFact("chest_dyspnea");
+  if (dyspnea && (dyspnea.value === true || String(dyspnea.label).toLowerCase().includes("breath"))) {
+    if (!associatedList.includes("Breathlessness")) associatedList.push("Breathlessness");
+  }
+
+  const bleeding = getFact("active_bleeding") || getFact("injury_bleeding") || getFact("animal_bleeding");
+  if (bleeding && (bleeding.value === true || String(bleeding.label).toLowerCase().includes("bleed"))) {
+    if (!associatedList.includes("Active Bleeding")) associatedList.push("Active Bleeding");
+  }
+
+  let finalAssociated = associatedList.length > 0 ? associatedList.join(", ") : "";
+  if (!finalAssociated) {
+    const assocMatch = text.match(/Associated Symptoms[:\s]*([^\n]+)/i);
+    if (assocMatch && assocMatch[1] && cleanSymptomText(assocMatch[1]) !== "None reported") {
+      finalAssociated = cleanSymptomText(assocMatch[1]);
+    } else {
+      finalAssociated = "None reported";
+    }
+  }
+
+  // 4. Location
+  const locFact = getFactVal("location") || getFactVal("pain_location") || getFactVal("injury_location");
+  let finalLocation = locFact;
+  if (!finalLocation || finalLocation === "None reported") {
+    const locMatch = text.match(/Location[:\s]*([^\n]+)/i);
+    finalLocation = locMatch ? cleanSymptomText(locMatch[1]) : "";
+  }
+
+  // 5. Severity
+  const sevFact = getFact("severity") || getFact("pain_severity") || getFact("headache_severity") || getFact("stomach_severity") || getFact("dental_severity");
+  let finalSeverity = "";
+  if (sevFact && sevFact.certainty !== "unknown" && sevFact.label) {
+    const raw = String(sevFact.label).trim();
+    finalSeverity = raw.includes("/10") ? raw : `${raw} / 10`;
+  } else {
+    const sevMatch = text.match(/Severity[:\s]*([0-9]+(?:\s*\/\s*10)?)/i);
+    if (sevMatch) {
+      finalSeverity = sevMatch[1].includes("/10") ? sevMatch[1] : `${sevMatch[1]} / 10`;
+    }
+  }
+
+  // 6. Character
+  const charFact = getFactVal("character") || getFactVal("pain_character");
+  let finalCharacter = charFact;
+  if (!finalCharacter || finalCharacter === "None reported") {
+    const charMatch = text.match(/Character[:\s]*([^\n]+)/i);
+    finalCharacter = charMatch ? cleanSymptomText(charMatch[1]) : "";
+  }
+
+  // 7. Medications & Allergies
+  const medFacts = facts.filter((x) => x.concept === "medication" || x.concept === "general_meds");
+  let medsStr = medFacts.map((m) => cleanSymptomText(m.label)).filter(Boolean).join(", ");
+  if (!medsStr) {
+    const medMatch = text.match(/MEDICATIONS[:\s]*\n+([^\n]+)/i);
+    medsStr = medMatch ? cleanSymptomText(medMatch[1]) : "None reported";
+  }
+
+  const allergyFacts = facts.filter((x) => x.concept === "allergy" || x.concept === "general_allergies");
+  let allergiesStr = allergyFacts.map((a) => cleanSymptomText(a.label)).filter(Boolean).join(", ");
+  if (!allergiesStr) {
+    const allMatch = text.match(/ALLERGIES[:\s]*\n+([^\n]+)/i);
+    allergiesStr = allMatch ? cleanSymptomText(allMatch[1]) : "No known allergies reported";
+  }
+
+  // 8. Build specific step details array
+  const stepDetails: ClinicalStepDetail[] = [];
+  let stepCounter = 4;
+
+  if (finalLocation && finalLocation !== "None reported") {
+    stepDetails.push({
+      stepNumber: stepCounter++,
+      label: "Location / Body Part",
+      value: finalLocation,
+      icon: "📍",
+      highlight: "info",
+    });
+  }
+
+  if (finalSeverity && finalSeverity !== "None reported") {
+    stepDetails.push({
+      stepNumber: stepCounter++,
+      label: "Severity / Scale (0–10)",
+      value: finalSeverity,
+      icon: "⚡",
+      highlight: finalSeverity.startsWith("7") || finalSeverity.startsWith("8") || finalSeverity.startsWith("9") || finalSeverity.startsWith("10") ? "danger" : "warning",
+    });
+  }
+
+  if (finalCharacter && finalCharacter !== "None reported") {
+    stepDetails.push({
+      stepNumber: stepCounter++,
+      label: "Character / Quality of Sensation",
+      value: finalCharacter,
+      icon: "🔍",
+      highlight: "neutral",
+    });
+  }
+
+  const radiation = getFactVal("radiation_to_arm") || getFactVal("chest_radiation");
+  if (radiation && radiation !== "None reported" && strToBool(radiation)) {
+    stepDetails.push({
+      stepNumber: stepCounter++,
+      label: "Pain Radiation",
+      value: radiation === "true" || radiation === "yes" ? "Radiates to arm / shoulder / neck" : radiation,
+      icon: "⚠️",
+      highlight: "danger",
+    });
+  }
+
+  const injury = getFactVal("injury_cause") || getFactVal("injury_mechanism");
+  if (injury && injury !== "None reported") {
+    stepDetails.push({
+      stepNumber: stepCounter++,
+      label: "Injury Mechanism",
+      value: injury,
+      icon: "🩹",
+      highlight: "warning",
+    });
+  }
+
+  const animal = getFactVal("animal_exposure_type");
+  if (animal && animal !== "None reported") {
+    const brokenSkin = getFactVal("animal_exposure_broken_skin") || getFactVal("animal_skin_broken");
+    const animalVal = brokenSkin ? `${animal} (Broken Skin: ${brokenSkin})` : animal;
+    stepDetails.push({
+      stepNumber: stepCounter++,
+      label: "Animal Exposure",
+      value: animalVal,
+      icon: "🐕",
+      highlight: "danger",
+    });
+  }
+
+  const otherNote = getFactVal("other_description");
+  if (otherNote && otherNote !== "None reported") {
+    stepDetails.push({
+      stepNumber: stepCounter++,
+      label: "Patient Description / Voice Note",
+      value: otherNote,
+      icon: "🎙️",
+      highlight: "info",
+    });
+  }
 
   return {
-    chiefComplaint: chief || (text.includes("Chief Complaint") ? "General medical evaluation" : text.split("\n")[0] || "General medical evaluation"),
-    duration: duration || "Not recorded",
-    keySymptoms: cleanSymptomText(keySymptoms || hpi || "None reported"),
-    medications: cleanSymptomText(medications || "None reported"),
-    allergies: cleanSymptomText(allergies || "No known allergies reported"),
-    pmh: cleanSymptomText(pmh || "None reported"),
-    previousTreatment: cleanSymptomText(treatment || "None reported"),
-    investigations: cleanSymptomText(investigations || "No reports available"),
+    selectedSymptoms: selectedSymptomsList,
+    onsetDuration: finalDuration,
+    associatedSymptoms: finalAssociated,
+    location: finalLocation || undefined,
+    severity: finalSeverity || undefined,
+    character: finalCharacter || undefined,
+    medications: medsStr,
+    allergies: allergiesStr,
+    stepDetails,
   };
+}
+
+function strToBool(val: string): boolean {
+  if (!val) return false;
+  const s = val.toLowerCase().trim();
+  return s === "true" || s === "yes" || s === "confirmed" || (!s.startsWith("no") && !s.startsWith("none") && !s.startsWith("false") && s !== "unknown");
 }
 
 export default function DoctorPage() {
@@ -110,6 +392,7 @@ export default function DoctorPage() {
   const [priority, setPriority] = useState("ROUTINE");
   const [summary, setSummary] = useState<Summary | null>(null);
   const [documents, setDocuments] = useState<any[]>([]);
+  const [clinicalFacts, setClinicalFacts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   // --- Prescription & Past Medical Records State ---
@@ -133,6 +416,21 @@ export default function DoctorPage() {
   const [tokenActionLoading, setTokenActionLoading] = useState<string | null>(null);
 
   const doctorDisplayName = currentUser?.full_name || currentUser?.username || "";
+
+  // Reset workspace state
+  const resetWorkspace = () => {
+    setSelectedPatientId("");
+    setPatient(null);
+    setEncounterId(null);
+    setSummary(null);
+    setDocuments([]);
+    setClinicalFacts([]);
+    setPrescribedMedicines([]);
+    setDoctorNotes("");
+    setDiagnosisInput("");
+    setPastTreatments([]);
+    setPrescriptionSavedStatus(null);
+  };
 
   // Check existing session
   useEffect(() => {
@@ -363,12 +661,14 @@ export default function DoctorPage() {
 
   async function loadEncounterData(encId: string) {
     try {
-      const [triage, docs] = await Promise.all([
+      const [triage, docs, factsList] = await Promise.all([
         api.getTriageStatus(encId) as Promise<any>,
         api.listDocuments(encId) as Promise<any[]>,
+        api.listFacts(encId).catch(() => []) as Promise<any[]>,
       ]);
       setPriority(triage.priority || "ROUTINE");
       setDocuments(docs);
+      setClinicalFacts(factsList || []);
       try {
         let s = await api.getSummary(encId);
         if (!s) {
@@ -463,28 +763,6 @@ export default function DoctorPage() {
     setNewMedInstructions(inst);
   }
 
-  async function handleSavePrescription() {
-    if (!patient) return;
-    setIsSavingPrescription(true);
-    try {
-      await api.savePrescription(patient.id, {
-        encounter_id: encounterId || undefined,
-        diagnosis: diagnosisInput.trim() || undefined,
-        doctor_notes: doctorNotes.trim() || undefined,
-        doctor_name: doctorDisplayName || "Doctor",
-        prescribed_medicines: prescribedMedicines,
-      });
-      setPrescriptionSavedStatus("✓ Prescription saved to patient medical record!");
-      const updatedPast = await api.getPatientTreatments(patient.id).catch(() => []);
-      setPastTreatments(updatedPast);
-      setTimeout(() => setPrescriptionSavedStatus(null), 4000);
-    } catch (err: any) {
-      alert("Failed to save prescription: " + err.message);
-    } finally {
-      setIsSavingPrescription(false);
-    }
-  }
-
   // --- Token Actions ---
   async function handleCallToken(tokenItem: TokenQueueItem) {
     setTokenActionLoading(tokenItem.id);
@@ -520,24 +798,28 @@ export default function DoctorPage() {
     }
   }
 
-  async function handleCompleteConsultation() {
-    if (!activeToken) return;
+  async function handleSaveAndCompleteConsultation() {
+    setIsSavingPrescription(true);
     setTokenActionLoading("complete");
     try {
-      // Auto-save prescription if medicines or notes are entered
-      if (patient && (prescribedMedicines.length > 0 || doctorNotes.trim() || diagnosisInput.trim())) {
+      // 1. Save prescription if patient exists (even with notes/diagnosis/medicines)
+      if (patient) {
         await api.savePrescription(patient.id, {
           encounter_id: encounterId || undefined,
           diagnosis: diagnosisInput.trim() || undefined,
           doctor_notes: doctorNotes.trim() || undefined,
           doctor_name: doctorDisplayName || "Doctor",
           prescribed_medicines: prescribedMedicines,
-        }).catch((e) => console.warn("Auto-save Rx note:", e));
+        }).catch((e) => console.warn("Prescription save note:", e));
       }
 
-      await api.completeToken(activeToken.id);
-      setActiveToken(null);
-      // Clean workspace after completion
+      // 2. Complete consultation token
+      if (activeToken) {
+        await api.completeToken(activeToken.id);
+        setActiveToken(null);
+      }
+
+      // 3. Clean workspace cleanly for next patient
       setPatient(null);
       setEncounterId(null);
       setSummary(null);
@@ -549,8 +831,9 @@ export default function DoctorPage() {
       setPrescriptionSavedStatus(null);
       await loadTokenQueue();
     } catch (err: any) {
-      alert("Failed to complete token: " + err.message);
+      alert("Failed to complete consultation: " + err.message);
     } finally {
+      setIsSavingPrescription(false);
       setTokenActionLoading(null);
     }
   }
@@ -838,12 +1121,16 @@ export default function DoctorPage() {
 
               <button
                 type="button"
-                disabled={tokenActionLoading === "complete"}
-                onClick={handleCompleteConsultation}
+                disabled={tokenActionLoading === "complete" || isSavingPrescription}
+                onClick={handleSaveAndCompleteConsultation}
                 className="py-3 px-5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-lg transition flex items-center gap-1.5"
               >
                 <span>✓</span>
-                <span>{tokenActionLoading === "complete" ? "Completing…" : "Complete Consultation"}</span>
+                <span>
+                  {tokenActionLoading === "complete" || isSavingPrescription
+                    ? "Completing…"
+                    : "Save Prescription & Complete Consultation"}
+                </span>
               </button>
             </div>
           </div>
@@ -955,7 +1242,12 @@ export default function DoctorPage() {
             {tab === "summary" && (
               <div className="space-y-6">
                 {!summary ? (
-                  <div className="text-center py-8">
+                  <div className="text-center py-12 bg-white border-2 border-slate-200 rounded-3xl p-8 shadow-xs">
+                    <div className="text-3xl mb-3">📋</div>
+                    <h4 className="text-base font-bold text-slate-800 mb-1">No Clinical Summary Generated</h4>
+                    <p className="text-xs text-slate-500 mb-6 max-w-sm mx-auto">
+                      Generate an AI-extracted clinical summary from the patient's kiosk intake.
+                    </p>
                     <button
                       type="button"
                       onClick={handleGenerateSummary}
@@ -965,163 +1257,221 @@ export default function DoctorPage() {
                     </button>
                   </div>
                 ) : (
-                  <div className="space-y-6">
-                    {/* Structured Clinical Summary Box */}
-                    {(() => {
-                      const parsed = parseStructuredSummary(summary.draft_text || summary.text);
-                      return (
-                        <div className="space-y-5">
-                          {/* Top Main Box: CLINICAL SUMMARY */}
-                          <div className="bg-white border-2 border-slate-700 rounded-2xl p-5 md:p-6 shadow-sm space-y-4 font-sans">
-                            <div className="text-xs font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 pb-2.5 flex items-center justify-between">
-                              <span className="flex items-center gap-2">
-                                <span>📋</span>
-                                <span>CLINICAL SUMMARY</span>
-                              </span>
-                              <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
-                                AI INTAKE DRAFT
-                              </span>
-                            </div>
+                  (() => {
+                    const docSummary = extractDoctorSummary(summary.draft_text || summary.text, clinicalFacts);
+                    return (
+                      <div className="bg-white border-2 border-slate-200 rounded-3xl p-6 md:p-8 shadow-xs space-y-6 font-sans">
+                        {/* Header status bar */}
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+                          <div>
+                            <span className="text-xs font-black font-mono tracking-widest text-slate-400 uppercase block">
+                              STEP-BY-STEP CLINICAL INTAKE SUMMARY
+                            </span>
+                            <h3 className="text-lg font-black text-slate-900 mt-0.5">
+                              Patient Reported Symptoms & History
+                            </h3>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-black uppercase px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                              {summary.status || "AI_DRAFT"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleGenerateSummary}
+                              className="text-xs font-bold text-blue-700 hover:text-blue-900 bg-slate-50 hover:bg-blue-50 px-3 py-1.5 rounded-xl border border-slate-200 transition"
+                              title="Regenerate summary"
+                            >
+                              ⚡ Refresh
+                            </button>
+                          </div>
+                        </div>
 
-                            {/* 1. Key Symptoms (FIRST) */}
-                            <div>
-                              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                                Key Symptoms
-                              </div>
-                              <div className="text-base font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl p-4 leading-relaxed">
-                                {parsed.keySymptoms}
-                              </div>
-                            </div>
-
-                            {/* 2. Duration (SECOND) */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                        {/* Structured Step-by-Step Rows */}
+                        <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+                          {/* Row 1: Selected Symptoms / Chief Complaints */}
+                          <div className="p-4 md:p-5 bg-blue-50/40 hover:bg-blue-50/70 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <span className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center text-sm font-black flex-shrink-0 shadow-xs">
+                                1
+                              </span>
                               <div>
-                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
-                                  Duration
-                                </div>
-                                <div className="text-base font-bold text-slate-800">
-                                  {parsed.duration}
-                                </div>
+                                <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 block">
+                                  Step 1 • Selected Symptoms (Chief Complaints)
+                                </span>
+                                <span className="text-sm md:text-base font-extrabold text-slate-900">
+                                  Primary reasons for hospital visit
+                                </span>
                               </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              {docSummary.selectedSymptoms.map((sym, i) => (
+                                <span
+                                  key={i}
+                                  className="px-3.5 py-1.5 bg-blue-600 text-white text-xs md:text-sm font-black rounded-xl shadow-xs flex items-center gap-1.5"
+                                >
+                                  <span>✦</span>
+                                  <span>{sym}</span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
 
-                              {parsed.chiefComplaint && parsed.chiefComplaint !== "General medical evaluation" && (
-                                <div>
-                                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
-                                    Chief Complaint
-                                  </div>
-                                  <div className="text-base font-bold text-slate-800">
-                                    {parsed.chiefComplaint}
-                                  </div>
-                                </div>
+                          {/* Row 2: Duration / How Long */}
+                          <div className="p-4 md:p-5 bg-white hover:bg-slate-50/70 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <span className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center text-sm font-black flex-shrink-0 shadow-xs">
+                                2
+                              </span>
+                              <div>
+                                <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 block">
+                                  Step 2 • Duration (How Long)
+                                </span>
+                                <span className="text-sm md:text-base font-extrabold text-slate-900">
+                                  Time elapsed since symptom onset
+                                </span>
+                              </div>
+                            </div>
+                            <span className="px-4 py-1.5 bg-teal-50 text-teal-900 border border-teal-200 text-xs md:text-sm font-black rounded-xl">
+                              ⏱ {docSummary.onsetDuration}
+                            </span>
+                          </div>
+
+                          {/* Row 3: Associated Symptoms */}
+                          <div className="p-4 md:p-5 bg-slate-50/50 hover:bg-slate-50 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <span className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center text-sm font-black flex-shrink-0 shadow-xs">
+                                3
+                              </span>
+                              <div>
+                                <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 block">
+                                  Step 3 • Associated Symptoms
+                                </span>
+                                <span className="text-sm md:text-base font-extrabold text-slate-900">
+                                  Secondary symptoms reported with chief complaint
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5 max-w-lg justify-end">
+                              {docSummary.associatedSymptoms !== "None reported" ? (
+                                docSummary.associatedSymptoms.split(",").map((s, i) => (
+                                  <span
+                                    key={i}
+                                    className="px-3 py-1 bg-purple-50 text-purple-900 border border-purple-200 text-xs md:text-sm font-bold rounded-xl"
+                                  >
+                                    {s.trim()}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-slate-400 text-xs md:text-sm font-semibold italic">
+                                  None reported
+                                </span>
                               )}
                             </div>
                           </div>
 
-                          {/* Secondary Clinical Categories Grid */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {/* MEDICATIONS */}
-                            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
-                              <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5">
-                                <span>💊</span>
-                                <span>CURRENT MEDICATIONS</span>
-                              </div>
-                              <div className="text-sm font-bold text-slate-800">
-                                {parsed.medications}
-                              </div>
-                            </div>
+                          {/* Subsequent Question Steps (Location, Severity, Character, Radiation, etc.) */}
+                          {docSummary.stepDetails.map((step) => {
+                            let badgeStyle = "bg-slate-100 text-slate-800 border-slate-200";
+                            if (step.highlight === "danger") badgeStyle = "bg-rose-50 text-rose-900 border-rose-200 font-black";
+                            if (step.highlight === "warning") badgeStyle = "bg-amber-50 text-amber-900 border-amber-200 font-bold";
+                            if (step.highlight === "info") badgeStyle = "bg-sky-50 text-sky-900 border-sky-200 font-bold";
 
-                            {/* ALLERGIES */}
-                            <div className={`border rounded-2xl p-4 shadow-2xs ${
-                              parsed.allergies.toLowerCase().includes("none") || parsed.allergies.toLowerCase().includes("no known")
-                                ? "bg-white border-slate-200"
-                                : "bg-red-50 border-red-200"
-                            }`}>
-                              <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5">
-                                <span>⚠️</span>
-                                <span className={!parsed.allergies.toLowerCase().includes("none") && !parsed.allergies.toLowerCase().includes("no known") ? "text-red-700" : ""}>
-                                  ALLERGIES
+                            return (
+                              <div
+                                key={step.stepNumber}
+                                className="p-4 md:p-5 bg-white hover:bg-slate-50/70 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <span className="w-8 h-8 rounded-xl bg-slate-700 text-white flex items-center justify-center text-sm font-black flex-shrink-0 shadow-xs">
+                                    {step.stepNumber}
+                                  </span>
+                                  <div>
+                                    <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 block">
+                                      Step {step.stepNumber} • {step.label}
+                                    </span>
+                                    <span className="text-sm md:text-base font-extrabold text-slate-900">
+                                      {step.label}
+                                    </span>
+                                  </div>
+                                </div>
+                                <span className={`px-4 py-1.5 border rounded-xl text-xs md:text-sm ${badgeStyle}`}>
+                                  {step.icon} {step.value}
                                 </span>
                               </div>
-                              <div className={`text-sm font-bold ${
-                                !parsed.allergies.toLowerCase().includes("none") && !parsed.allergies.toLowerCase().includes("no known")
-                                ? "text-red-900"
-                                : "text-slate-800"
-                              }`}>
-                                {parsed.allergies}
-                              </div>
-                            </div>
+                            );
+                          })}
 
-                            {/* PAST MEDICAL HISTORY */}
-                            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
-                              <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5">
-                                <span>📋</span>
-                                <span>PAST MEDICAL HISTORY</span>
-                              </div>
-                              <div className="text-sm font-bold text-slate-800">
-                                {parsed.pmh}
+                          {/* Row: Daily Medications */}
+                          <div className="p-4 md:p-5 bg-slate-50/30 hover:bg-slate-50 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <span className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-sm font-black flex-shrink-0 shadow-xs">
+                                💊
+                              </span>
+                              <div>
+                                <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 block">
+                                  Current Daily Medications
+                                </span>
+                                <span className="text-sm md:text-base font-extrabold text-slate-900">
+                                  Prescription & OTC medicines currently taken
+                                </span>
                               </div>
                             </div>
+                            <span className="px-3.5 py-1.5 bg-emerald-50 text-emerald-900 border border-emerald-200 text-xs md:text-sm font-bold rounded-xl max-w-md text-right">
+                              {docSummary.medications}
+                            </span>
+                          </div>
 
-                            {/* PREVIOUS TREATMENT */}
-                            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
-                              <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5">
-                                <span>🩺</span>
-                                <span>PREVIOUS TREATMENT</span>
-                              </div>
-                              <div className="text-sm font-bold text-slate-800">
-                                {parsed.previousTreatment}
-                              </div>
-                            </div>
-
-                            {/* INVESTIGATIONS */}
-                            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs md:col-span-2">
-                              <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5">
-                                <span>🔬</span>
-                                <span>INVESTIGATIONS</span>
-                              </div>
-                              <div className="text-sm font-bold text-slate-800">
-                                {parsed.investigations}
+                          {/* Row: Known Allergies */}
+                          <div className="p-4 md:p-5 bg-white hover:bg-slate-50 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <span className="w-8 h-8 rounded-xl bg-amber-600 text-white flex items-center justify-center text-sm font-black flex-shrink-0 shadow-xs">
+                                ⚠️
+                              </span>
+                              <div>
+                                <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 block">
+                                  Known Drug Allergies
+                                </span>
+                                <span className="text-sm md:text-base font-extrabold text-slate-900">
+                                  Adverse drug reactions or known hypersensitivities
+                                </span>
                               </div>
                             </div>
+                            <span className="px-3.5 py-1.5 bg-amber-50 text-amber-900 border border-amber-200 text-xs md:text-sm font-bold rounded-xl max-w-md text-right">
+                              {docSummary.allergies}
+                            </span>
                           </div>
                         </div>
-                      );
-                    })()}
 
-                    {/* Extracted Clinical Facts Verification List */}
-                    {summary.facts && summary.facts.length > 0 && (
-                      <div className="space-y-3">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                          Structured Clinical Facts ({summary.facts.length})
-                        </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {summary.facts.map((fact: any) => (
-                            <div
-                              key={fact.id}
-                              className="p-3.5 bg-white border border-slate-200 rounded-xl flex items-start justify-between gap-3 shadow-2xs"
-                            >
-                              <div>
-                                <span className="text-[10px] font-mono font-bold uppercase bg-slate-100 text-slate-600 px-2 py-0.5 rounded mr-2">
-                                  {fact.category}
-                                </span>
-                                <span className="text-xs font-bold text-slate-800">
-                                  {fact.label || fact.concept}
-                                </span>
-                                {fact.value && typeof fact.value !== "boolean" && (
-                                  <span className="text-xs text-slate-600 ml-1">
-                                    : {String(fact.value)}
-                                  </span>
-                                )}
-                              </div>
-                              <span className="text-[10px] font-semibold text-slate-400 whitespace-nowrap">
-                                Conf: {Math.round((fact.confidence || 1) * 100)}%
+                        {/* Physician Verification Controls */}
+                        <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+                          <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                            <span>🛡️</span>
+                            <span>Review each step answer above before prescribing treatment.</span>
+                          </div>
+
+                          <div className="flex items-center gap-3 w-full sm:w-auto">
+                            {summary.status !== "PHYSICIAN_VERIFIED" && (
+                              <button
+                                type="button"
+                                onClick={handleConfirmSummary}
+                                className="flex-1 sm:flex-none py-2.5 px-5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow transition flex items-center justify-center gap-1.5"
+                              >
+                                <span>✓</span>
+                                <span>Confirm & Verify Summary</span>
+                              </button>
+                            )}
+
+                            {summary.status === "PHYSICIAN_VERIFIED" && (
+                              <span className="py-2 px-4 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-black flex items-center gap-1.5">
+                                <span>✓</span>
+                                <span>Physician Verified</span>
                               </span>
-                            </div>
-                          ))}
+                            )}
+                          </div>
                         </div>
                       </div>
-                    )}
-                  </div>
+                    );
+                  })()
                 )}
               </div>
             )}
@@ -1129,136 +1479,14 @@ export default function DoctorPage() {
             {/* Tab 2: Prescribe Medicines & Doctor Review */}
             {tab === "prescription" && (
               <div className="space-y-6">
-                {/* Header Banner */}
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-2xl shadow-md font-serif font-black">
-                      ℞
-                    </div>
-                    <div>
-                      <h3 className="text-base font-extrabold text-slate-900">
-                        Doctor Consultation & Prescription Pad
-                      </h3>
-                      <p className="text-xs text-slate-500 font-medium">
-                        Prescribe medications, dosage, frequency, and clinical reviews. Saved automatically upon completion.
-                      </p>
-                    </div>
+                {prescriptionSavedStatus && (
+                  <div className="bg-emerald-100 border border-emerald-300 text-emerald-800 px-4 py-2.5 rounded-xl text-xs font-bold animate-fade-in flex items-center gap-2 shadow-sm">
+                    <span>✓</span>
+                    <span>{prescriptionSavedStatus}</span>
                   </div>
-                  {prescriptionSavedStatus && (
-                    <div className="bg-emerald-100 border border-emerald-300 text-emerald-800 px-3.5 py-1.5 rounded-xl text-xs font-bold animate-fade-in flex items-center gap-1.5 shadow-sm">
-                      <span>✓</span>
-                      <span>{prescriptionSavedStatus}</span>
-                    </div>
-                  )}
-                </div>
+                )}
 
-                {/* 1. Diagnosis / Clinical Impression */}
-                <div className="bg-white border-2 border-slate-200 rounded-2xl p-5 space-y-3 shadow-2xs">
-                  <label className="block text-xs font-black uppercase tracking-wider text-slate-600">
-                    🩺 Diagnosis / Clinical Impression
-                  </label>
-                  <input
-                    type="text"
-                    value={diagnosisInput}
-                    onChange={(e) => setDiagnosisInput(e.target.value)}
-                    placeholder="e.g. Acute Viral Syndrome, Gastroenteritis, Upper Respiratory Infection"
-                    className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-blue-600 rounded-xl text-sm font-bold text-slate-800 outline-none"
-                  />
-                  {/* Quick Suggested Diagnosis Chips */}
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                    <span className="text-[11px] font-bold text-slate-400 mr-1">Quick Select:</span>
-                    {[
-                      "Viral Fever",
-                      "Acute Bronchitis & Cough",
-                      "Gastritis & Acidity",
-                      "Hypertension Review",
-                      "Gastroenteritis",
-                      "Allergic Rhinitis",
-                      "Migraine & Headache",
-                      "General Body Ache",
-                    ].map((diag) => (
-                      <button
-                        key={diag}
-                        type="button"
-                        onClick={() => setDiagnosisInput(diag)}
-                        className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-100 text-slate-700 hover:text-blue-800 border border-slate-200 hover:border-blue-300 transition"
-                      >
-                        + {diag}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 2. Active Prescribed Medicines List */}
-                <div className="bg-white border-2 border-slate-200 rounded-2xl p-5 space-y-4 shadow-2xs">
-                  <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">💊</span>
-                      <h4 className="text-sm font-black text-slate-900 uppercase tracking-wider">
-                        Prescribed Medicines ({prescribedMedicines.length})
-                      </h4>
-                    </div>
-                    <span className="text-xs text-slate-400 font-semibold">
-                      {prescribedMedicines.length === 0 ? "No medicines added yet" : "Ready for patient record"}
-                    </span>
-                  </div>
-
-                  {prescribedMedicines.length === 0 ? (
-                    <div className="text-center py-8 bg-slate-50/70 border border-dashed border-slate-200 rounded-xl">
-                      <div className="text-3xl mb-1.5">💊</div>
-                      <div className="text-sm font-bold text-slate-700">No Medicines Added Yet</div>
-                      <p className="text-xs text-slate-400 mt-0.5">Use the medicine builder below to add prescribed medications.</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="border-b border-slate-200 text-slate-500 font-black uppercase text-[10px]">
-                            <th className="py-2.5 px-3">#</th>
-                            <th className="py-2.5 px-3">Medicine Name</th>
-                            <th className="py-2.5 px-3">Dosage</th>
-                            <th className="py-2.5 px-3">Frequency (Times / Day)</th>
-                            <th className="py-2.5 px-3">Duration</th>
-                            <th className="py-2.5 px-3">Instructions</th>
-                            <th className="py-2.5 px-3 text-right">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
-                          {prescribedMedicines.map((med, idx) => (
-                            <tr key={idx} className="hover:bg-slate-50 transition">
-                              <td className="py-3 px-3 font-mono font-bold text-slate-400">{idx + 1}</td>
-                              <td className="py-3 px-3 font-extrabold text-slate-900 text-sm">{med.name}</td>
-                              <td className="py-3 px-3">
-                                <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded font-bold">
-                                  {med.dosage || "As advised"}
-                                </span>
-                              </td>
-                              <td className="py-3 px-3">
-                                <span className="bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded font-bold">
-                                  {med.frequency || "1-0-1 (Twice daily)"}
-                                </span>
-                              </td>
-                              <td className="py-3 px-3 font-mono font-bold text-slate-600">{med.duration || "5 days"}</td>
-                              <td className="py-3 px-3 text-slate-600">{med.instructions || "After food"}</td>
-                              <td className="py-3 px-3 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveMedicine(idx)}
-                                  className="text-red-500 hover:text-red-700 p-1.5 hover:bg-red-50 rounded-lg transition"
-                                  title="Remove medicine"
-                                >
-                                  🗑️
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-
-                {/* 3. Add Medicine Builder Form */}
+                {/* 1. Add Medicine Builder Form */}
                 <div className="bg-slate-50 border-2 border-slate-300 rounded-2xl p-5 space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
                     <span className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
@@ -1422,6 +1650,75 @@ export default function DoctorPage() {
                   </button>
                 </div>
 
+                {/* 2. Active Prescribed Medicines List */}
+                <div className="bg-white border-2 border-slate-200 rounded-2xl p-5 space-y-4 shadow-2xs">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">💊</span>
+                      <h4 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                        Prescribed Medicines ({prescribedMedicines.length})
+                      </h4>
+                    </div>
+                    <span className="text-xs text-slate-400 font-semibold">
+                      {prescribedMedicines.length === 0 ? "No medicines added yet" : "Ready for patient record"}
+                    </span>
+                  </div>
+
+                  {prescribedMedicines.length === 0 ? (
+                    <div className="text-center py-8 bg-slate-50/70 border border-dashed border-slate-200 rounded-xl">
+                      <div className="text-3xl mb-1.5">💊</div>
+                      <div className="text-sm font-bold text-slate-700">No Medicines Added Yet</div>
+                      <p className="text-xs text-slate-400 mt-0.5">Use the medicine builder above to add prescribed medications.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-200 text-slate-500 font-black uppercase text-[10px]">
+                            <th className="py-2.5 px-3">#</th>
+                            <th className="py-2.5 px-3">Medicine Name</th>
+                            <th className="py-2.5 px-3">Dosage</th>
+                            <th className="py-2.5 px-3">Frequency (Times / Day)</th>
+                            <th className="py-2.5 px-3">Duration</th>
+                            <th className="py-2.5 px-3">Instructions</th>
+                            <th className="py-2.5 px-3 text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+                          {prescribedMedicines.map((med, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50 transition">
+                              <td className="py-3 px-3 font-mono font-bold text-slate-400">{idx + 1}</td>
+                              <td className="py-3 px-3 font-extrabold text-slate-900 text-sm">{med.name}</td>
+                              <td className="py-3 px-3">
+                                <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded font-bold">
+                                  {med.dosage || "As advised"}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3">
+                                <span className="bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded font-bold">
+                                  {med.frequency || "1-0-1 (Twice daily)"}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 font-mono font-bold text-slate-600">{med.duration || "5 days"}</td>
+                              <td className="py-3 px-3 text-slate-600">{med.instructions || "After food"}</td>
+                              <td className="py-3 px-3 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveMedicine(idx)}
+                                  className="text-red-500 hover:text-red-700 p-1.5 hover:bg-red-50 rounded-lg transition"
+                                  title="Remove medicine"
+                                >
+                                  🗑️
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
                 {/* 4. Doctor Review Notes & Clinical Advice */}
                 <div className="bg-white border-2 border-slate-200 rounded-2xl p-5 space-y-2.5 shadow-2xs">
                   <label className="block text-xs font-black uppercase tracking-wider text-slate-600">
@@ -1436,32 +1733,24 @@ export default function DoctorPage() {
                   />
                 </div>
 
-                {/* 5. Prescription Action Buttons */}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 border-t border-slate-200">
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      disabled={isSavingPrescription}
-                      onClick={handleSavePrescription}
-                      className="py-3 px-6 bg-blue-700 hover:bg-blue-800 active:scale-98 text-white rounded-xl text-xs font-black shadow-md transition flex items-center gap-2"
-                    >
-                      <span>💾</span>
-                      <span>{isSavingPrescription ? "Saving Record…" : "Save Prescription"}</span>
-                    </button>
+                {/* 5. Single Consolidated Prescription Action Button */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-200">
+                  <button
+                    type="button"
+                    disabled={isSavingPrescription || tokenActionLoading === "complete"}
+                    onClick={handleSaveAndCompleteConsultation}
+                    className="w-full sm:w-auto py-3.5 px-8 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white rounded-xl text-sm font-black shadow-lg transition flex items-center justify-center gap-2"
+                  >
+                    <span>✓</span>
+                    <span>
+                      {isSavingPrescription || tokenActionLoading === "complete"
+                        ? "Saving & Completing Consultation…"
+                        : "Save Prescription & Complete Consultation"}
+                    </span>
+                  </button>
 
-                    <button
-                      type="button"
-                      disabled={tokenActionLoading === "complete"}
-                      onClick={handleCompleteConsultation}
-                      className="py-3 px-6 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white rounded-xl text-xs font-black shadow-md transition flex items-center gap-2"
-                    >
-                      <span>✓</span>
-                      <span>Complete Consultation & Save</span>
-                    </button>
-                  </div>
-
-                  <span className="text-xs text-slate-400 font-semibold">
-                    Saved medicines will be stored in the patient's record for all future visits.
+                  <span className="text-xs text-slate-400 font-semibold text-center sm:text-right">
+                    Saves prescription to patient medical record and completes consultation.
                   </span>
                 </div>
               </div>
@@ -1494,104 +1783,96 @@ export default function DoctorPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {pastTreatments.map((rec, idx) => (
-                      <div
-                        key={rec.id || idx}
-                        className="bg-white border-2 border-slate-200 hover:border-blue-400 rounded-2xl p-5 shadow-2xs space-y-3.5 transition"
-                      >
-                        {/* Visit Header */}
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                          <div className="flex items-center gap-2.5">
-                            <span className="text-xl">🩺</span>
-                            <div>
-                              <h4 className="text-base font-black text-slate-900 leading-tight">
-                                {rec.illness_name || rec.diagnosis || "Medical Consultation"}
-                              </h4>
-                              {rec.doctor_name && (
-                                <span className="text-xs text-blue-700 font-bold">
-                                  👨‍⚕️ {rec.doctor_name}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <span className="text-xs font-bold font-mono px-3 py-1 bg-slate-100 text-slate-700 border border-slate-200 rounded-xl self-start sm:self-auto">
-                            📅 {rec.visit_date || "Past Visit"}
-                          </span>
-                        </div>
+                    {pastTreatments.map((rec, idx) => {
+                      const shortIllness = formatShortIllnessName(rec);
+                      const assocSymptoms = getPastAssociatedSymptoms(rec);
+                      const hasMedicines = rec.prescribed_medicines && rec.prescribed_medicines.length > 0;
 
-                        {/* Symptoms & Diagnosis */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                          {rec.symptoms && (
-                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                              <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">
-                                Reported Symptoms
+                      return (
+                        <div
+                          key={rec.id || idx}
+                          className="bg-white border-2 border-slate-200 hover:border-blue-400 rounded-2xl p-5 shadow-2xs space-y-4 transition"
+                        >
+                          {/* 1. Header: Past illness in short and precise words only */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                            <div className="flex items-center gap-2.5">
+                              <span className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 flex items-center justify-center text-base font-bold flex-shrink-0">
+                                🩺
                               </span>
-                              <span className="font-bold text-slate-800">{rec.symptoms}</span>
+                              <div>
+                                <h4 className="text-base font-black text-slate-900 leading-tight">
+                                  {shortIllness}
+                                </h4>
+                                {rec.doctor_name && (
+                                  <span className="text-[11px] text-blue-700 font-bold">
+                                    👨‍⚕️ Prescribed by {rec.doctor_name}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          )}
-
-                          {rec.diagnosis && (
-                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                              <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">
-                                Diagnosis / Summary
-                              </span>
-                              <span className="font-bold text-slate-800">{rec.diagnosis}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Prescribed Medicines Section */}
-                        {rec.prescribed_medicines && rec.prescribed_medicines.length > 0 ? (
-                          <div className="space-y-2 pt-1">
-                            <span className="text-[11px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
-                              <span>💊</span>
-                              <span>Prescribed Medicines ({rec.prescribed_medicines.length}):</span>
+                            <span className="text-xs font-bold font-mono px-3 py-1 bg-slate-100 text-slate-700 border border-slate-200 rounded-xl self-start sm:self-auto">
+                              📅 {rec.visit_date || "Past Visit"}
                             </span>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-                              {rec.prescribed_medicines.map((med, mIdx) => (
-                                <div
-                                  key={mIdx}
-                                  className="bg-blue-50/50 border border-blue-200 rounded-xl p-3 space-y-1"
-                                >
-                                  <div className="font-black text-slate-900 text-xs">{med.name}</div>
-                                  <div className="text-[11px] text-blue-800 font-bold">
-                                    {med.dosage ? `Dose: ${med.dosage}` : ""}
-                                    {med.frequency ? ` • ${med.frequency}` : ""}
+                          </div>
+
+                          {/* 2. Subsection: Associated Symptoms */}
+                          {assocSymptoms && (
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1 text-xs">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
+                                Associated Symptoms:
+                              </span>
+                              <span className="font-bold text-slate-800 text-xs sm:text-sm">
+                                {assocSymptoms}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* 3. Subsection: Past Prescribed Medicines (If no medicines, display nothing) */}
+                          {hasMedicines && (
+                            <div className="space-y-2 pt-1">
+                              <span className="text-[11px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                                <span>💊</span>
+                                <span>Past Prescribed Medicines ({rec.prescribed_medicines!.length}):</span>
+                              </span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                                {rec.prescribed_medicines!.map((med, mIdx) => (
+                                  <div
+                                    key={mIdx}
+                                    className="bg-blue-50/60 border border-blue-200 rounded-xl p-3 space-y-1 shadow-2xs"
+                                  >
+                                    <div className="font-black text-slate-900 text-xs sm:text-sm">{med.name}</div>
+                                    <div className="text-[11px] text-blue-800 font-bold">
+                                      {med.dosage ? `Dose: ${med.dosage}` : ""}
+                                      {med.frequency ? ` • ${med.frequency}` : ""}
+                                    </div>
+                                    {med.duration && (
+                                      <div className="text-[10px] font-mono text-slate-500">
+                                        Duration: {med.duration}
+                                      </div>
+                                    )}
+                                    {med.instructions && (
+                                      <div className="text-[10px] text-slate-600 italic">
+                                        {med.instructions}
+                                      </div>
+                                    )}
                                   </div>
-                                  {med.duration && (
-                                    <div className="text-[10px] font-mono text-slate-500">
-                                      Duration: {med.duration}
-                                    </div>
-                                  )}
-                                  {med.instructions && (
-                                    <div className="text-[10px] text-slate-600 italic">
-                                      {med.instructions}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        ) : rec.treatment && rec.treatment !== "OPD Consultation" ? (
-                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
-                            <span className="text-[10px] font-black uppercase text-slate-400 block mb-0.5">
-                              Treatment / Medication Summary
-                            </span>
-                            <span className="font-semibold text-slate-700">{rec.treatment}</span>
-                          </div>
-                        ) : null}
+                          )}
 
-                        {/* Doctor Notes / Clinical Review */}
-                        {rec.doctor_notes && (
-                          <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-3 text-xs">
-                            <span className="text-[10px] font-black uppercase text-amber-800 block mb-0.5">
-                              Doctor Clinical Notes & Review
-                            </span>
-                            <span className="text-slate-800 font-medium">{rec.doctor_notes}</span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                          {/* 4. Doctor Notes / Clinical Advice (if present) */}
+                          {rec.doctor_notes && (
+                            <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-3 text-xs">
+                              <span className="text-[10px] font-black uppercase text-amber-800 block mb-0.5">
+                                Doctor Clinical Notes & Review
+                              </span>
+                              <span className="text-slate-800 font-medium">{rec.doctor_notes}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
