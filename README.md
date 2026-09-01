@@ -135,39 +135,14 @@ flowchart TD
 
 ---
 
-## 👨‍⚕️ Structured Physician Summary Format
+## 👨‍⚕️ Doctor Consultation Workspace (4-Tab Interface)
 
-MediKiosk generates a structured, noise-free clinical briefing for the attending doctor:
+The attending physician consultation workstation (`/doctor`) provides a streamlined 4-tab workflow:
 
-```text
-┌──────────────────────────────────────────────┐
-│ CLINICAL SUMMARY                             │
-│                                              │
-│ Chief Complaint                              │
-│ Cough + Fever                                │
-│                                              │
-│ Duration                                     │
-│ 1–3 days                                     │
-│                                              │
-│ Key Symptoms                                 │
-│ • Fever  • Cough (Dry)  • Location: Chest    │
-└──────────────────────────────────────────────┘
-
-MEDICATIONS
-None reported
-
-ALLERGIES
-No known allergies reported
-
-PAST MEDICAL HISTORY
-None reported
-
-PREVIOUS TREATMENT
-None reported
-
-INVESTIGATIONS
-No reports available
-```
+1. **📋 Summary:** Structured view of patient-reported chief complaints, symptom duration, associated symptoms, step details, current daily medications, and known drug allergies.
+2. **📜 Past Medical History:** Longitudinal history of previous hospital OPD visits, past diagnoses, and previous treatments.
+3. **📄 Documents:** Encounter documents (prescriptions, lab reports, discharge summaries) with extracted OCR text.
+4. **💊 Prescription & Medicines:** Interactive prescription builder with instant quick-fill chips for common medications (Dolo 650, Augmentin, Pan 40, Cetirizine, etc.), custom dosage/schedule builder, doctor notes, diagnosis input, and one-click saving to the patient record.
 
 ---
 
