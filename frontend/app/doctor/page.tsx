@@ -7,7 +7,7 @@ import {
 } from "../../components/ClinicalComponents";
 import type { Summary, Patient, TokenQueueItem, TokenItem, TreatmentRecord, PrescribedMedicine } from "../../lib/types";
 
-const TABS = ["summary", "prescription", "past_records", "documents"] as const;
+const TABS = ["summary", "past_records", "documents", "prescription"] as const;
 type Tab = (typeof TABS)[number];
 
 // Crisp audio chime feedback for doctor station
@@ -1173,7 +1173,7 @@ export default function DoctorPage() {
             <div className="text-4xl mb-3">📋</div>
             <h3 className="text-xl font-bold text-slate-800 mb-2">No Active Patient In Consultation</h3>
             <p className="text-slate-500 text-sm max-w-md mx-auto">
-              Select and call a patient token from the upcoming queue above to load their clinical record, encounter documents, and AI summary.
+              Select and call a patient token from the upcoming queue above to load their clinical record, encounter documents, and summary.
             </p>
           </div>
         ) : (
@@ -1186,7 +1186,7 @@ export default function DoctorPage() {
                 let badge: React.ReactNode = null;
 
                 if (t === "summary") {
-                  label = "AI Summary";
+                  label = "Summary";
                   icon = "📋";
                 } else if (t === "prescription") {
                   label = "Prescription & Medicines";
@@ -1264,25 +1264,14 @@ export default function DoctorPage() {
                         {/* Header status bar */}
                         <div className="flex items-center justify-between border-b border-slate-200 pb-4">
                           <div>
-                            <span className="text-xs font-black font-mono tracking-widest text-slate-400 uppercase block">
-                              STEP-BY-STEP CLINICAL INTAKE SUMMARY
-                            </span>
-                            <h3 className="text-lg font-black text-slate-900 mt-0.5">
+                            <h3 className="text-lg font-black text-slate-900">
                               Patient Reported Symptoms & History
                             </h3>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-[11px] font-black uppercase px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                              {summary.status || "AI_DRAFT"}
+                              {summary.status || "DRAFT"}
                             </span>
-                            <button
-                              type="button"
-                              onClick={handleGenerateSummary}
-                              className="text-xs font-bold text-blue-700 hover:text-blue-900 bg-slate-50 hover:bg-blue-50 px-3 py-1.5 rounded-xl border border-slate-200 transition"
-                              title="Regenerate summary"
-                            >
-                              ⚡ Refresh
-                            </button>
                           </div>
                         </div>
 
@@ -1442,33 +1431,6 @@ export default function DoctorPage() {
                           </div>
                         </div>
 
-                        {/* Physician Verification Controls */}
-                        <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
-                          <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
-                            <span>🛡️</span>
-                            <span>Review each step answer above before prescribing treatment.</span>
-                          </div>
-
-                          <div className="flex items-center gap-3 w-full sm:w-auto">
-                            {summary.status !== "PHYSICIAN_VERIFIED" && (
-                              <button
-                                type="button"
-                                onClick={handleConfirmSummary}
-                                className="flex-1 sm:flex-none py-2.5 px-5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow transition flex items-center justify-center gap-1.5"
-                              >
-                                <span>✓</span>
-                                <span>Confirm & Verify Summary</span>
-                              </button>
-                            )}
-
-                            {summary.status === "PHYSICIAN_VERIFIED" && (
-                              <span className="py-2 px-4 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-black flex items-center gap-1.5">
-                                <span>✓</span>
-                                <span>Physician Verified</span>
-                              </span>
-                            )}
-                          </div>
-                        </div>
                       </div>
                     );
                   })()
