@@ -46,6 +46,8 @@ export interface TreatmentRecord {
   doctor_notes?: string | null;
   doctor_name?: string | null;
   visit_date?: string | null;
+  is_followup?: boolean;
+  primary_reason?: string | null;
   created_at: string;
 }
 

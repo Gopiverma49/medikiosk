@@ -278,19 +278,11 @@ export default function TokenDisplayPage() {
           </div>
         </div>
 
-        {/* Right: Live Connection Indicator & Sound Controls */}
+        {/* Right: Sound Controls & Fullscreen */}
         <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
-            <span>{isConnected ? "LIVE SYNC" : "POLLING"}</span>
-          </div>
-
           <button
             type="button"
-            onClick={() => {
-              setSoundEnabled(!soundEnabled);
-              playHospitalChime();
-            }}
+            onClick={() => setSoundEnabled(!soundEnabled)}
             className={`py-1.5 px-3 rounded-xl border text-xs font-bold transition flex items-center gap-1.5 ${
               soundEnabled
                 ? "bg-emerald-500 text-white border-emerald-600 shadow-sm hover:bg-emerald-600"
@@ -363,7 +355,6 @@ interface RoomCardProps {
 function RoomCard({ roomTitle, data, isFlashing }: RoomCardProps) {
   const hasActivePatient = Boolean(data && data.token_number && data.token_number.trim() !== "");
   const doctorName = data?.doctor_name && data.doctor_name.trim() !== "" ? data.doctor_name : "—";
-  const departmentName = data?.department || "General Medicine";
 
   return (
     <div
@@ -375,8 +366,8 @@ function RoomCard({ roomTitle, data, isFlashing }: RoomCardProps) {
           : "border-slate-300 bg-white"
       }`}
     >
-      {/* Card Header: Room Name Banner + Department */}
-      <div className={`px-5 py-3.5 flex items-center justify-between border-b transition ${
+      {/* Card Header: Room Name Banner Only */}
+      <div className={`px-5 py-3.5 flex items-center border-b transition ${
         hasActivePatient ? "bg-slate-900 text-white border-slate-800" : "bg-slate-100 text-slate-800 border-slate-200"
       }`}>
         <div className="flex items-center gap-2.5">
@@ -385,11 +376,6 @@ function RoomCard({ roomTitle, data, isFlashing }: RoomCardProps) {
             {roomTitle}
           </h2>
         </div>
-        <span className={`text-[11px] font-extrabold uppercase px-2.5 py-0.5 rounded-full tracking-wider border ${
-          hasActivePatient ? "bg-blue-950/80 text-blue-200 border-blue-700" : "bg-slate-200 text-slate-700 border-slate-300"
-        }`}>
-          {departmentName}
-        </span>
       </div>
 
       {/* Card Center: PATIENT TOKEN DISPLAY (Compact internal space + Giant Token Number) */}
@@ -434,7 +420,7 @@ function RoomCard({ roomTitle, data, isFlashing }: RoomCardProps) {
         )}
       </div>
 
-      {/* Card Footer: CONSULTING DOCTOR & STATION DETAILS */}
+      {/* Card Footer: CONSULTING DOCTOR & STATION DETAILS (Without Busy/Available badge) */}
       <div className="px-5 py-3.5 border-t border-slate-200 bg-slate-50/80 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center text-blue-700 font-bold flex-shrink-0 text-xs">
@@ -448,12 +434,6 @@ function RoomCard({ roomTitle, data, isFlashing }: RoomCardProps) {
               {doctorName !== "—" ? doctorName : "Doctor Not Logged In"}
             </div>
           </div>
-        </div>
-
-        <div className="text-right flex-shrink-0">
-          <span className="inline-block px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[10px] font-mono font-bold text-slate-600">
-            {hasActivePatient ? "BUSY" : "AVAILABLE"}
-          </span>
         </div>
       </div>
     </div>

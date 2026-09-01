@@ -10,29 +10,6 @@ import type { Summary, Patient, TokenQueueItem, TokenItem, TreatmentRecord, Pres
 const TABS = ["summary", "past_records", "documents", "prescription"] as const;
 type Tab = (typeof TABS)[number];
 
-// Crisp audio chime feedback for doctor station
-function playDoctorChime() {
-  try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    const now = ctx.currentTime;
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(659.25, now);
-    gain.gain.setValueAtTime(0.3, now);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start(now);
-    osc.stop(now + 0.5);
-  } catch (e) {
-    console.warn("Audio chime error:", e);
-  }
-}
-
 export interface ClinicalStepDetail {
   stepNumber: number;
   label: string;
@@ -60,6 +37,7 @@ function cleanSymptomText(str: string): string {
     .replace(/\[\s*['"](.*?)['"]\s*\]/g, "$1")
     .replace(/\(\s*\[.*?\]\s*\)/g, "")
     .replace(/\(\s*['"](.*?)['"]\s*\)/g, "($1)")
+    .replace(/['"[\]]/g, "")
     .replace(/_/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -415,6 +393,12 @@ export default function DoctorPage() {
   const [activeToken, setActiveToken] = useState<TokenItem | null>(null);
   const [tokenActionLoading, setTokenActionLoading] = useState<string | null>(null);
 
+  // --- AI Summary State (Accept, Edit, Reject) ---
+  const [isEditingSummary, setIsEditingSummary] = useState(false);
+  const [summaryEditText, setSummaryEditText] = useState("");
+  const [summaryActionLoading, setSummaryActionLoading] = useState<"accept" | "edit" | "reject" | null>(null);
+  const [summaryFeedbackMsg, setSummaryFeedbackMsg] = useState<string | null>(null);
+
   const doctorDisplayName = currentUser?.full_name || currentUser?.username || "";
 
   // Reset workspace state
@@ -430,6 +414,10 @@ export default function DoctorPage() {
     setDiagnosisInput("");
     setPastTreatments([]);
     setPrescriptionSavedStatus(null);
+    setIsEditingSummary(false);
+    setSummaryEditText("");
+    setSummaryActionLoading(null);
+    setSummaryFeedbackMsg(null);
   };
 
   // Check existing session
@@ -615,7 +603,11 @@ export default function DoctorPage() {
 
   async function handleLogout() {
     if (doctorDisplayName) {
-      api.releaseRoom(doctorDisplayName).catch(() => { });
+      try {
+        await api.releaseRoom(doctorDisplayName);
+      } catch (e) {
+        console.warn("Room release error on logout:", e);
+      }
     }
     sessionStorage.removeItem("medikiosk_doctor_token");
     sessionStorage.removeItem("medikiosk_doctor_user");
@@ -627,10 +619,7 @@ export default function DoctorPage() {
     setActiveToken(null);
     setTokenQueue([]);
     // Fresh workspace purge
-    setPatient(null);
-    setEncounterId(null);
-    setSummary(null);
-    setDocuments([]);
+    resetWorkspace();
   }
 
   async function loadDoctorDashboard(userContext?: { username: string; full_name?: string }) {
@@ -766,7 +755,6 @@ export default function DoctorPage() {
   // --- Token Actions ---
   async function handleCallToken(tokenItem: TokenQueueItem) {
     setTokenActionLoading(tokenItem.id);
-    playDoctorChime();
     try {
       const docName = currentUser?.full_name || currentUser?.username || "Doctor";
       const updated = await api.callToken(tokenItem.id, {
@@ -788,7 +776,6 @@ export default function DoctorPage() {
   async function handleRecallToken() {
     if (!activeToken) return;
     setTokenActionLoading("recall");
-    playDoctorChime();
     try {
       await api.recallToken(activeToken.id);
     } catch (err: any) {
@@ -829,6 +816,10 @@ export default function DoctorPage() {
       setDiagnosisInput("");
       setPastTreatments([]);
       setPrescriptionSavedStatus(null);
+      setIsEditingSummary(false);
+      setSummaryEditText("");
+      setSummaryActionLoading(null);
+      setSummaryFeedbackMsg(null);
       await loadTokenQueue();
     } catch (err: any) {
       alert("Failed to complete consultation: " + err.message);
@@ -840,20 +831,81 @@ export default function DoctorPage() {
 
   async function handleGenerateSummary() {
     if (!encounterId) return;
-    const s = await api.generateSummary(encounterId);
-    setSummary(s);
+    try {
+      const s = await api.generateSummary(encounterId);
+      setSummary(s);
+      setIsEditingSummary(false);
+      setSummaryFeedbackMsg(null);
+    } catch (err: any) {
+      console.warn("Summary generation error:", err);
+    }
   }
 
   async function handleConfirmSummary() {
     if (!summary) return;
-    const s = await api.confirmSummary(summary.id);
-    setSummary(s);
+    setSummaryActionLoading("accept");
+    try {
+      const docName = doctorDisplayName || "Doctor";
+      const s = await api.confirmSummary(summary.id, docName);
+      setSummary(s);
+      setIsEditingSummary(false);
+      setSummaryFeedbackMsg("✓ AI summary accepted and stored to database records for future display.");
+      if (patient) {
+        const past = await api.getPatientTreatments(patient.id).catch(() => []);
+        setPastTreatments(past);
+      }
+    } catch (err: any) {
+      alert("Failed to accept summary: " + err.message);
+    } finally {
+      setSummaryActionLoading(null);
+    }
   }
 
   async function handleRejectSummary() {
     if (!summary) return;
-    const s = await api.rejectSummary(summary.id);
-    setSummary(s);
+    setSummaryActionLoading("reject");
+    try {
+      const docName = doctorDisplayName || "Doctor";
+      const s = await api.rejectSummary(summary.id, docName);
+      setSummary(s);
+      setIsEditingSummary(false);
+      setSummaryFeedbackMsg("✕ AI summary rejected. This record will not be saved to the database.");
+      if (patient) {
+        const past = await api.getPatientTreatments(patient.id).catch(() => []);
+        setPastTreatments(past);
+      }
+    } catch (err: any) {
+      alert("Failed to reject summary: " + err.message);
+    } finally {
+      setSummaryActionLoading(null);
+    }
+  }
+
+  function handleStartEditingSummary() {
+    if (!summary) return;
+    setSummaryEditText(summary.text || summary.draft_text || "");
+    setIsEditingSummary(true);
+    setSummaryFeedbackMsg(null);
+  }
+
+  async function handleSaveEditedSummary() {
+    if (!summary) return;
+    setSummaryActionLoading("edit");
+    try {
+      const docName = doctorDisplayName || "Doctor";
+      const s = await api.editSummary(summary.id, summaryEditText, docName);
+      setSummary(s);
+      setIsEditingSummary(false);
+      setSummaryFeedbackMsg("✓ AI summary edited & saved to database records.");
+      if (patient) {
+        const past = await api.getPatientTreatments(patient.id).catch(() => []);
+        setPastTreatments(past);
+      }
+    } catch (err: any) {
+      alert("Failed to save edited summary: " + err.message);
+    } finally {
+      setSummaryActionLoading(null);
+    }
   }
 
   if (authLoading) {
@@ -994,19 +1046,6 @@ export default function DoctorPage() {
                 Patients who completed intake kiosk and are waiting for consultation call.
               </p>
             </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <span className="px-3 py-1 bg-amber-100 text-amber-900 border border-amber-300 rounded-full text-xs font-mono font-bold">
-              {waitingPatients.length} Waiting
-            </span>
-            <button
-              type="button"
-              onClick={() => loadTokenQueue()}
-              className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1"
-            >
-              ↻ Refresh Queue
-            </button>
           </div>
         </div>
 
@@ -1152,14 +1191,7 @@ export default function DoctorPage() {
             </h2>
           </div>
 
-          {patient ? (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl font-mono flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                Active Consultation Record
-              </span>
-            </div>
-          ) : (
+          {!patient && (
             <div className="text-xs text-slate-400 font-medium">
               Accept a patient token from the queue above to load their summary.
             </div>
@@ -1261,19 +1293,210 @@ export default function DoctorPage() {
                     const docSummary = extractDoctorSummary(summary.draft_text || summary.text, clinicalFacts);
                     return (
                       <div className="bg-white border-2 border-slate-200 rounded-3xl p-6 md:p-8 shadow-xs space-y-6 font-sans">
-                        {/* Header status bar */}
-                        <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+                        {/* Header status bar with 3 Action Options: Accept, Edit, Reject */}
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
                           <div>
-                            <h3 className="text-lg font-black text-slate-900">
-                              Patient Reported Symptoms & History
+                            <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                              <span>Patient Reported Symptoms & History</span>
                             </h3>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              Review AI-extracted clinical notes from patient intake
+                            </p>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-black uppercase px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                              {summary.status || "DRAFT"}
-                            </span>
+
+                          {/* Action Options: Accept, Edit, Reject + Status */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {/* Current Status Badge */}
+                            {summary.status === "PHYSICIAN_VERIFIED" || summary.status === "ACCEPTED" ? (
+                              <span className="text-xs font-extrabold px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-300 flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                                Verified (Saved)
+                              </span>
+                            ) : summary.status === "PHYSICIAN_CORRECTED" ? (
+                              <span className="text-xs font-extrabold px-3 py-1.5 rounded-xl bg-blue-50 text-blue-800 border border-blue-300 flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-blue-500" />
+                                Corrected (Saved)
+                              </span>
+                            ) : summary.status === "REJECTED" ? (
+                              <span className="text-xs font-extrabold px-3 py-1.5 rounded-xl bg-rose-50 text-rose-800 border border-rose-300 flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-rose-500" />
+                                Rejected (Not Saved)
+                              </span>
+                            ) : (
+                              <span className="text-xs font-extrabold px-3 py-1.5 rounded-xl bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                                AI Draft (Review)
+                              </span>
+                            )}
+
+                            {/* 1. ACCEPT BUTTON */}
+                            <button
+                              type="button"
+                              disabled={summaryActionLoading !== null}
+                              onClick={handleConfirmSummary}
+                              className={`py-2 px-3.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95 ${
+                                summary.status === "PHYSICIAN_VERIFIED"
+                                  ? "bg-emerald-700 text-white"
+                                  : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                              }`}
+                              title="Accept AI summary and save record to database for future use and display"
+                            >
+                              <span>✓</span>
+                              <span>{summaryActionLoading === "accept" ? "Saving…" : "Accept"}</span>
+                            </button>
+
+                            {/* 2. EDIT BUTTON */}
+                            <button
+                              type="button"
+                              disabled={summaryActionLoading !== null}
+                              onClick={() => {
+                                if (isEditingSummary) {
+                                  setIsEditingSummary(false);
+                                } else {
+                                  handleStartEditingSummary();
+                                }
+                              }}
+                              className="py-2 px-3.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+                              title="Rewrite or edit the AI summary"
+                            >
+                              <span>✏</span>
+                              <span>{isEditingSummary ? "Close Editor" : "Edit"}</span>
+                            </button>
+
+                            {/* 3. REJECT BUTTON */}
+                            <button
+                              type="button"
+                              disabled={summaryActionLoading !== null}
+                              onClick={handleRejectSummary}
+                              className={`py-2 px-3.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 active:scale-95 ${
+                                summary.status === "REJECTED"
+                                  ? "bg-rose-100 text-rose-800 border border-rose-300"
+                                  : "bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200"
+                              }`}
+                              title="Reject AI summary (does not save records to database)"
+                            >
+                              <span>✕</span>
+                              <span>{summaryActionLoading === "reject" ? "Rejecting…" : "Reject"}</span>
+                            </button>
                           </div>
                         </div>
+
+                        {/* Inline Doctor Editor */}
+                        {isEditingSummary && (
+                          <div className="bg-blue-50/60 border-2 border-blue-300 rounded-2xl p-5 space-y-4 shadow-sm animate-fade-in">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center text-sm font-black shadow-xs">
+                                  ✏
+                                </span>
+                                <div>
+                                  <h4 className="text-sm font-black text-slate-900">Doctor Clinical Summary Editor</h4>
+                                  <p className="text-[11px] text-slate-500">Rewrite or customize the AI summary below. Saving will store this record into the database for future use.</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Quick text helpers */}
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Quick Clinical Insert:</span>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {[
+                                  "Vitals: Stable (BP 120/80, HR 72, SpO2 98%)",
+                                  "Symptoms: Resolving with supportive care",
+                                  "Advised: Adequate hydration, rest, and light diet",
+                                  "Follow-up: In OPD after 3 days if symptoms persist",
+                                  "Diagnosis: Acute viral symptoms evaluation",
+                                ].map((chip) => (
+                                  <button
+                                    key={chip}
+                                    type="button"
+                                    onClick={() => setSummaryEditText((prev) => (prev ? `${prev.trim()}\n• ${chip}` : `• ${chip}`))}
+                                    className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white hover:bg-blue-100 text-slate-700 border border-slate-200 shadow-2xs transition"
+                                  >
+                                    + {chip.split(":")[0]}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <textarea
+                              rows={6}
+                              value={summaryEditText}
+                              onChange={(e) => setSummaryEditText(e.target.value)}
+                              placeholder="Write physician clinical notes or rewrite the AI summary here..."
+                              className="w-full p-3.5 bg-white border-2 border-blue-200 focus:border-blue-600 rounded-xl text-xs font-mono font-medium text-slate-800 outline-none leading-relaxed shadow-inner"
+                            />
+
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <span className="text-[11px] text-slate-400 font-mono">
+                                {summaryEditText.length} characters
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setIsEditingSummary(false)}
+                                  className="py-2 px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={summaryActionLoading === "edit" || !summaryEditText.trim()}
+                                  onClick={handleSaveEditedSummary}
+                                  className="py-2 px-5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow transition flex items-center gap-1.5"
+                                >
+                                  <span>✓</span>
+                                  <span>{summaryActionLoading === "edit" ? "Saving…" : "Save & Store to Database"}</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Feedback message banner */}
+                        {summaryFeedbackMsg && (
+                          <div className={`p-3.5 rounded-2xl text-xs font-bold flex items-center justify-between animate-fade-in border shadow-xs ${
+                            summary.status === "REJECTED"
+                              ? "bg-rose-50 text-rose-800 border-rose-200"
+                              : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                          }`}>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm">{summary.status === "REJECTED" ? "✕" : "✓"}</span>
+                              <span>{summaryFeedbackMsg}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setSummaryFeedbackMsg(null)}
+                              className="text-slate-400 hover:text-slate-600 text-xs px-1"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Rejected Warning Notice */}
+                        {summary.status === "REJECTED" && (
+                          <div className="bg-rose-50/80 border-2 border-rose-200 text-rose-900 p-4 rounded-2xl text-xs flex items-start gap-3 shadow-xs">
+                            <span className="text-xl flex-shrink-0">⚠️</span>
+                            <div>
+                              <p className="font-black text-rose-900">AI Summary Rejected</p>
+                              <p className="text-[11px] text-rose-700 mt-0.5">This AI summary draft was rejected by the doctor. It is NOT stored in the database records. You can use the Edit or Accept button above if you wish to rewrite or save it.</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Physician's Corrected Note Display if summary was edited */}
+                        {summary.status === "PHYSICIAN_CORRECTED" && summary.text && (
+                          <div className="bg-blue-50/60 border border-blue-200 rounded-2xl p-4 shadow-2xs">
+                            <div className="flex items-center gap-2 mb-2 text-xs font-black text-blue-900 uppercase">
+                              <span>📝</span>
+                              <span>Doctor's Corrected Clinical Note</span>
+                            </div>
+                            <pre className="text-xs text-slate-800 font-sans whitespace-pre-wrap leading-relaxed bg-white p-3.5 rounded-xl border border-blue-100 shadow-inner">
+                              {summary.text}
+                            </pre>
+                          </div>
+                        )}
 
                         {/* Structured Step-by-Step Rows */}
                         <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
@@ -1721,122 +1944,180 @@ export default function DoctorPage() {
             {/* Tab 3: Past Medical Records & Historical Prescriptions */}
             {tab === "past_records" && (
               <div className="space-y-6">
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-600" />
-                    <span className="text-xs font-bold text-slate-800">
-                      Past Consultations & Prescriptions for {patient?.name} ({pastTreatments.length})
-                    </span>
-                  </div>
-                  <span className="text-xs text-slate-400 font-semibold">
-                    Historical patient records
-                  </span>
-                </div>
+                {(() => {
+                  const historicalTreatments = pastTreatments.filter((rec) => {
+                    if (!encounterId) return true;
+                    if (rec.id === encounterId) return false;
+                    if (rec.illness_id && rec.illness_id.toUpperCase() === `VISIT_${encounterId.slice(0, 8).toUpperCase()}`) return false;
+                    return true;
+                  });
 
-                {pastTreatments.length === 0 ? (
-                  <div className="text-center py-12 px-6 bg-slate-50/50 border border-dashed border-slate-300 rounded-2xl">
-                    <div className="text-3xl mb-2">📜</div>
-                    <div className="text-sm font-bold text-slate-700 mb-1">
-                      No Past Medical Records
-                    </div>
-                    <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                      This is the first recorded hospital consultation for this patient. Future visits will show complete historical records here.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {pastTreatments.map((rec, idx) => {
-                      const shortIllness = formatShortIllnessName(rec);
-                      const assocSymptoms = getPastAssociatedSymptoms(rec);
-                      const hasMedicines = rec.prescribed_medicines && rec.prescribed_medicines.length > 0;
+                  if (historicalTreatments.length === 0) {
+                    return (
+                      <div className="text-center py-12 px-6 bg-slate-50/50 border border-dashed border-slate-300 rounded-2xl">
+                        <div className="text-3xl mb-2">📜</div>
+                        <div className="text-sm font-bold text-slate-700 mb-1">
+                          No Past Medical Records
+                        </div>
+                        <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                          This is the first recorded hospital consultation for this patient. Future visits will show complete historical records here.
+                        </p>
+                      </div>
+                    );
+                  }
 
-                      return (
-                        <div
-                          key={rec.id || idx}
-                          className="bg-white border-2 border-slate-200 hover:border-blue-400 rounded-2xl p-5 shadow-2xs space-y-4 transition"
-                        >
-                          {/* 1. Header: Past illness in short and precise words only */}
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                            <div className="flex items-center gap-2.5">
-                              <span className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 flex items-center justify-center text-base font-bold flex-shrink-0">
-                                🩺
-                              </span>
-                              <div>
-                                <h4 className="text-base font-black text-slate-900 leading-tight">
-                                  {shortIllness}
-                                </h4>
-                                {rec.doctor_name && (
-                                  <span className="text-[11px] text-blue-700 font-bold">
-                                    👨‍⚕️ Prescribed by {rec.doctor_name}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <span className="text-xs font-bold font-mono px-3 py-1 bg-slate-100 text-slate-700 border border-slate-200 rounded-xl self-start sm:self-auto">
-                              📅 {rec.visit_date || "Past Visit"}
-                            </span>
-                          </div>
+                  const currentDocSummary = summary ? extractDoctorSummary(summary.draft_text || summary.text, clinicalFacts) : null;
+                  const currentSymptoms = currentDocSummary?.selectedSymptoms || [];
 
-                          {/* 2. Subsection: Associated Symptoms */}
-                          {assocSymptoms && (
-                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1 text-xs">
-                              <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
-                                Associated Symptoms:
-                              </span>
-                              <span className="font-bold text-slate-800 text-xs sm:text-sm">
-                                {assocSymptoms}
-                              </span>
-                            </div>
-                          )}
+                  return (
+                    <div className="space-y-4">
+                      {historicalTreatments.map((rec, idx) => {
+                        const shortIllness = formatShortIllnessName(rec);
+                        const assocSymptoms = getPastAssociatedSymptoms(rec);
+                        
+                        // Check if current active consultation is continuing/revisiting this illness
+                        const isCurrentComplaintMatch = currentSymptoms.some((s) => {
+                          const lowS = s.toLowerCase().trim();
+                          const lowIllness = (rec.illness_name || "").toLowerCase();
+                          const lowSymptoms = (rec.symptoms || "").toLowerCase();
+                          return (
+                            lowS &&
+                            (lowIllness.includes(lowS) ||
+                              lowS.includes(lowIllness) ||
+                              lowSymptoms.includes(lowS))
+                          );
+                        });
 
-                          {/* 3. Subsection: Past Prescribed Medicines (If no medicines, display nothing) */}
-                          {hasMedicines && (
-                            <div className="space-y-2 pt-1">
-                              <span className="text-[11px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
-                                <span>💊</span>
-                                <span>Past Prescribed Medicines ({rec.prescribed_medicines!.length}):</span>
-                              </span>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-                                {rec.prescribed_medicines!.map((med, mIdx) => (
-                                  <div
-                                    key={mIdx}
-                                    className="bg-blue-50/60 border border-blue-200 rounded-xl p-3 space-y-1 shadow-2xs"
-                                  >
-                                    <div className="font-black text-slate-900 text-xs sm:text-sm">{med.name}</div>
-                                    <div className="text-[11px] text-blue-800 font-bold">
-                                      {med.dosage ? `Dose: ${med.dosage}` : ""}
-                                      {med.frequency ? ` • ${med.frequency}` : ""}
-                                    </div>
-                                    {med.duration && (
-                                      <div className="text-[10px] font-mono text-slate-500">
-                                        Duration: {med.duration}
-                                      </div>
+                        const isFollowUp = !!(rec.is_followup || isCurrentComplaintMatch || (rec.illness_name && rec.illness_name.toLowerCase().includes("follow")));
+                        const rawPrimary = rec.primary_reason || (rec.symptoms ? rec.symptoms.split(",")[0].trim() : rec.illness_name);
+                        const primaryReason = cleanSymptomText(rawPrimary);
+                        const hasMedicines = !!(rec.prescribed_medicines && rec.prescribed_medicines.length > 0);
+                        const hasTreatmentText = !!(rec.treatment && rec.treatment !== "OPD Consultation" && rec.treatment !== "Prescribed Treatment & Medical Advice");
+
+                        return (
+                          <div
+                            key={rec.id || idx}
+                            className={`bg-white border-2 rounded-2xl p-5 shadow-2xs space-y-4 transition ${
+                              isFollowUp
+                                ? "border-purple-300 hover:border-purple-500 bg-purple-50/15"
+                                : "border-slate-200 hover:border-blue-400"
+                            }`}
+                          >
+                            {/* 1. Header: Past illness with Follow-up and Primary Reason */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                              <div className="flex items-center gap-3 flex-wrap">
+                                <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-base font-bold flex-shrink-0 shadow-xs ${
+                                  isFollowUp
+                                    ? "bg-purple-100 border border-purple-200 text-purple-800"
+                                    : "bg-blue-50 border border-blue-200 text-blue-700"
+                                }`}>
+                                  🩺
+                                </span>
+                                <div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h4 className="text-base font-black text-slate-900 leading-tight">
+                                      {shortIllness}
+                                    </h4>
+                                    {isFollowUp && (
+                                      <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-purple-100 text-purple-900 border border-purple-300 flex items-center gap-1 shadow-2xs">
+                                        <span>🔄</span>
+                                        <span>Follow-up</span>
+                                      </span>
                                     )}
-                                    {med.instructions && (
-                                      <div className="text-[10px] text-slate-600 italic">
-                                        {med.instructions}
-                                      </div>
+                                    {isFollowUp && primaryReason && primaryReason !== "None reported" && (
+                                      <span className="text-xs font-bold text-purple-950 bg-purple-100/80 border border-purple-200 px-2.5 py-0.5 rounded-lg flex items-center gap-1.5">
+                                        <span className="text-purple-600 font-semibold">Primary Reason:</span>
+                                        <span>{primaryReason}</span>
+                                      </span>
                                     )}
                                   </div>
-                                ))}
+                                  {rec.doctor_name && (
+                                    <span className="text-[11px] text-blue-700 font-bold block mt-0.5">
+                                      👨‍⚕️ Prescribed by {rec.doctor_name}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          )}
-
-                          {/* 4. Doctor Notes / Clinical Advice (if present) */}
-                          {rec.doctor_notes && (
-                            <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-3 text-xs">
-                              <span className="text-[10px] font-black uppercase text-amber-800 block mb-0.5">
-                                Doctor Clinical Notes & Review
+                              <span className="text-xs font-bold font-mono px-3 py-1 bg-slate-100 text-slate-700 border border-slate-200 rounded-xl self-start sm:self-auto">
+                                📅 {rec.visit_date || "Past Visit"}
                               </span>
-                              <span className="text-slate-800 font-medium">{rec.doctor_notes}</span>
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+
+                            {/* 2. Subsection: Associated Symptoms */}
+                            {assocSymptoms && (
+                              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1 text-xs">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
+                                  Associated Symptoms:
+                                </span>
+                                <span className="font-bold text-slate-800 text-xs sm:text-sm">
+                                  {assocSymptoms}
+                                </span>
+                              </div>
+                            )}
+
+                            {/* 3. Subsection: Past Prescribed Medicines */}
+                            {(hasMedicines || hasTreatmentText) && (
+                              <div className="space-y-2 pt-1">
+                                <span className="text-[11px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5 font-bold">
+                                  <span>💊</span>
+                                  <span>
+                                    Prescribed Medicines {hasMedicines ? `(${rec.prescribed_medicines!.length})` : ""}:
+                                  </span>
+                                </span>
+                                {hasMedicines ? (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                                    {rec.prescribed_medicines!.map((med, mIdx) => (
+                                      <div
+                                        key={mIdx}
+                                        className="bg-blue-50/70 border border-blue-200 rounded-xl p-3 space-y-1.5 shadow-2xs hover:bg-blue-50 transition"
+                                      >
+                                        <div className="font-black text-slate-900 text-xs sm:text-sm flex items-center gap-1.5">
+                                          <span className="text-blue-600">✦</span>
+                                          <span>{med.name}</span>
+                                        </div>
+                                        {(med.dosage || med.frequency) && (
+                                          <div className="text-[11px] text-blue-900 font-bold bg-white border border-blue-200 px-2 py-0.5 rounded-md inline-block">
+                                            {med.dosage ? med.dosage : ""}
+                                            {med.dosage && med.frequency ? " • " : ""}
+                                            {med.frequency ? med.frequency : ""}
+                                          </div>
+                                        )}
+                                        {med.duration && (
+                                          <div className="text-[10px] font-mono text-slate-600 font-medium">
+                                            ⏱ Duration: {med.duration}
+                                          </div>
+                                        )}
+                                        {med.instructions && (
+                                          <div className="text-[10px] text-slate-600 italic bg-blue-100/50 px-2 py-0.5 rounded">
+                                            📋 {med.instructions}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-xs font-semibold text-slate-800 bg-blue-50/50 p-3 rounded-xl border border-blue-200">
+                                    {rec.treatment}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* 4. Doctor Notes / Clinical Advice (if present) */}
+                            {rec.doctor_notes && (
+                              <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-3 text-xs">
+                                <span className="text-[10px] font-black uppercase text-amber-800 block mb-0.5">
+                                  Doctor Clinical Notes & Review
+                                </span>
+                                <span className="text-slate-800 font-medium">{rec.doctor_notes}</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             )}
 

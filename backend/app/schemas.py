@@ -30,6 +30,8 @@ class TreatmentRecordOut(BaseModel):
     doctor_notes: Optional[str] = None
     doctor_name: Optional[str] = None
     visit_date: Optional[str] = None
+    is_followup: Optional[bool] = False
+    primary_reason: Optional[str] = None
     created_at: datetime
 
 

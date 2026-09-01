@@ -363,23 +363,12 @@ class RoomReleaseIn(BaseModel):
 
 @router.get("/tokens/rooms")
 def get_room_availability(db: Session = Depends(get_db)):
-    """Return all consultation rooms and their current occupancy."""
+    """Return all consultation rooms and their current occupancy based on active doctor sessions."""
     db_rooms = _get_or_create_default_rooms(db)
     all_rooms = [r.name for r in db_rooms]
 
-    active_tokens = db.query(TokenQueue).filter(
-        TokenQueue.status.in_([TokenStatus.CALLED, TokenStatus.IN_CONSULTATION])
-    ).all()
-    
     occupied: dict[str, str] = {}
-    for tok in active_tokens:
-        if tok.room_number and tok.doctor_name:
-            r_name = tok.room_number
-            if r_name == "Room 1": r_name = "Room A"
-            if r_name == "Room 2": r_name = "Room B"
-            occupied[r_name] = tok.doctor_name
-
-    # Merge with active doctor room claims
+    # Only active logged-in doctor room claims dictate room occupancy
     for doc, room in ACTIVE_DOCTOR_ROOMS.items():
         if room:
             r_name = room
@@ -421,9 +410,11 @@ async def claim_room(payload: RoomClaimIn, db: Session = Depends(get_db)):
 
 @router.post("/tokens/rooms/release")
 async def release_room(payload: RoomReleaseIn, db: Session = Depends(get_db)):
-    """Doctor logs out or leaves, freeing their assigned room for other doctors."""
-    if payload.doctor_name in ACTIVE_DOCTOR_ROOMS:
-        del ACTIVE_DOCTOR_ROOMS[payload.doctor_name]
+    """Doctor logs out or leaves, freeing their assigned room immediately for other doctors."""
+    clean_target = (payload.doctor_name or "").strip().lower()
+    for doc_key in list(ACTIVE_DOCTOR_ROOMS.keys()):
+        if doc_key.strip().lower() == clean_target:
+            del ACTIVE_DOCTOR_ROOMS[doc_key]
 
     display_state = _build_display_state(db)
     # Broadcast room release to all doctor stations and TV displays
@@ -577,29 +568,48 @@ async def complete_token(token_id: str, db: Session = Depends(get_db)):
 
     # Auto-save TreatmentRecord for patient if encounter had clinical facts/summary
     if token.encounter_id and token.patient_id:
-        existing_tr = db.query(TreatmentRecord).filter(
-            TreatmentRecord.patient_id == token.patient_id,
-            TreatmentRecord.illness_id == f"VISIT_{token.encounter_id[:8].upper()}"
-        ).first()
+        summary = db.query(ClinicalSummary).filter(ClinicalSummary.encounter_id == token.encounter_id).first()
+        if summary and summary.status == "REJECTED":
+            # Summary explicitly rejected - do not save record
+            pass
+        else:
+            existing_tr = db.query(TreatmentRecord).filter(
+                TreatmentRecord.patient_id == token.patient_id,
+                TreatmentRecord.illness_id == f"VISIT_{token.encounter_id[:8].upper()}"
+            ).first()
         if existing_tr:
             if token.doctor_name and not existing_tr.doctor_name:
                 existing_tr.doctor_name = token.doctor_name
                 db.flush()
         else:
+            enc = db.query(Encounter).filter(Encounter.id == token.encounter_id).first() if token.encounter_id else None
+            prev_tr = None
+            if enc and enc.previous_illness_id:
+                prev_tr = db.query(TreatmentRecord).filter(
+                    (TreatmentRecord.illness_id == enc.previous_illness_id) |
+                    (TreatmentRecord.id == enc.previous_illness_id)
+                ).first()
+
             facts = db.query(ClinicalFact).filter(ClinicalFact.encounter_id == token.encounter_id).all()
             cc = next((f.label for f in facts if f.concept == "chief_complaint" and f.label), None)
             symptom_labels = [f.label for f in facts if f.label and (f.category in ("symptom", "chief_complaint") or f.concept in ("chief_complaint", "location", "character"))]
             if not symptom_labels and facts:
                 symptom_labels = [f.label or f.concept for f in facts if f.label or f.concept]
-            symptoms_str = ", ".join(symptom_labels[:4]) if symptom_labels else "General symptoms evaluation"
-            illness_title = cc or (symptom_labels[0] if symptom_labels else "OPD Medical Consultation")
+            symptoms_str = ", ".join(symptom_labels[:4]) if symptom_labels else (prev_tr.symptoms if prev_tr else "General symptoms evaluation")
+
+            if prev_tr:
+                illness_title = f"Follow-up: {prev_tr.illness_name}" if not (prev_tr.illness_name or "").lower().startswith("follow") else prev_tr.illness_name
+                diag_str = f"Follow-up for {prev_tr.illness_name}"
+            else:
+                illness_title = cc or (symptom_labels[0] if symptom_labels else "OPD Medical Consultation")
+                diag_str = "Consultation Completed"
 
             tr = TreatmentRecord(
                 patient_id=token.patient_id,
                 illness_id=f"VISIT_{token.encounter_id[:8].upper()}",
                 illness_name=illness_title,
                 symptoms=symptoms_str,
-                diagnosis="Consultation Completed",
+                diagnosis=diag_str,
                 treatment="Prescribed Treatment & Medical Advice",
                 doctor_name=token.doctor_name,
                 visit_date=datetime.now(timezone.utc).strftime("%d %b %Y"),

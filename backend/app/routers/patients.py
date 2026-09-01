@@ -21,6 +21,8 @@ def _get_patient(db: Session, identifier: str) -> Optional[Patient]:
     return db.query(Patient).filter((Patient.id == clean_id) | (Patient.patient_id == clean_id)).first()
 
 
+from ..models import Patient, Encounter, Consent, TreatmentRecord, ClinicalFact, ClinicalSummary, TokenQueue, TokenStatus
+
 def _clean_str_value(val) -> str:
     if val is None or val is True or val is False:
         return ""
@@ -45,7 +47,7 @@ def _clean_str_value(val) -> str:
                     return str(d.get("displayLabel") or d.get("name") or d.get("mainLocation") or "").strip()
             except Exception:
                 pass
-    if s.startswith("[") and s.endswith("]"):
+    if (s.startswith("[") and s.endswith("]")) or (s.startswith("(") and s.endswith(")")):
         import ast
         try:
             parsed = ast.literal_eval(s)
@@ -54,31 +56,61 @@ def _clean_str_value(val) -> str:
                 return ", ".join(i for i in items if i)
         except Exception:
             pass
+        s = s.strip("[]()\"' ")
+    s = s.replace("['", "").replace("']", "").replace('["', "").replace('"]', "")
     if "_" in s:
         s = s.replace("_", " ").title()
-    return s
+    return s.strip()
 
 
-def _get_combined_patient_treatments(db: Session, patient: Patient) -> list:
-    """Retrieve all past medical records with clean structured symptoms, duration, and dates."""
-    # 1. Fetch explicit TreatmentRecords directly
+def _get_combined_patient_treatments(db: Session, patient: Patient, exclude_encounter_id: Optional[str] = None) -> list:
+    """Retrieve all past completed medical records, strictly excluding any active/ongoing consultations."""
+    # Find active / ongoing tokens for this patient (WAITING, CALLED, IN_CONSULTATION)
+    active_tokens = db.query(TokenQueue).filter(
+        TokenQueue.patient_id == patient.id,
+        TokenQueue.status.in_([TokenStatus.WAITING, TokenStatus.CALLED, TokenStatus.IN_CONSULTATION])
+    ).all()
+    active_encounter_ids = {t.encounter_id for t in active_tokens if t.encounter_id}
+    if exclude_encounter_id:
+        active_encounter_ids.add(exclude_encounter_id)
+
+    # 1. Fetch explicit TreatmentRecords directly, filtering out ongoing active encounter records
     records = db.query(TreatmentRecord).filter(TreatmentRecord.patient_id == patient.id).order_by(TreatmentRecord.created_at.desc()).all()
-    out = list(records)
+    out = []
+    for r in records:
+        r_illness = (r.illness_id or "").upper()
+        if any(enc_id and f"VISIT_{enc_id[:8].upper()}" == r_illness for enc_id in active_encounter_ids):
+            continue
+        if str(r.id) in active_encounter_ids:
+            continue
+        out.append(r)
 
     # 2. Also check past completed or documented Encounters for this patient
     encounters = db.query(Encounter).filter(Encounter.patient_id == patient.id).order_by(Encounter.created_at.desc()).all()
 
-    existing_illness_keys = {
-        f"{(r.illness_name or '').strip().lower()}_{(r.visit_date or '').strip().lower()}"
-        for r in out
+    existing_encounter_keys = {
+        (r.illness_id or "").upper() for r in out
+    } | {
+        f"VISIT_{str(r.id)[:8].upper()}" for r in out if r.id
     }
 
     for enc in encounters:
+        # Strictly skip active ongoing encounters!
+        if enc.id in active_encounter_ids:
+            continue
+
         summary = db.query(ClinicalSummary).filter(ClinicalSummary.encounter_id == enc.id).first()
+        if summary and summary.status == "REJECTED":
+            continue
         facts = db.query(ClinicalFact).filter(ClinicalFact.encounter_id == enc.id).all()
         
         if not summary and not facts:
             continue
+
+        enc_key = f"VISIT_{enc.id[:8].upper()}"
+        if enc_key in existing_encounter_keys:
+            continue
+        existing_encounter_keys.add(enc_key)
 
         # Extract duration
         onset_fact = next((f for f in facts if f.concept == "symptom_onset" and f.label), None)
@@ -86,10 +118,22 @@ def _get_combined_patient_treatments(db: Session, patient: Patient) -> list:
         if not duration_str:
             duration_str = "1–3 days"
 
-        # Extract meaningful symptoms (filtering out booleans, duration, JSON artifacts)
+        # Extract meaningful symptoms & medications
         symptom_items = []
+        med_items = []
         for f in facts:
             if f.concept in ("symptom_onset", "consent", "encounter_mode"):
+                continue
+            if f.concept == "medication" or f.category == "medication":
+                med_name = _clean_str_value(f.label or f.value)
+                if med_name and med_name.lower() not in ("none", "no", "false", "none reported"):
+                    med_items.append({
+                        "name": med_name,
+                        "dosage": "As prescribed",
+                        "frequency": "Daily",
+                        "duration": "3–5 days",
+                        "instructions": "After food",
+                    })
                 continue
             cleaned = _clean_str_value(f.label or f.value)
             if not cleaned or cleaned.lower() in ("true", "false", "yes", "no", "none", "general medical evaluation"):
@@ -109,24 +153,48 @@ def _get_combined_patient_treatments(db: Session, patient: Patient) -> list:
         illness_name = symptom_items[0] if symptom_items else "Medical Consultation"
         visit_date_str = enc.created_at.strftime("%d %b %Y") if enc.created_at else "Recent Visit"
         
-        record_key = f"{illness_name.strip().lower()}_{visit_date_str.strip().lower()}"
-        if record_key in existing_illness_keys:
-            continue
-        existing_illness_keys.add(record_key)
-        
-        out.append(TreatmentRecord(
+        tr = TreatmentRecord(
             id=enc.id,
             patient_id=patient.id,
-            illness_id=f"VISIT_{enc.id[:8].upper()}",
+            illness_id=enc_key,
             illness_name=illness_name,
             symptoms=symptoms_str,
             diagnosis=f"Duration: {duration_str}",
             treatment="OPD Consultation",
+            prescribed_medicines=med_items if med_items else None,
             visit_date=visit_date_str,
             created_at=enc.created_at or datetime.now(timezone.utc),
-        ))
+        )
+        out.append(tr)
 
     out.sort(key=lambda r: r.created_at or datetime.min, reverse=True)
+
+    # Compute follow-up flags and primary reason for each record
+    seen_illness_names = set()
+    for r in reversed(out):
+        raw_name = _clean_str_value(r.illness_name or "")
+        norm_name = raw_name.lower()
+        norm_key = norm_name.replace("follow-up:", "").replace("followup:", "").replace("past", "").strip()
+        
+        primary = None
+        if r.symptoms:
+            primary = _clean_str_value(r.symptoms.split(",")[0].strip())
+        if not primary or primary.lower() in ("none reported", "general symptoms", "none"):
+            primary = _clean_str_value(r.illness_name or r.diagnosis or "Medical Evaluation")
+        
+        is_fu = False
+        if norm_key and norm_key in seen_illness_names:
+            is_fu = True
+        elif "follow" in norm_name or (r.diagnosis and "follow" in str(r.diagnosis).lower()):
+            is_fu = True
+        elif r.illness_id and any(enc.previous_illness_id in (r.illness_id, str(r.id)) for enc in encounters if enc.previous_illness_id):
+            is_fu = True
+            
+        r.is_followup = is_fu
+        r.primary_reason = _clean_str_value(primary)
+        if norm_key:
+            seen_illness_names.add(norm_key)
+
     return out
 
 
@@ -290,19 +358,36 @@ def save_patient_prescription(patient_id: str, payload: PrescriptionSaveIn, db: 
     meds_data = [m.model_dump() for m in payload.prescribed_medicines]
 
     if not tr:
-        # Determine illness name from facts or default
+        # Determine illness name from facts, previous illness, or default
+        enc = db.query(Encounter).filter(Encounter.id == enc_id).first() if enc_id else None
+        prev_tr = None
+        if enc and enc.previous_illness_id:
+            prev_tr = db.query(TreatmentRecord).filter(
+                (TreatmentRecord.illness_id == enc.previous_illness_id) |
+                (TreatmentRecord.id == enc.previous_illness_id)
+            ).first()
+
         facts = db.query(ClinicalFact).filter(ClinicalFact.encounter_id == enc_id).all() if enc_id else []
         cc = next((f.label for f in facts if f.concept == "chief_complaint" and f.label), None)
         symptom_labels = [f.label for f in facts if f.label and (f.category in ("symptom", "chief_complaint") or f.concept in ("chief_complaint", "location", "character"))]
-        symptoms_str = ", ".join(symptom_labels[:4]) if symptom_labels else (cc or "OPD Consultation")
-        illness_name = payload.diagnosis or cc or (symptom_labels[0] if symptom_labels else "OPD Medical Consultation")
+        symptoms_str = ", ".join(symptom_labels[:4]) if symptom_labels else (prev_tr.symptoms if prev_tr else (cc or "OPD Consultation"))
+
+        if payload.diagnosis:
+            illness_name = payload.diagnosis
+            diag_str = payload.diagnosis
+        elif prev_tr:
+            illness_name = f"Follow-up: {prev_tr.illness_name}" if not (prev_tr.illness_name or "").lower().startswith("follow") else prev_tr.illness_name
+            diag_str = f"Follow-up for {prev_tr.illness_name}"
+        else:
+            illness_name = cc or (symptom_labels[0] if symptom_labels else "OPD Medical Consultation")
+            diag_str = "Consultation Completed"
 
         tr = TreatmentRecord(
             patient_id=patient.id,
             illness_id=illness_key,
             illness_name=illness_name,
             symptoms=symptoms_str,
-            diagnosis=payload.diagnosis or "Consultation Completed",
+            diagnosis=diag_str,
             treatment="Prescribed Treatment & Medical Advice",
             prescribed_medicines=meds_data,
             doctor_notes=payload.doctor_notes,

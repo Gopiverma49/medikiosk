@@ -56,5 +56,48 @@ def test_summary_confirmation_flow(client):
     summary = client.post(f"/api/summaries/generate?encounter_id={enc['id']}").json()
     assert summary["status"] == "AI_DRAFT"
 
-    confirmed = client.post(f"/api/summaries/{summary['id']}/confirm").json()
+    confirmed = client.post(f"/api/summaries/{summary['id']}/confirm?confirmed_by=Dr.%20Sharma").json()
     assert confirmed["status"] == "PHYSICIAN_VERIFIED"
+
+    # Verify TreatmentRecord is saved in database for future use and display
+    treatments = client.get(f"/api/patients/{patient['id']}/treatments").json()
+    assert len(treatments) >= 1
+    assert any("Verified" in (t.get("diagnosis") or "") for t in treatments)
+
+
+def test_summary_edit_flow_saves_to_database(client):
+    patient = client.post("/api/patients", json={"name": "Priya Singh"}).json()
+    enc = client.post("/api/encounters", json={"patient_id": patient["id"]}).json()
+    client.post("/api/history/answer", json={
+        "encounter_id": enc["id"], "question_concept": "chief_complaint", "raw_answer": "Severe headache", "certainty": "confirmed",
+    })
+    summary = client.post(f"/api/summaries/generate?encounter_id={enc['id']}").json()
+
+    edited_text = "Custom physician notes: Patient examined, migraine diagnosed, advised rest."
+    edited = client.post(f"/api/summaries/{summary['id']}/edit", json={
+        "text": edited_text,
+        "edited_by": "Dr. Gupta"
+    }).json()
+    assert edited["status"] == "PHYSICIAN_CORRECTED"
+    assert edited["text"] == edited_text
+
+    # Verify database has updated record with custom text
+    treatments = client.get(f"/api/patients/{patient['id']}/treatments").json()
+    assert len(treatments) >= 1
+    assert any(edited_text in (t.get("treatment") or "") for t in treatments)
+
+
+def test_summary_reject_flow_does_not_save_to_database(client):
+    patient = client.post("/api/patients", json={"name": "Amit Patel"}).json()
+    enc = client.post("/api/encounters", json={"patient_id": patient["id"]}).json()
+    client.post("/api/history/answer", json={
+        "encounter_id": enc["id"], "question_concept": "chief_complaint", "raw_answer": "Stomach pain", "certainty": "confirmed",
+    })
+    summary = client.post(f"/api/summaries/generate?encounter_id={enc['id']}").json()
+
+    rejected = client.post(f"/api/summaries/{summary['id']}/reject?rejected_by=Dr.%20Verma").json()
+    assert rejected["status"] == "REJECTED"
+
+    # Verify rejected summary is not stored in patient treatment history
+    treatments = client.get(f"/api/patients/{patient['id']}/treatments").json()
+    assert len(treatments) == 0

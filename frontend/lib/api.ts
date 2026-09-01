@@ -114,10 +114,15 @@ export const api = {
   // --- summaries ---
   generateSummary: (encounter_id: string) => request<Summary>(`/summaries/generate?encounter_id=${encounter_id}`, { method: "POST" }),
   getSummary: (encounter_id: string) => request<Summary>(`/summaries/${encounter_id}`),
-  confirmSummary: (summary_id: string) => request<Summary>(`/summaries/${summary_id}/confirm`, { method: "POST" }),
-  rejectSummary: (summary_id: string) => request<Summary>(`/summaries/${summary_id}/reject`, { method: "POST" }),
-  editSummary: (summary_id: string, text: string) =>
-    request<Summary>(`/summaries/${summary_id}/edit`, { method: "POST", body: JSON.stringify({ text }) }),
+  confirmSummary: (summary_id: string, confirmed_by?: string) =>
+    request<Summary>(`/summaries/${summary_id}/confirm${confirmed_by ? `?confirmed_by=${encodeURIComponent(confirmed_by)}` : ""}`, { method: "POST" }),
+  rejectSummary: (summary_id: string, rejected_by?: string) =>
+    request<Summary>(`/summaries/${summary_id}/reject${rejected_by ? `?rejected_by=${encodeURIComponent(rejected_by)}` : ""}`, { method: "POST" }),
+  editSummary: (summary_id: string, text: string, edited_by?: string) =>
+    request<Summary>(`/summaries/${summary_id}/edit`, {
+      method: "POST",
+      body: JSON.stringify({ text, edited_by: edited_by || "Doctor" }),
+    }),
 
   // --- FHIR / ABDM / HIS ---
   fhirStatus: () => request("/fhir/status"),
