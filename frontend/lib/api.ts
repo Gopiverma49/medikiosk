@@ -156,6 +156,21 @@ export const api = {
     request<{ ok: boolean; message: string }>(`/admin/doctors/${id}`, {
       method: "DELETE",
     }),
+  listNurses: () => request<import("./types").NurseAccount[]>("/admin/nurses"),
+  createNurse: (data: { username: string; password: string; full_name: string }) =>
+    request<import("./types").NurseAccount>("/admin/nurses", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateNurse: (id: string, data: { username?: string; password?: string; full_name?: string }) =>
+    request<import("./types").NurseAccount>(`/admin/nurses/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteNurse: (id: string) =>
+    request<{ ok: boolean; message: string }>(`/admin/nurses/${id}`, {
+      method: "DELETE",
+    }),
   listAllPatientsAdmin: () => request<import("./types").AdminPatientRecord[]>("/admin/patients"),
   deletePatientAdmin: (id: string) =>
     request<{ ok: boolean; message: string }>(`/admin/patients/${id}`, {

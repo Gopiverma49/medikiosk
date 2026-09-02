@@ -18,6 +18,7 @@ type FlowStep =
   | "patient_confirm" // Step 3: Existing Patient Confirmation
   | "patient_register" // Step 3: New Patient Form
   | "patient_register_confirm" // Step 3: New Patient Confirmation
+  | "patient_consent" // Step 3: First-Time Patient Consent (Info, Voice, Care)
   | "history_check" // Step 4: Same vs New Illness
   | "history_details" // Step 4: Previous Illness Summary
   | "history_auto_skip" // Step 4: No history auto message
@@ -64,6 +65,11 @@ export default function PatientPage() {
   });
   const [regErrors, setRegErrors] = useState<Record<string, string>>({});
 
+  // First-Time Patient Consent State (Info, Voice, Clinical Care / Rest)
+  const [consentInfo, setConsentInfo] = useState(true);
+  const [consentVoice, setConsentVoice] = useState(true);
+  const [consentRest, setConsentRest] = useState(true);
+
   // Loading & Document Status
   const [isLoading, setIsLoading] = useState(false);
   const [docStatus, setDocStatus] = useState<Record<string, string>>({});
@@ -89,6 +95,7 @@ export default function PatientPage() {
       case "patient_confirm":
       case "patient_register":
       case "patient_register_confirm":
+      case "patient_consent":
         return 3;
       case "history_check":
       case "history_details":
@@ -123,8 +130,10 @@ export default function PatientPage() {
 
   const goBack = () => {
     if (historyStack.length === 0) {
-      if (step === "patient_register" || step === "patient_confirm") {
-        setStep("id_method");
+      if (step === "patient_consent" || step === "patient_confirm") {
+        goBackToIdEntry();
+      } else if (step === "patient_register") {
+        setStep("patient_consent");
       } else if (step === "patient_register_confirm") {
         setStep("patient_register");
       } else if (step === "scan_id" || step === "keypad_id") {
@@ -196,6 +205,9 @@ export default function PatientPage() {
           break;
         case "patient_register_confirm":
           playVoicePrompt("voice_speak_prompt_reg_confirm");
+          break;
+        case "patient_consent":
+          playVoicePrompt("voice_speak_prompt_consent");
           break;
         case "history_check":
           playVoicePrompt("voice_speak_prompt_history");
@@ -272,14 +284,23 @@ export default function PatientPage() {
         setPatient(result.patient);
         goTo("patient_confirm");
       } else {
+        // New patient detected: Ask consent first, then take inputs for name and rest of registration
         setPatient(null);
         setRegForm({ name: "", phone: "", age: "", gender: "Male" });
-        goTo("patient_register");
+        setConsentInfo(true);
+        setConsentVoice(true);
+        setConsentRest(true);
+        goTo("patient_consent");
       }
     } catch (err) {
       console.error("Lookup error:", err);
       setIsLoading(false);
-      goTo("patient_register");
+      setPatient(null);
+      setRegForm({ name: "", phone: "", age: "", gender: "Male" });
+      setConsentInfo(true);
+      setConsentVoice(true);
+      setConsentRest(true);
+      goTo("patient_consent");
     }
   };
 
@@ -342,12 +363,19 @@ export default function PatientPage() {
       });
       setPatient(created);
       setTreatments([]);
+      setIsLoading(false);
+      // Consent was already collected first; proceed straight into clinical consultation
       await startEncounterFlow(null, created);
     } catch (err: any) {
       console.error("Error creating patient:", err);
       setIsLoading(false);
       alert(err.message || "Failed to save patient. Please retry.");
     }
+  };
+
+  const handleConsentAccepted = () => {
+    // Consent granted: now proceed to registration form to take inputs for name and rest
+    goTo("patient_register");
   };
 
   // 4. Handle Treatment History Branching
@@ -851,7 +879,7 @@ export default function PatientPage() {
             <div className="flex gap-4">
               <button
                 type="button"
-                onClick={goBackToIdEntry}
+                onClick={goBack}
                 className="flex-1 py-4 border-2 border-slate-300 hover:bg-slate-100 rounded-2xl font-bold text-slate-700 text-lg transition flex items-center justify-center gap-2"
               >
                 ← {t("back", lang)}
@@ -929,6 +957,150 @@ export default function PatientPage() {
                 className="flex-1 py-4 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-extrabold text-lg shadow-lg transition transform active:scale-95"
               >
                 {isLoading ? t("saving_patient", lang) : t("confirm", lang)}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 3D: First-Time Patient Consent (Info, Voice, Clinical Care / Rest) */}
+        {step === "patient_consent" && (
+          <div className="max-w-2xl mx-auto bg-white border-2 border-slate-200 rounded-3xl p-6 md:p-8 shadow-xl text-center space-y-6">
+            <div>
+              <div className="w-16 h-16 bg-emerald-100 text-emerald-800 rounded-2xl flex items-center justify-center text-3xl font-black mx-auto mb-3 shadow-sm">
+                🛡️
+              </div>
+              <h2 className="text-2xl md:text-3xl font-black text-slate-900 mb-2">
+                {t("consent_heading", lang)}
+              </h2>
+              <p className="text-slate-500 text-sm max-w-lg mx-auto">
+                {t("consent_subheading", lang)}
+              </p>
+            </div>
+
+            {/* 3 Consent Items: Information, Voice AI, Clinical Care / Rest */}
+            <div className="space-y-3.5 text-left">
+              {/* 1. Personal & Health Info */}
+              <div
+                onClick={() => setConsentInfo(!consentInfo)}
+                className={`p-4 md:p-5 rounded-2xl border-2 transition cursor-pointer flex items-start gap-4 ${
+                  consentInfo
+                    ? "bg-emerald-50/60 border-emerald-400 shadow-xs"
+                    : "bg-slate-50 border-slate-200 opacity-60"
+                }`}
+              >
+                <div
+                  className={`mt-0.5 flex items-center justify-center w-7 h-7 rounded-xl border-2 text-sm font-black transition flex-shrink-0 ${
+                    consentInfo
+                      ? "bg-emerald-600 border-emerald-600 text-white"
+                      : "bg-white border-slate-300 text-transparent"
+                  }`}
+                >
+                  ✓
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-lg">📋</span>
+                    <h3 className="text-sm md:text-base font-extrabold text-slate-900">
+                      {t("consent_info_title", lang)}
+                    </h3>
+                  </div>
+                  <p className="text-xs md:text-sm text-slate-600 font-medium leading-relaxed">
+                    {t("consent_info_desc", lang)}
+                  </p>
+                </div>
+              </div>
+
+              {/* 2. Voice & Speech Processing */}
+              <div
+                onClick={() => setConsentVoice(!consentVoice)}
+                className={`p-4 md:p-5 rounded-2xl border-2 transition cursor-pointer flex items-start gap-4 ${
+                  consentVoice
+                    ? "bg-teal-50/60 border-teal-400 shadow-xs"
+                    : "bg-slate-50 border-slate-200 opacity-60"
+                }`}
+              >
+                <div
+                  className={`mt-0.5 flex items-center justify-center w-7 h-7 rounded-xl border-2 text-sm font-black transition flex-shrink-0 ${
+                    consentVoice
+                      ? "bg-teal-600 border-teal-600 text-white"
+                      : "bg-white border-slate-300 text-transparent"
+                  }`}
+                >
+                  ✓
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-lg">🎙️</span>
+                    <h3 className="text-sm md:text-base font-extrabold text-slate-900">
+                      {t("consent_voice_title", lang)}
+                    </h3>
+                  </div>
+                  <p className="text-xs md:text-sm text-slate-600 font-medium leading-relaxed">
+                    {t("consent_voice_desc", lang)}
+                  </p>
+                </div>
+              </div>
+
+              {/* 3. Clinical Care Terms & Rest */}
+              <div
+                onClick={() => setConsentRest(!consentRest)}
+                className={`p-4 md:p-5 rounded-2xl border-2 transition cursor-pointer flex items-start gap-4 ${
+                  consentRest
+                    ? "bg-blue-50/60 border-blue-400 shadow-xs"
+                    : "bg-slate-50 border-slate-200 opacity-60"
+                }`}
+              >
+                <div
+                  className={`mt-0.5 flex items-center justify-center w-7 h-7 rounded-xl border-2 text-sm font-black transition flex-shrink-0 ${
+                    consentRest
+                      ? "bg-blue-600 border-blue-600 text-white"
+                      : "bg-white border-slate-300 text-transparent"
+                  }`}
+                >
+                  ✓
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-lg">🏥</span>
+                    <h3 className="text-sm md:text-base font-extrabold text-slate-900">
+                      {t("consent_rest_title", lang)}
+                    </h3>
+                  </div>
+                  <p className="text-xs md:text-sm text-slate-600 font-medium leading-relaxed">
+                    {t("consent_rest_desc", lang)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <button
+                type="button"
+                onClick={goBack}
+                className="py-3.5 px-6 border-2 border-slate-300 hover:bg-slate-100 rounded-xl font-bold text-slate-600 text-sm transition"
+              >
+                ← {t("back", lang)}
+              </button>
+              <button
+                type="button"
+                disabled={isLoading || (!consentInfo && !consentVoice && !consentRest)}
+                onClick={() => {
+                  setConsentInfo(true);
+                  setConsentVoice(true);
+                  setConsentRest(true);
+                  handleConsentAccepted();
+                }}
+                className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 active:scale-98 disabled:opacity-50 text-white rounded-xl font-black text-base shadow-lg transition flex items-center justify-center gap-2"
+              >
+                <span>✓</span>
+                <span>
+                  {isLoading
+                    ? lang === "hi"
+                      ? "सत्यापित हो रहा है..."
+                      : "Starting Intake..."
+                    : t("consent_agree_all", lang)}
+                </span>
               </button>
             </div>
           </div>

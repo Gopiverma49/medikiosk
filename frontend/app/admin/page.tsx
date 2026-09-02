@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
-import type { DoctorAccount, AdminPatientRecord, ConsultationRoomItem } from "../../lib/types";
+import type { DoctorAccount, NurseAccount, AdminPatientRecord, ConsultationRoomItem } from "../../lib/types";
 
-type AdminSection = "doctors" | "patients" | "rooms";
+type AdminSection = "doctors" | "nurses" | "patients" | "rooms";
 
 function formatIndiaDateTime(dateStr?: string | null): string {
   if (!dateStr) return "—";
@@ -45,6 +45,15 @@ export default function AdminPage() {
   const [doctorForm, setDoctorForm] = useState({ fullName: "", username: "", password: "" });
   const [doctorActionLoading, setDoctorActionLoading] = useState(false);
   const [doctorActionError, setDoctorActionError] = useState<string | null>(null);
+
+  // --- Nurse Management State ---
+  const [nurses, setNurses] = useState<NurseAccount[]>([]);
+  const [nurseSearch, setNurseSearch] = useState("");
+  const [isNurseModalOpen, setIsNurseModalOpen] = useState(false);
+  const [editingNurse, setEditingNurse] = useState<NurseAccount | null>(null);
+  const [nurseForm, setNurseForm] = useState({ fullName: "", username: "", password: "" });
+  const [nurseActionLoading, setNurseActionLoading] = useState(false);
+  const [nurseActionError, setNurseActionError] = useState<string | null>(null);
 
   // --- Patient Management State ---
   const [patients, setPatients] = useState<AdminPatientRecord[]>([]);
@@ -123,7 +132,7 @@ export default function AdminPage() {
   }
 
   async function loadAllData() {
-    await Promise.all([loadDoctors(), loadPatients(), loadRooms()]);
+    await Promise.all([loadDoctors(), loadNurses(), loadPatients(), loadRooms()]);
   }
 
   async function loadDoctors() {
@@ -132,6 +141,15 @@ export default function AdminPage() {
       setDoctors(docs);
     } catch (err) {
       console.error("Failed to load doctors:", err);
+    }
+  }
+
+  async function loadNurses() {
+    try {
+      const nList = await api.listNurses();
+      setNurses(nList);
+    } catch (err) {
+      console.error("Failed to load nurses:", err);
     }
   }
 
@@ -207,6 +225,60 @@ export default function AdminPage() {
       await loadDoctors();
     } catch (err: any) {
       alert("Failed to delete doctor: " + err.message);
+    }
+  }
+
+  // --- Nurse Modal Handlers ---
+  function openCreateNurseModal() {
+    setEditingNurse(null);
+    setNurseForm({ fullName: "", username: "", password: "" });
+    setNurseActionError(null);
+    setIsNurseModalOpen(true);
+  }
+
+  function openEditNurseModal(nurse: NurseAccount) {
+    setEditingNurse(nurse);
+    setNurseForm({ fullName: nurse.full_name || "", username: nurse.username, password: "" });
+    setNurseActionError(null);
+    setIsNurseModalOpen(true);
+  }
+
+  async function handleNurseFormSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setNurseActionError(null);
+    setNurseActionLoading(true);
+    try {
+      if (editingNurse) {
+        await api.updateNurse(editingNurse.id, {
+          full_name: nurseForm.fullName.trim(),
+          username: nurseForm.username.trim(),
+          password: nurseForm.password.trim() || undefined,
+        });
+      } else {
+        await api.createNurse({
+          full_name: nurseForm.fullName.trim(),
+          username: nurseForm.username.trim(),
+          password: nurseForm.password.trim(),
+        });
+      }
+      setIsNurseModalOpen(false);
+      await loadNurses();
+    } catch (err: any) {
+      setNurseActionError(err.message || "Failed to save nurse details.");
+    } finally {
+      setNurseActionLoading(false);
+    }
+  }
+
+  async function handleDeleteNurse(nurse: NurseAccount) {
+    if (!confirm(`Are you sure you want to permanently delete nurse account "${nurse.full_name || nurse.username}"?`)) {
+      return;
+    }
+    try {
+      await api.deleteNurse(nurse.id);
+      await loadNurses();
+    } catch (err: any) {
+      alert("Failed to delete nurse: " + err.message);
     }
   }
 
@@ -322,6 +394,12 @@ export default function AdminPage() {
       (d.full_name && d.full_name.toLowerCase().includes(doctorSearch.toLowerCase()))
   );
 
+  const filteredNurses = nurses.filter(
+    (n) =>
+      n.username.toLowerCase().includes(nurseSearch.toLowerCase()) ||
+      (n.full_name && n.full_name.toLowerCase().includes(nurseSearch.toLowerCase()))
+  );
+
   const filteredPatients = patients.filter(
     (p) =>
       p.name.toLowerCase().includes(patientSearch.toLowerCase()) ||
@@ -427,8 +505,8 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Main Sections Switcher (3 Tabs) */}
-      <div className="flex gap-2 bg-slate-200/70 p-1.5 rounded-2xl max-w-xl flex-wrap">
+      {/* Main Sections Switcher (4 Tabs) */}
+      <div className="flex gap-2 bg-slate-200/70 p-1.5 rounded-2xl max-w-2xl flex-wrap">
         <button
           type="button"
           onClick={() => setActiveSection("doctors")}
@@ -439,6 +517,17 @@ export default function AdminPage() {
           }`}
         >
           <span>👨‍⚕️</span> Doctors ({doctors.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveSection("nurses")}
+          className={`flex-1 py-3 px-3 rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-1.5 ${
+            activeSection === "nurses"
+              ? "bg-white text-slate-900 shadow-md border border-slate-200"
+              : "text-slate-600 hover:text-slate-900"
+          }`}
+        >
+          <span>👩‍⚕️</span> Nurses ({nurses.length})
         </button>
         <button
           type="button"
@@ -547,6 +636,98 @@ export default function AdminPage() {
                   <tr>
                     <td colSpan={5} className="py-8 text-center text-slate-400 font-medium">
                       No doctor accounts found. Click &quot;Create Doctor ID&quot; to add one.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* SECTION: NURSES MANAGEMENT */}
+      {activeSection === "nurses" && (
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                <span>👩‍⚕️</span> Nurse Credentials & Accounts
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Create, modify, and delete nurse login credentials. Nurses can only sign in using credentials created here by hospital administrator.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={openCreateNurseModal}
+              className="py-3 px-5 bg-teal-700 hover:bg-teal-800 text-white font-bold text-sm rounded-xl shadow transition flex items-center gap-2"
+            >
+              <span>+</span> Create Nurse ID
+            </button>
+          </div>
+
+          {/* Search bar */}
+          <div className="flex items-center gap-3">
+            <input
+              type="text"
+              value={nurseSearch}
+              onChange={(e) => setNurseSearch(e.target.value)}
+              placeholder="Search nurses by name or username..."
+              className="w-full max-w-md p-3 bg-slate-50 border-2 border-slate-200 focus:border-teal-600 rounded-xl text-sm font-medium text-slate-800 outline-none"
+            />
+          </div>
+
+          {/* Nurses Table */}
+          <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 text-slate-500 font-bold text-xs uppercase border-b border-slate-200">
+                <tr>
+                  <th className="py-3.5 px-4">Full Name</th>
+                  <th className="py-3.5 px-4">Username</th>
+                  <th className="py-3.5 px-4">Role</th>
+                  <th className="py-3.5 px-4">Created At</th>
+                  <th className="py-3.5 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredNurses.map((nurse) => (
+                  <tr key={nurse.id} className="hover:bg-slate-50/80 transition">
+                    <td className="py-4 px-4 font-bold text-slate-900">
+                      {nurse.full_name || `Nurse ${nurse.username}`}
+                    </td>
+                    <td className="py-4 px-4 font-mono font-bold text-teal-800 text-xs">
+                      {nurse.username}
+                    </td>
+                    <td className="py-4 px-4">
+                      <span className="inline-block px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold font-mono">
+                        {nurse.role}
+                      </span>
+                    </td>
+                    <td className="py-4 px-4 text-xs text-slate-600 font-mono">
+                      {formatIndiaDateTime(nurse.created_at)}
+                    </td>
+                    <td className="py-4 px-4 text-right space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => openEditNurseModal(nurse)}
+                        className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg transition"
+                      >
+                        Edit / Reset Password
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteNurse(nurse)}
+                        className="py-1.5 px-3 bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs rounded-lg transition"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {filteredNurses.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-slate-400 font-medium">
+                      No nurse accounts found. Click &quot;Create Nurse ID&quot; to add one.
                     </td>
                   </tr>
                 )}
@@ -897,6 +1078,92 @@ export default function AdminPage() {
                   className="flex-1 py-3 bg-teal-700 hover:bg-teal-800 text-white rounded-xl font-black text-sm shadow transition"
                 >
                   {doctorActionLoading ? "Saving..." : editingDoctor ? "Update Doctor" : "Create Doctor"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Nurse Create / Edit Modal */}
+      {isNurseModalOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm"
+          onClick={(e) => e.target === e.currentTarget && setIsNurseModalOpen(false)}
+        >
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl">
+            <h3 className="text-xl font-black text-slate-900 mb-1">
+              {editingNurse ? "Edit Nurse Credentials" : "Create New Nurse Account"}
+            </h3>
+            <p className="text-xs text-slate-500 mb-4">
+              {editingNurse
+                ? `Modify account details or reset password for ${editingNurse.username}.`
+                : "Enter credentials for the new staff nurse. They will use these to log into the Nurse Station."}
+            </p>
+
+            {nurseActionError && (
+              <div className="bg-red-50 border-2 border-red-300 text-red-700 text-xs font-bold p-3 rounded-xl mb-4">
+                ⚠ {nurseActionError}
+              </div>
+            )}
+
+            <form onSubmit={handleNurseFormSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Nurse Full Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={nurseForm.fullName}
+                  onChange={(e) => setNurseForm({ ...nurseForm, fullName: e.target.value })}
+                  placeholder="e.g. Sister Mary or Staff Nurse Anita"
+                  className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-teal-600 rounded-xl text-sm font-semibold text-slate-800 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Nurse Username / Login ID
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={nurseForm.username}
+                  onChange={(e) => setNurseForm({ ...nurseForm, username: e.target.value.toLowerCase() })}
+                  placeholder="Enter login username"
+                  className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-teal-600 rounded-xl text-sm font-semibold text-slate-800 outline-none font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  {editingNurse ? "New Password (leave blank to keep current)" : "Password"}
+                </label>
+                <input
+                  type="password"
+                  required={!editingNurse}
+                  value={nurseForm.password}
+                  onChange={(e) => setNurseForm({ ...nurseForm, password: e.target.value })}
+                  placeholder="••••••••"
+                  className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-teal-600 rounded-xl text-sm font-semibold text-slate-800 outline-none"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsNurseModalOpen(false)}
+                  className="flex-1 py-3 border-2 border-slate-300 hover:bg-slate-100 rounded-xl font-bold text-slate-700 text-sm transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={nurseActionLoading}
+                  className="flex-1 py-3 bg-teal-700 hover:bg-teal-800 text-white rounded-xl font-black text-sm shadow transition"
+                >
+                  {nurseActionLoading ? "Saving..." : editingNurse ? "Update Nurse" : "Create Nurse"}
                 </button>
               </div>
             </form>

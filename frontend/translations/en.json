@@ -118,5 +118,16 @@
   "continue_btn": "Continue",
   "all_done_title": "All Done — Please Take a Seat",
   "all_done_desc": "Your clinical intake has been transmitted directly to your doctor's consultation dashboard.",
-  "view_doctor_dashboard": "View Doctor Dashboard →"
+  "view_doctor_dashboard": "View Doctor Dashboard →",
+  "consent_heading": "Patient Consent & Care Agreement",
+  "consent_subheading": "As a first-time visitor, please review and accept our data sharing, voice processing, and clinical care policies.",
+  "consent_info_title": "1. Personal & Health Information Consent",
+  "consent_info_desc": "I consent to MediKiosk collecting, storing, and sharing my personal details, clinical complaints, and health history with consulting doctors for medical care.",
+  "consent_voice_title": "2. Voice AI & Audio Processing Consent",
+  "consent_voice_desc": "I consent to the recording and AI-assisted processing of my voice answers and speech for symptom extraction and clinical documentation.",
+  "consent_rest_title": "3. Hospital OPD Consultation & Triage Policy",
+  "consent_rest_desc": "I agree to hospital outpatient protocols, emergency triage screening rules, and doctor consultation terms.",
+  "consent_agree_all": "Agree to All Terms & Continue",
+  "consent_decline": "Decline / Go Back",
+  "voice_speak_prompt_consent": "Welcome. As a first time patient, please review and accept our consent for information collection, voice recording, and hospital consultation to proceed."
 }

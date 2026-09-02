@@ -1256,11 +1256,10 @@ export default function DoctorPage() {
                   <button
                     key={t}
                     onClick={() => setTab(t)}
-                    className={`pb-3.5 text-xs sm:text-sm font-black capitalize transition border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${
-                      tab === t
+                    className={`pb-3.5 text-xs sm:text-sm font-black capitalize transition border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${tab === t
                         ? "border-blue-600 text-blue-600"
                         : "border-transparent text-slate-400 hover:text-slate-700"
-                    }`}
+                      }`}
                   >
                     <span>{icon}</span>
                     <span>{label}</span>
@@ -1334,11 +1333,10 @@ export default function DoctorPage() {
                               type="button"
                               disabled={summaryActionLoading !== null}
                               onClick={handleConfirmSummary}
-                              className={`py-2 px-3.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95 ${
-                                summary.status === "PHYSICIAN_VERIFIED"
+                              className={`py-2 px-3.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95 ${summary.status === "PHYSICIAN_VERIFIED"
                                   ? "bg-emerald-700 text-white"
                                   : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                              }`}
+                                }`}
                               title="Accept AI summary and save record to database for future use and display"
                             >
                               <span>✓</span>
@@ -1368,11 +1366,10 @@ export default function DoctorPage() {
                               type="button"
                               disabled={summaryActionLoading !== null}
                               onClick={handleRejectSummary}
-                              className={`py-2 px-3.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 active:scale-95 ${
-                                summary.status === "REJECTED"
+                              className={`py-2 px-3.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 active:scale-95 ${summary.status === "REJECTED"
                                   ? "bg-rose-100 text-rose-800 border border-rose-300"
                                   : "bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200"
-                              }`}
+                                }`}
                               title="Reject AI summary (does not save records to database)"
                             >
                               <span>✕</span>
@@ -1455,11 +1452,10 @@ export default function DoctorPage() {
 
                         {/* Feedback message banner */}
                         {summaryFeedbackMsg && (
-                          <div className={`p-3.5 rounded-2xl text-xs font-bold flex items-center justify-between animate-fade-in border shadow-xs ${
-                            summary.status === "REJECTED"
+                          <div className={`p-3.5 rounded-2xl text-xs font-bold flex items-center justify-between animate-fade-in border shadow-xs ${summary.status === "REJECTED"
                               ? "bg-rose-50 text-rose-800 border-rose-200"
                               : "bg-emerald-50 text-emerald-800 border-emerald-200"
-                          }`}>
+                            }`}>
                             <div className="flex items-center gap-2">
                               <span className="text-sm">{summary.status === "REJECTED" ? "✕" : "✓"}</span>
                               <span>{summaryFeedbackMsg}</span>
@@ -1974,7 +1970,7 @@ export default function DoctorPage() {
                       {historicalTreatments.map((rec, idx) => {
                         const shortIllness = formatShortIllnessName(rec);
                         const assocSymptoms = getPastAssociatedSymptoms(rec);
-                        
+
                         // Check if current active consultation is continuing/revisiting this illness
                         const isCurrentComplaintMatch = currentSymptoms.some((s) => {
                           const lowS = s.toLowerCase().trim();
@@ -1997,20 +1993,18 @@ export default function DoctorPage() {
                         return (
                           <div
                             key={rec.id || idx}
-                            className={`bg-white border-2 rounded-2xl p-5 shadow-2xs space-y-4 transition ${
-                              isFollowUp
+                            className={`bg-white border-2 rounded-2xl p-5 shadow-2xs space-y-4 transition ${isFollowUp
                                 ? "border-purple-300 hover:border-purple-500 bg-purple-50/15"
                                 : "border-slate-200 hover:border-blue-400"
-                            }`}
+                              }`}
                           >
                             {/* 1. Header: Past illness with Follow-up and Primary Reason */}
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
                               <div className="flex items-center gap-3 flex-wrap">
-                                <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-base font-bold flex-shrink-0 shadow-xs ${
-                                  isFollowUp
+                                <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-base font-bold flex-shrink-0 shadow-xs ${isFollowUp
                                     ? "bg-purple-100 border border-purple-200 text-purple-800"
                                     : "bg-blue-50 border border-blue-200 text-blue-700"
-                                }`}>
+                                  }`}>
                                   🩺
                                 </span>
                                 <div>

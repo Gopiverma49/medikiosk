@@ -11,7 +11,7 @@ from ..models import (
     ClinicalSummary, RedFlagEvent, TriageEvent, Contradiction, ContradictionResolution,
     HumanVerification, TreatmentRecord
 )
-from ..schemas import DoctorCreate, DoctorUpdate, DoctorOut, PatientOut, RoomCreateIn, RoomUpdateIn, RoomOut
+from ..schemas import DoctorCreate, DoctorUpdate, DoctorOut, NurseCreate, NurseUpdate, NurseOut, PatientOut, RoomCreateIn, RoomUpdateIn, RoomOut
 from ..security import hash_password
 from ..services.audit import log_event
 from .tokens import _build_display_state, broadcast_token_event, ACTIVE_DOCTOR_ROOMS
@@ -116,6 +116,79 @@ def delete_doctor(doctor_id: str, db: Session = Depends(get_db)):
         pass
 
     return {"ok": True, "message": f"Doctor '{doc_name}' deleted successfully"}
+
+
+# --- Nurse Management (Admin Only) ---
+@router.get("/nurses", response_model=List[NurseOut])
+def list_nurses(db: Session = Depends(get_db)):
+    """List all nurse accounts."""
+    return db.query(User).filter(User.role == Role.NURSE).order_by(User.created_at.desc()).all()
+
+
+@router.post("/nurses", response_model=NurseOut)
+def create_nurse(payload: NurseCreate, db: Session = Depends(get_db)):
+    """Create a new nurse credential account."""
+    clean_username = payload.username.strip()
+    if not clean_username:
+        raise HTTPException(status_code=400, detail="Username is required")
+    
+    existing = db.query(User).filter(User.username == clean_username).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="A user with this username already exists")
+    
+    nurse = User(
+        username=clean_username,
+        hashed_password=hash_password(payload.password),
+        role=Role.NURSE,
+        full_name=payload.full_name.strip() if payload.full_name else f"Nurse {clean_username}",
+    )
+    db.add(nurse)
+    db.flush()
+    log_event(db, "Nurse Created", f"Admin created nurse account '{nurse.username}' ({nurse.full_name})")
+    db.commit()
+    db.refresh(nurse)
+    return nurse
+
+
+@router.put("/nurses/{nurse_id}", response_model=NurseOut)
+def update_nurse(nurse_id: str, payload: NurseUpdate, db: Session = Depends(get_db)):
+    """Modify a nurse account (name, username, or password)."""
+    nurse = db.query(User).filter(User.id == nurse_id, User.role == Role.NURSE).first()
+    if not nurse:
+        raise HTTPException(status_code=404, detail="Nurse not found")
+    
+    if payload.username and payload.username.strip() != nurse.username:
+        clean_user = payload.username.strip()
+        existing = db.query(User).filter(User.username == clean_user).first()
+        if existing and existing.id != nurse.id:
+            raise HTTPException(status_code=400, detail="Username already in use")
+        nurse.username = clean_user
+    
+    if payload.full_name:
+        nurse.full_name = payload.full_name.strip()
+        
+    if payload.password and payload.password.strip():
+        nurse.hashed_password = hash_password(payload.password.strip())
+        
+    nurse.updated_at = datetime.now(timezone.utc)
+    log_event(db, "Nurse Modified", f"Admin updated nurse '{nurse.username}' ({nurse.full_name})")
+    db.commit()
+    db.refresh(nurse)
+    return nurse
+
+
+@router.delete("/nurses/{nurse_id}")
+def delete_nurse(nurse_id: str, db: Session = Depends(get_db)):
+    """Delete a nurse credential account."""
+    nurse = db.query(User).filter(User.id == nurse_id, User.role == Role.NURSE).first()
+    if not nurse:
+        raise HTTPException(status_code=404, detail="Nurse not found")
+    
+    nurse_name = nurse.full_name or nurse.username
+    db.delete(nurse)
+    log_event(db, "Nurse Deleted", f"Admin deleted nurse account '{nurse.username}' ({nurse_name})")
+    db.commit()
+    return {"ok": True, "message": f"Nurse '{nurse_name}' deleted successfully"}
 
 
 # --- Patient Management for Admin ---

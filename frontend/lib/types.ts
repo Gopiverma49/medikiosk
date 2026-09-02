@@ -89,6 +89,15 @@ export interface DoctorAccount {
   updated_at?: string | null;
 }
 
+export interface NurseAccount {
+  id: string;
+  username: string;
+  full_name?: string | null;
+  role: string;
+  created_at: string;
+  updated_at?: string | null;
+}
+
 export interface AdminPatientRecord {
   id: string;
   patient_id: string;

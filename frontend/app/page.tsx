@@ -38,27 +38,29 @@ export default function Home() {
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
           {/* Portal 1: Patient Kiosk */}
           <Link
             href="/patient"
             target="_blank"
             rel="noopener noreferrer"
-            className="group bg-white border-2 border-slate-200 hover:border-emerald-500 rounded-3xl p-8 transition-all duration-200 transform hover:-translate-y-1.5 shadow-xs hover:shadow-xl flex flex-col text-center items-center"
+            className="group bg-white border-2 border-slate-200 hover:border-emerald-500 rounded-3xl p-6 transition-all duration-200 transform hover:-translate-y-1.5 shadow-xs hover:shadow-xl flex flex-col text-center items-center justify-between"
           >
-            {/* Enlarged Icon */}
-            <div className="w-22 h-22 rounded-2xl bg-emerald-50 border-2 border-emerald-100 flex items-center justify-center text-4xl mb-5 group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600 transition-all duration-200 shadow-sm group-hover:scale-105">
-              🏥
+            <div>
+              {/* Enlarged Icon */}
+              <div className="w-20 h-20 rounded-2xl bg-emerald-50 border-2 border-emerald-100 flex items-center justify-center text-3xl mb-4 group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600 transition-all duration-200 shadow-sm group-hover:scale-105 mx-auto">
+                🏥
+              </div>
+              <div className="text-[11px] font-mono uppercase tracking-wider text-emerald-700 font-black mb-1">
+                PORTAL 1 • TERMINAL
+              </div>
+              <h2 className="text-xl font-black text-slate-900 mb-2 group-hover:text-emerald-800 transition-colors">
+                Patient Kiosk
+              </h2>
+              <p className="text-slate-600 text-xs leading-relaxed font-medium">
+                5-stage accessible patient intake with English/Hindi localization, first-time consent, touch or voice guidance, and instant token generation.
+              </p>
             </div>
-            <div className="text-xs font-mono uppercase tracking-wider text-emerald-700 font-black mb-1.5">
-              PORTAL 1 • TERMINAL
-            </div>
-            <h2 className="text-2xl font-black text-slate-900 mb-3 group-hover:text-emerald-800 transition-colors">
-              Patient Kiosk
-            </h2>
-            <p className="text-slate-600 text-sm leading-relaxed font-medium">
-              5-stage accessible patient intake with English/Hindi localization, touch or voice guidance, and instant token generation.
-            </p>
           </Link>
 
           {/* Portal 2: Doctor Station */}
@@ -66,65 +68,95 @@ export default function Home() {
             href="/doctor"
             target="_blank"
             rel="noopener noreferrer"
-            className="group bg-white border-2 border-slate-200 hover:border-blue-500 rounded-3xl p-8 transition-all duration-200 transform hover:-translate-y-1.5 shadow-xs hover:shadow-xl flex flex-col text-center items-center"
+            className="group bg-white border-2 border-slate-200 hover:border-blue-500 rounded-3xl p-6 transition-all duration-200 transform hover:-translate-y-1.5 shadow-xs hover:shadow-xl flex flex-col text-center items-center justify-between"
           >
-            {/* Enlarged Icon */}
-            <div className="w-22 h-22 rounded-2xl bg-blue-50 border-2 border-blue-100 flex items-center justify-center text-4xl mb-5 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 transition-all duration-200 shadow-sm group-hover:scale-105">
-              👨‍⚕️
+            <div>
+              {/* Enlarged Icon */}
+              <div className="w-20 h-20 rounded-2xl bg-blue-50 border-2 border-blue-100 flex items-center justify-center text-3xl mb-4 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 transition-all duration-200 shadow-sm group-hover:scale-105 mx-auto">
+                👨‍⚕️
+              </div>
+              <div className="text-[11px] font-mono uppercase tracking-wider text-blue-700 font-black mb-1">
+                PORTAL 2 • CONSULTATION
+              </div>
+              <h2 className="text-xl font-black text-slate-900 mb-2 group-hover:text-blue-800 transition-colors">
+                Doctor Station
+              </h2>
+              <p className="text-slate-600 text-xs leading-relaxed font-medium">
+                Live upcoming token queue, patient call management, clinical summary verification, and document inspection.
+              </p>
             </div>
-            <div className="text-xs font-mono uppercase tracking-wider text-blue-700 font-black mb-1.5">
-              PORTAL 2 • CONSULTATION
-            </div>
-            <h2 className="text-2xl font-black text-slate-900 mb-3 group-hover:text-blue-800 transition-colors">
-              Doctor Station
-            </h2>
-            <p className="text-slate-600 text-sm leading-relaxed font-medium">
-              Live upcoming token queue, patient call management, clinical summary verification, and document inspection.
-            </p>
           </Link>
 
-          {/* Portal 3: Token Display */}
+          {/* Portal 3: Nurse Station */}
+          <Link
+            href="/nurse"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group bg-white border-2 border-slate-200 hover:border-teal-500 rounded-3xl p-6 transition-all duration-200 transform hover:-translate-y-1.5 shadow-xs hover:shadow-xl flex flex-col text-center items-center justify-between"
+          >
+            <div>
+              {/* Enlarged Icon */}
+              <div className="w-20 h-20 rounded-2xl bg-teal-50 border-2 border-teal-100 flex items-center justify-center text-3xl mb-4 group-hover:bg-teal-600 group-hover:text-white group-hover:border-teal-600 transition-all duration-200 shadow-sm group-hover:scale-105 mx-auto">
+                👩‍⚕️
+              </div>
+              <div className="text-[11px] font-mono uppercase tracking-wider text-teal-700 font-black mb-1">
+                PORTAL 3 • NURSE DESK
+              </div>
+              <h2 className="text-xl font-black text-slate-900 mb-2 group-hover:text-teal-800 transition-colors">
+                Nurse Station
+              </h2>
+              <p className="text-slate-600 text-xs leading-relaxed font-medium">
+                Live patient queue monitoring, token tracking, and patient past medicinal history lookup via ID card scan or number entry.
+              </p>
+            </div>
+          </Link>
+
+          {/* Portal 4: Token Display */}
           <Link
             href="/tokens"
             target="_blank"
             rel="noopener noreferrer"
-            className="group bg-white border-2 border-slate-200 hover:border-purple-500 rounded-3xl p-8 transition-all duration-200 transform hover:-translate-y-1.5 shadow-xs hover:shadow-xl flex flex-col text-center items-center"
+            className="group bg-white border-2 border-slate-200 hover:border-purple-500 rounded-3xl p-6 transition-all duration-200 transform hover:-translate-y-1.5 shadow-xs hover:shadow-xl flex flex-col text-center items-center justify-between"
           >
-            {/* Enlarged Icon */}
-            <div className="w-22 h-22 rounded-2xl bg-purple-50 border-2 border-purple-100 flex items-center justify-center text-4xl mb-5 group-hover:bg-purple-600 group-hover:text-white group-hover:border-purple-600 transition-all duration-200 shadow-sm group-hover:scale-105">
-              📺
+            <div>
+              {/* Enlarged Icon */}
+              <div className="w-20 h-20 rounded-2xl bg-purple-50 border-2 border-purple-100 flex items-center justify-center text-3xl mb-4 group-hover:bg-purple-600 group-hover:text-white group-hover:border-purple-600 transition-all duration-200 shadow-sm group-hover:scale-105 mx-auto">
+                📺
+              </div>
+              <div className="text-[11px] font-mono uppercase tracking-wider text-purple-700 font-black mb-1">
+                PORTAL 4 • WAITING TV
+              </div>
+              <h2 className="text-xl font-black text-slate-900 mb-2 group-hover:text-purple-800 transition-colors">
+                Token Display
+              </h2>
+              <p className="text-slate-600 text-xs leading-relaxed font-medium">
+                Dedicated 2-column live waiting-room TV display with simultaneous doctor calling, audio chime, and real-time sync.
+              </p>
             </div>
-            <div className="text-xs font-mono uppercase tracking-wider text-purple-700 font-black mb-1.5">
-              PORTAL 3 • WAITING TV
-            </div>
-            <h2 className="text-2xl font-black text-slate-900 mb-3 group-hover:text-purple-800 transition-colors">
-              Token Display
-            </h2>
-            <p className="text-slate-600 text-sm leading-relaxed font-medium">
-              Dedicated 2-column live waiting-room TV display with simultaneous doctor calling, audio chime, and real-time sync.
-            </p>
           </Link>
 
-          {/* Portal 4: Hospital Admin */}
+          {/* Portal 5: Hospital Admin */}
           <Link
             href="/admin"
             target="_blank"
             rel="noopener noreferrer"
-            className="group bg-white border-2 border-slate-200 hover:border-slate-800 rounded-3xl p-8 transition-all duration-200 transform hover:-translate-y-1.5 shadow-xs hover:shadow-xl flex flex-col text-center items-center"
+            className="group bg-white border-2 border-slate-200 hover:border-slate-800 rounded-3xl p-6 transition-all duration-200 transform hover:-translate-y-1.5 shadow-xs hover:shadow-xl flex flex-col text-center items-center justify-between"
           >
-            {/* Enlarged Icon */}
-            <div className="w-22 h-22 rounded-2xl bg-slate-100 border-2 border-slate-200 flex items-center justify-center text-4xl mb-5 group-hover:bg-slate-900 group-hover:text-white group-hover:border-slate-900 transition-all duration-200 shadow-sm group-hover:scale-105">
-              ⚙️
+            <div>
+              {/* Enlarged Icon */}
+              <div className="w-20 h-20 rounded-2xl bg-slate-100 border-2 border-slate-200 flex items-center justify-center text-3xl mb-4 group-hover:bg-slate-900 group-hover:text-white group-hover:border-slate-900 transition-all duration-200 shadow-sm group-hover:scale-105 mx-auto">
+                ⚙️
+              </div>
+              <div className="text-[11px] font-mono uppercase tracking-wider text-slate-600 font-black mb-1">
+                PORTAL 5 • ADMIN
+              </div>
+              <h2 className="text-xl font-black text-slate-900 mb-2 group-hover:text-slate-900 transition-colors">
+                Hospital Admin
+              </h2>
+              <p className="text-slate-600 text-xs leading-relaxed font-medium">
+                Physician and nurse accounts management, patient records audit, emergency triage rules, and room controls.
+              </p>
             </div>
-            <div className="text-xs font-mono uppercase tracking-wider text-slate-600 font-black mb-1.5">
-              PORTAL 4 • ADMIN
-            </div>
-            <h2 className="text-2xl font-black text-slate-900 mb-3 group-hover:text-slate-900 transition-colors">
-              Hospital Admin
-            </h2>
-            <p className="text-slate-600 text-sm leading-relaxed font-medium">
-              Physician account management, patient records audit, emergency triage rules, and AI evaluation benchmarks.
-            </p>
           </Link>
         </div>
       </div>

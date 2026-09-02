@@ -72,6 +72,7 @@ def seed():
                 ("admin", "admin123", Role.ADMIN, "System Admin (demo)"),
                 ("doctor", "doctor123", Role.DOCTOR, "Dr. Rahul (Physician)"),
                 ("doctor2", "doctor123", Role.DOCTOR, "Dr. Priya (Physician)"),
+                ("nurse", "nurse123", Role.NURSE, "Sister Mary (Staff Nurse)"),
                 ("triage", "triage123", Role.TRIAGE, "Triage Nurse (demo)"),
                 ("patient", "patient123", Role.PATIENT, "Rahul Kumar (demo patient login)"),
             ]
@@ -83,6 +84,17 @@ def seed():
                     full_name=full_name,
                 ))
             db.commit()
+        else:
+            # Ensure demo nurse exists for testing
+            existing_nurse = db.query(User).filter(User.username == "nurse").first()
+            if not existing_nurse:
+                db.add(User(
+                    username="nurse",
+                    hashed_password=hash_password("nurse123"),
+                    role=Role.NURSE,
+                    full_name="Sister Mary (Staff Nurse)",
+                ))
+                db.commit()
 
         # 2. Seed default red-flag triage rules ONLY if empty
         if db.query(RedFlagRule).count() == 0:

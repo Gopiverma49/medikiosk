@@ -56,6 +56,7 @@ class Role(str, enum.Enum):
     DOCTOR = "DOCTOR"
     TRIAGE = "TRIAGE"
     ADMIN = "ADMIN"
+    NURSE = "NURSE"
 
 
 class TimestampMixin:
