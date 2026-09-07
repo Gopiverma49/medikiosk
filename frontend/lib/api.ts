@@ -7,9 +7,11 @@ import type { ClinicalFact, Patient, Encounter, Contradiction, RedFlagRule, Summ
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const { headers, ...restOptions } = options;
+  const isFormData = typeof FormData !== "undefined" && restOptions.body instanceof FormData;
+  const defaultHeaders: Record<string, string> = isFormData ? {} : { "Content-Type": "application/json" };
   const res = await fetch(`/api${path}`, {
     cache: "no-store",
-    headers: { "Content-Type": "application/json", ...(headers as Record<string, string> || {}) },
+    headers: { ...defaultHeaders, ...(headers as Record<string, string> || {}) },
     ...restOptions,
   });
   if (!res.ok) {
@@ -85,7 +87,34 @@ export const api = {
   uploadDocument: (encounter_id: string, doc_type: string, filename: string) =>
     request(`/documents/upload?encounter_id=${encounter_id}&doc_type=${doc_type}&filename=${encodeURIComponent(filename)}`, { method: "POST" }),
   processDocument: (document_id: string) => request(`/documents/${document_id}/process`, { method: "POST" }),
-  listDocuments: (encounter_id: string) => request(`/documents/${encounter_id}/list`),
+  listDocuments: (encounter_id: string) => request<import("./types").DocumentOutDetailed[]>(`/documents/${encounter_id}/list`),
+  getDocument: (document_id: string) => request<import("./types").DocumentOutDetailed>(`/documents/${document_id}`),
+  listPatientDocuments: (patient_id: string) => request<import("./types").DocumentOutDetailed[]>(`/documents/patient/${patient_id}/list`),
+  confirmDocument: (document_id: string, extracted_data: import("./types").ClinicalDocumentExtraction, confirmed_by: string = "Patient") =>
+    request<import("./types").DocumentOutDetailed>(`/documents/${document_id}/confirm`, {
+      method: "POST",
+      body: JSON.stringify({ extracted_data, confirmed_by }),
+    }),
+  uploadScanDocument: async (
+    encounterId: string,
+    files: File[],
+    docType: string = "prescription",
+    patientId?: string
+  ): Promise<import("./types").DocumentOutDetailed> => {
+    const formData = new FormData();
+    formData.append("encounter_id", encounterId);
+    formData.append("doc_type", docType);
+    if (patientId) {
+      formData.append("patient_id", patientId);
+    }
+    files.forEach((file) => {
+      formData.append("files", file);
+    });
+    return request<import("./types").DocumentOutDetailed>("/documents/scan-upload", {
+      method: "POST",
+      body: formData,
+    });
+  },
 
   // --- timeline ---
   getTimeline: (patient_id: string) => request(`/timeline/${patient_id}`),

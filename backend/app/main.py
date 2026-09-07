@@ -41,6 +41,16 @@ async def lifespan(app: FastAPI):
                     conn.exec_driver_sql("ALTER TABLE treatment_records ADD COLUMN doctor_notes TEXT")
                 if cols and "doctor_name" not in cols:
                     conn.exec_driver_sql("ALTER TABLE treatment_records ADD COLUMN doctor_name VARCHAR")
+
+                doc_res = conn.exec_driver_sql("PRAGMA table_info(documents)").fetchall()
+                doc_cols = [r[1] for r in doc_res] if doc_res else []
+                if doc_cols and "extracted_data" not in doc_cols:
+                    conn.exec_driver_sql("ALTER TABLE documents ADD COLUMN extracted_data JSON")
+                if doc_cols and "pages" not in doc_cols:
+                    conn.exec_driver_sql("ALTER TABLE documents ADD COLUMN pages JSON")
+                if doc_cols and "patient_id" not in doc_cols:
+                    conn.exec_driver_sql("ALTER TABLE documents ADD COLUMN patient_id VARCHAR")
+
                 conn.commit()
     except Exception as e:
         print("Schema migration notice:", e)

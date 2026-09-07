@@ -192,4 +192,87 @@ export interface TokenDisplayState {
   recent_called: TokenColumnDisplay[];
 }
 
+// --- Medical Report Scanner & Extraction Types ---
+
+export interface MedicineExtractionItem {
+  name: string;
+  strength?: string | null;
+  dosage?: string | null;
+  route?: string | null;
+  frequency?: string | null;
+  timing?: string | null;
+  duration?: string | null;
+  instructions?: string | null;
+}
+
+export interface TestExtractionItem {
+  name: string;
+  value?: string | null;
+  unit?: string | null;
+  reference_range?: string | null;
+  flag?: string | null;
+}
+
+export interface SymptomExtractionItem {
+  name: string;
+  duration?: string | null;
+}
+
+export interface VitalsExamination {
+  blood_pressure?: string | null;
+  pulse_rate?: string | null;
+  temperature?: string | null;
+  spo2?: string | null;
+  respiratory_rate?: string | null;
+  examination_notes?: string | null;
+}
+
+export interface FollowUpInfo {
+  required?: boolean;
+  date_or_duration?: string | null;
+  notes?: string | null;
+}
+
+export interface TimelineEventItem {
+  date?: string | null;
+  event: string;
+  category?: string | null;
+}
+
+export interface ClinicalDocumentExtraction {
+  report_date?: string | null;
+  reason_for_visit?: string | null;
+  symptoms: SymptomExtractionItem[];
+  diagnosis: string[];
+  past_medical_history: string[];
+  allergies: string[];
+  vitals_and_examination?: VitalsExamination | null;
+  tests: TestExtractionItem[];
+  imaging_findings: string[];
+  medicines: MedicineExtractionItem[];
+  procedures_and_treatments: string[];
+  doctor_advice: string[];
+  follow_up?: FollowUpInfo | null;
+  timeline_events: TimelineEventItem[];
+  raw_ocr_summary?: string | null;
+  extraction_notes?: string | null;
+}
+
+export interface DocumentOutDetailed {
+  id: string;
+  encounter_id: string;
+  patient_id?: string | null;
+  doc_type: string;
+  filename: string;
+  storage_path?: string | null;
+  status: "uploaded" | "processing" | "review_required" | "confirmed" | "failed" | string;
+  pages?: string[] | null;
+  ocr_text?: string | null;
+  ocr_confidence?: number | null;
+  extracted_data?: ClinicalDocumentExtraction | null;
+  file_url?: string | null;
+  page_urls?: string[] | null;
+  created_at?: string | null;
+}
+
 

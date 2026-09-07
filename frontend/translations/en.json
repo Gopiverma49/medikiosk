@@ -129,5 +129,8 @@
   "consent_rest_desc": "I agree to hospital outpatient protocols, emergency triage screening rules, and doctor consultation terms.",
   "consent_agree_all": "Agree to All Terms & Continue",
   "consent_decline": "Decline / Go Back",
-  "voice_speak_prompt_consent": "Welcome. As a first time patient, please review and accept our consent for information collection, voice recording, and hospital consultation to proceed."
+  "voice_speak_prompt_consent": "Welcome. As a first time patient, please review and accept our consent for information collection, voice recording, and hospital consultation to proceed.",
+  "scan_report": "Scan Report",
+  "scan_report_desc": "Upload or scan previous prescriptions, lab reports, or discharge summaries",
+  "view_original_report": "View Original Report"
 }

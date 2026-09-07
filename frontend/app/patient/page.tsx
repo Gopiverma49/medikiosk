@@ -8,7 +8,8 @@ import { KioskKeypad } from "../../components/KioskKeypad";
 import { KioskScanner } from "../../components/KioskScanner";
 import { KioskVoiceIndicator } from "../../components/KioskVoiceIndicator";
 import AdaptiveSymptomEngine, { SymptomAnswerRecord } from "../../components/symptoms/AdaptiveSymptomEngine";
-import type { Patient, TreatmentRecord, TokenItem } from "../../lib/types";
+import { MedicalReportScanner } from "../../components/MedicalReportScanner";
+import type { Patient, TreatmentRecord, TokenItem, DocumentOutDetailed } from "../../lib/types";
 
 type FlowStep =
   | "lang_mode" // Step 1: Language & Interaction Mode
@@ -73,6 +74,7 @@ export default function PatientPage() {
   // Loading & Document Status
   const [isLoading, setIsLoading] = useState(false);
   const [docStatus, setDocStatus] = useState<Record<string, string>>({});
+  const [scannedDocs, setScannedDocs] = useState<DocumentOutDetailed[]>([]);
 
   // Voice Guidance State
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -118,6 +120,7 @@ export default function PatientPage() {
     setEncounterId(null);
     setGeneratedToken(null);
     setDocStatus({});
+    setScannedDocs([]);
     setHistoryStack([]);
     setStep("lang_mode");
   };
@@ -1308,48 +1311,23 @@ export default function PatientPage() {
 
         {/* STEP 5C: Document Scan */}
         {step === "documents_upload" && (
-          <div className="max-w-xl mx-auto bg-white border-2 border-slate-200 rounded-3xl p-8 shadow-xl text-center">
-            <h2 className="text-2xl md:text-3xl font-black text-slate-900 mb-2">
-              {lang === "hi" ? "रिपोर्ट अपलोड / स्कैन करें" : "Upload / Scan Reports"}
-            </h2>
-            <p className="text-slate-500 mb-6 text-sm">
-              {lang === "hi"
-                ? "यदि आपके पास कोई पुराना पर्चा, लैब रिपोर्ट या मेडिकल रिपोर्ट है, तो स्कैन या अपलोड करें (वैकल्पिक)।"
-                : "Upload or scan previous medical records, prescriptions, or lab reports (optional)."}
-            </p>
+          <div className="space-y-6">
+            <MedicalReportScanner
+              lang={lang}
+              encounterId={encounterId || ""}
+              patientId={patient?.id}
+              onComplete={(doc) => {
+                setScannedDocs((prev) => [...prev, doc]);
+              }}
+              onCancel={finishKioskIntake}
+            />
 
-            <div className="max-w-md mx-auto mb-8">
-              <div className="border-2 border-slate-200 hover:border-teal-500 rounded-3xl p-6 text-center bg-slate-50 transition shadow-sm">
-                <div className="text-4xl mb-3">📄</div>
-                <div className="text-lg font-black text-slate-900 mb-1">
-                  {lang === "hi" ? "दस्तावेज / रिपोर्ट अपलोड करें" : "Upload / Scan Reports"}
-                </div>
-                <p className="text-xs text-slate-500 font-medium mb-4">
-                  {lang === "hi" ? "पर्चा, लैब रिपोर्ट या डिस्चार्ज समरी" : "Prescriptions, Lab Reports, or Discharge Summary"}
-                </p>
-
-                {docStatus["prescription"] || docStatus["report"] ? (
-                  <div className="inline-flex items-center gap-2 py-2 px-4 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-mono font-bold">
-                    <span>✓</span>
-                    <span>{docStatus["prescription"] ? docStatus["prescription"].toUpperCase() : "PROCESSED"}</span>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => uploadAndProcessDoc("prescription", "sample_prescription.png")}
-                    className="py-3 px-6 bg-teal-700 hover:bg-teal-800 active:scale-98 text-white rounded-2xl text-sm font-extrabold shadow-md transition flex items-center justify-center gap-2 mx-auto"
-                  >
-                    <span>📎</span> {lang === "hi" ? "रिपोर्ट अपलोड / स्कैन करें" : "Upload / Scan Reports"}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-4">
+            {/* Bottom Continuation Bar */}
+            <div className="max-w-3xl mx-auto flex flex-col sm:flex-row gap-4 pt-2">
               <button
                 type="button"
                 onClick={goBack}
-                className="flex-1 py-4 px-6 border-2 border-slate-300 hover:bg-slate-100 rounded-2xl font-bold text-slate-700 text-lg transition text-center"
+                className="py-4 px-6 border-2 border-slate-300 hover:bg-slate-100 rounded-2xl font-bold text-slate-700 text-base transition text-center"
               >
                 ← {t("back", lang)}
               </button>
@@ -1357,9 +1335,13 @@ export default function PatientPage() {
                 type="button"
                 disabled={isLoading}
                 onClick={finishKioskIntake}
-                className="flex-1 py-5 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-black text-xl shadow-lg transition transform active:scale-95 text-center"
+                className="flex-1 py-5 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-black text-lg shadow-xl transition transform active:scale-95 text-center"
               >
-                {isLoading ? "..." : t("continue_btn", lang)} →
+                {isLoading
+                  ? "..."
+                  : scannedDocs.length > 0
+                  ? (lang === "hi" ? "टोकन प्राप्त करें →" : "Proceed to Consultation Token →")
+                  : (lang === "hi" ? "बिना रिपोर्ट के आगे बढ़ें →" : "Continue to Token →")}
               </button>
             </div>
           </div>

@@ -183,12 +183,15 @@ class Document(Base, TimestampMixin):
     __tablename__ = "documents"
     id = Column(GUID(), primary_key=True, default=gen_uuid)
     encounter_id = Column(GUID(), ForeignKey("encounters.id"), nullable=False)
+    patient_id = Column(GUID(), ForeignKey("patients.id"), nullable=True)
     doc_type = Column(String, nullable=False)  # prescription | lab_report | discharge_summary
     filename = Column(String, nullable=False)
     storage_path = Column(String, nullable=True)
-    status = Column(String, default="uploaded")  # uploaded | processing | processed | failed
+    pages = Column(JSON, nullable=True)  # List of file paths/names for multi-page captures
+    status = Column(String, default="uploaded")  # uploaded | processing | review_required | confirmed | failed
     ocr_text = Column(Text, nullable=True)
     ocr_confidence = Column(Float, nullable=True)
+    extracted_data = Column(JSON, nullable=True)  # Validated ClinicalDocumentExtraction dictionary
 
     encounter = relationship("Encounter", back_populates="documents")
     extractions = relationship("DocumentExtraction", back_populates="document")

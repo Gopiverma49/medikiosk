@@ -123,6 +123,70 @@ class FactCorrectAction(BaseModel):
     performed_by: str = "Dr. (demo) Physician"
 
 
+class MedicineExtractionItem(BaseModel):
+    name: str
+    strength: Optional[str] = None       # e.g. "500 mg", "650 mg", "5 ml"
+    dosage: Optional[str] = None         # e.g. "1 tablet", "2 puffs"
+    route: Optional[str] = None          # e.g. "Oral", "Topical", "Inhalation", "IV"
+    frequency: Optional[str] = None      # e.g. "BD (Twice daily)", "OD (Once daily)", "TDS", "HS", "SOS"
+    timing: Optional[str] = None         # e.g. "After meals", "Before food", "At bedtime"
+    duration: Optional[str] = None       # e.g. "5 days", "1 month"
+    instructions: Optional[str] = None   # e.g. "With warm water", "Avoid alcohol"
+
+
+class TestExtractionItem(BaseModel):
+    name: str
+    value: Optional[str] = None
+    unit: Optional[str] = None
+    reference_range: Optional[str] = None
+    flag: Optional[str] = None           # Normal | High | Low | Abnormal
+
+
+class SymptomExtractionItem(BaseModel):
+    name: str
+    duration: Optional[str] = None
+
+
+class VitalsExamination(BaseModel):
+    blood_pressure: Optional[str] = None
+    pulse_rate: Optional[str] = None
+    temperature: Optional[str] = None
+    spo2: Optional[str] = None
+    respiratory_rate: Optional[str] = None
+    examination_notes: Optional[str] = None
+
+
+class FollowUpInfo(BaseModel):
+    required: Optional[bool] = False
+    date_or_duration: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class TimelineEventItem(BaseModel):
+    date: Optional[str] = None
+    event: str
+    category: Optional[str] = "clinical"  # consultation | symptom | test | prescription | admission
+
+
+class ClinicalDocumentExtraction(BaseModel):
+    report_date: Optional[str] = None
+    reason_for_visit: Optional[str] = None
+    symptoms: List[SymptomExtractionItem] = []
+    diagnosis: List[str] = []
+    past_medical_history: List[str] = []
+    allergies: List[str] = []
+    vitals_and_examination: Optional[VitalsExamination] = None
+    tests: List[TestExtractionItem] = []
+    imaging_findings: List[str] = []
+    medicines: List[MedicineExtractionItem] = []
+    procedures_and_treatments: List[str] = []
+    doctor_advice: List[str] = []
+    follow_up: Optional[FollowUpInfo] = None
+    timeline_events: List[TimelineEventItem] = []
+    raw_ocr_summary: Optional[str] = None
+    extraction_notes: Optional[str] = None
+
+
 class DocumentUploadOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
@@ -130,6 +194,24 @@ class DocumentUploadOut(BaseModel):
     doc_type: str
     filename: str
     status: str
+
+
+class DocumentConfirmIn(BaseModel):
+    extracted_data: ClinicalDocumentExtraction
+    confirmed_by: Optional[str] = "Patient"
+
+
+class DocumentOutDetailed(DocumentUploadOut):
+    model_config = ConfigDict(from_attributes=True)
+    patient_id: Optional[str] = None
+    storage_path: Optional[str] = None
+    pages: Optional[List[str]] = None
+    ocr_text: Optional[str] = None
+    ocr_confidence: Optional[float] = None
+    extracted_data: Optional[ClinicalDocumentExtraction] = None
+    file_url: Optional[str] = None
+    page_urls: Optional[List[str]] = None
+    created_at: Optional[datetime] = None
 
 
 class ContradictionOut(BaseModel):

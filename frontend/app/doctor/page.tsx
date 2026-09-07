@@ -373,6 +373,12 @@ export default function DoctorPage() {
   const [clinicalFacts, setClinicalFacts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Document Viewer Modal State
+  const [viewingDocModal, setViewingDocModal] = useState<any | null>(null);
+  const [viewingDocPage, setViewingDocPage] = useState<number>(0);
+  const [docZoom, setDocZoom] = useState<number>(1);
+  const [docRotation, setDocRotation] = useState<number>(0);
+
   // --- Prescription & Past Medical Records State ---
   const [prescribedMedicines, setPrescribedMedicines] = useState<PrescribedMedicine[]>([]);
   const [doctorNotes, setDoctorNotes] = useState<string>("");
@@ -2142,24 +2148,289 @@ export default function DoctorPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {documents.map((doc: any) => (
-                      <div key={doc.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-slate-800 uppercase font-mono">
-                            {doc.doc_type || doc.filename || "Prescription / Lab"}
-                          </span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-700">
-                            {doc.status || doc.ocr_status || "Uploaded"}
-                          </span>
-                        </div>
-                        {(doc.ocr_text || doc.extracted_text) && (
-                          <div className="text-xs text-slate-600 font-mono bg-white p-3 rounded-xl border border-slate-200 whitespace-pre-wrap max-h-40 overflow-y-auto">
-                            {doc.ocr_text || doc.extracted_text}
+                  <div className="space-y-6">
+                    {documents.map((doc: any) => {
+                      const ext = doc.extracted_data;
+                      return (
+                        <div
+                          key={doc.id}
+                          className="bg-white border-2 border-slate-200 rounded-3xl p-6 shadow-md hover:border-teal-400 transition space-y-5"
+                        >
+                          {/* Document Card Header */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                            <div className="flex items-center gap-3">
+                              <span className="w-10 h-10 rounded-2xl bg-teal-50 border border-teal-200 flex items-center justify-center text-xl">
+                                {doc.doc_type?.includes("lab") ? "🧪" : "💊"}
+                              </span>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-black text-slate-900 uppercase font-mono tracking-wide">
+                                    {doc.doc_type?.replace(/_/g, " ").toUpperCase() || "MEDICAL REPORT"}
+                                  </span>
+                                  <span
+                                    className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                                      doc.status === "confirmed"
+                                        ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                        : doc.status === "review_required"
+                                        ? "bg-amber-100 text-amber-800 border border-amber-300"
+                                        : "bg-blue-100 text-blue-800 border border-blue-300"
+                                    }`}
+                                  >
+                                    {doc.status || "PROCESSED"}
+                                  </span>
+                                </div>
+                                <div className="text-xs text-slate-400 font-medium">
+                                  {doc.filename} {ext?.report_date ? `• Date: ${ext.report_date}` : ""}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* View Original Report Button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setViewingDocModal(doc);
+                                setViewingDocPage(0);
+                                setDocZoom(1);
+                                setDocRotation(0);
+                              }}
+                              className="px-4 py-2.5 bg-teal-700 hover:bg-teal-800 active:scale-95 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-2 transition"
+                            >
+                              <span>👁️</span>
+                              <span>View Original Report</span>
+                            </button>
                           </div>
-                        )}
-                      </div>
-                    ))}
+
+                          {/* Concise Clinical View: Reason → Diagnosis → Medicines → Tests → Findings → Advice → Follow-up → Timeline */}
+                          {ext ? (
+                            <div className="space-y-4">
+                              {/* 1. Reason for Visit */}
+                              {ext.reason_for_visit && (
+                                <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                                  <span className="text-sm">🎯</span>
+                                  <div>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                                      Reason for Visit / Chief Complaint
+                                    </span>
+                                    <span className="text-xs font-bold text-slate-800">
+                                      {ext.reason_for_visit}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* 2. Diagnosis */}
+                              {ext.diagnosis && ext.diagnosis.length > 0 && (
+                                <div className="flex items-start gap-2.5">
+                                  <span className="text-sm mt-0.5">🩺</span>
+                                  <div className="flex-1">
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                                      Diagnosis
+                                    </span>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {ext.diagnosis.map((d: string, i: number) => (
+                                        <span
+                                          key={i}
+                                          className="px-3 py-1 bg-teal-50 border border-teal-200 text-teal-900 rounded-lg text-xs font-bold"
+                                        >
+                                          {d}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* 3. Medicines */}
+                              {ext.medicines && ext.medicines.length > 0 && (
+                                <div>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-sm">💊</span>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                      Prescribed Medicines ({ext.medicines.length})
+                                    </span>
+                                  </div>
+                                  <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                                    <table className="w-full text-left text-xs bg-slate-50">
+                                      <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                                        <tr>
+                                          <th className="p-2.5">Medicine</th>
+                                          <th className="p-2.5">Strength</th>
+                                          <th className="p-2.5">Dosage</th>
+                                          <th className="p-2.5">Frequency</th>
+                                          <th className="p-2.5">Timing</th>
+                                          <th className="p-2.5">Duration</th>
+                                          <th className="p-2.5">Instructions</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-200 bg-white">
+                                        {ext.medicines.map((m: any, i: number) => (
+                                          <tr key={i} className="hover:bg-slate-50">
+                                            <td className="p-2.5 font-bold text-slate-900">{m.name}</td>
+                                            <td className="p-2.5 font-semibold text-teal-700">{m.strength || "—"}</td>
+                                            <td className="p-2.5 text-slate-700">{m.dosage || "1 tab"}</td>
+                                            <td className="p-2.5 font-mono font-bold text-slate-800">{m.frequency || "OD"}</td>
+                                            <td className="p-2.5 text-slate-600">{m.timing || "—"}</td>
+                                            <td className="p-2.5 text-slate-600">{m.duration || "—"}</td>
+                                            <td className="p-2.5 text-slate-500 italic">{m.instructions || "—"}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* 4. Tests */}
+                              {ext.tests && ext.tests.length > 0 && (
+                                <div>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-sm">🧪</span>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                      Diagnostic Tests ({ext.tests.length})
+                                    </span>
+                                  </div>
+                                  <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                                    <table className="w-full text-left text-xs bg-slate-50">
+                                      <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                                        <tr>
+                                          <th className="p-2.5">Test Name</th>
+                                          <th className="p-2.5">Result Value</th>
+                                          <th className="p-2.5">Unit</th>
+                                          <th className="p-2.5">Reference Range</th>
+                                          <th className="p-2.5">Flag</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-200 bg-white">
+                                        {ext.tests.map((t: any, i: number) => (
+                                          <tr key={i} className="hover:bg-slate-50">
+                                            <td className="p-2.5 font-bold text-slate-900">{t.name}</td>
+                                            <td className="p-2.5 font-black text-slate-900">{t.value}</td>
+                                            <td className="p-2.5 text-slate-600">{t.unit || "—"}</td>
+                                            <td className="p-2.5 text-slate-500 font-mono">{t.reference_range || "—"}</td>
+                                            <td className="p-2.5">
+                                              <span
+                                                className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                                  t.flag === "High"
+                                                    ? "bg-rose-100 text-rose-700"
+                                                    : t.flag === "Low"
+                                                    ? "bg-amber-100 text-amber-700"
+                                                    : "bg-emerald-100 text-emerald-700"
+                                                }`}
+                                              >
+                                                {t.flag || "Normal"}
+                                              </span>
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* 5. Findings (Vitals & Imaging) */}
+                              {(ext.vitals_and_examination || (ext.imaging_findings && ext.imaging_findings.length > 0)) && (
+                                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                                    Findings & Examination
+                                  </span>
+                                  {ext.vitals_and_examination && (
+                                    <div className="flex flex-wrap gap-3 text-xs font-semibold text-slate-700">
+                                      {ext.vitals_and_examination.blood_pressure && (
+                                        <span className="px-2.5 py-1 bg-white rounded-lg border border-slate-200">
+                                          BP: <strong>{ext.vitals_and_examination.blood_pressure}</strong>
+                                        </span>
+                                      )}
+                                      {ext.vitals_and_examination.pulse_rate && (
+                                        <span className="px-2.5 py-1 bg-white rounded-lg border border-slate-200">
+                                          Pulse: <strong>{ext.vitals_and_examination.pulse_rate}</strong>
+                                        </span>
+                                      )}
+                                      {ext.vitals_and_examination.temperature && (
+                                        <span className="px-2.5 py-1 bg-white rounded-lg border border-slate-200">
+                                          Temp: <strong>{ext.vitals_and_examination.temperature}</strong>
+                                        </span>
+                                      )}
+                                      {ext.vitals_and_examination.spo2 && (
+                                        <span className="px-2.5 py-1 bg-white rounded-lg border border-slate-200">
+                                          SpO2: <strong>{ext.vitals_and_examination.spo2}</strong>
+                                        </span>
+                                      )}
+                                      {ext.vitals_and_examination.examination_notes && (
+                                        <span className="w-full text-slate-600 italic">
+                                          Notes: {ext.vitals_and_examination.examination_notes}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                  {ext.imaging_findings && ext.imaging_findings.length > 0 && (
+                                    <div className="pt-1">
+                                      <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Imaging:</span>
+                                      {ext.imaging_findings.map((im: string, i: number) => (
+                                        <div key={i} className="text-xs text-slate-700 font-medium">
+                                          • {im}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* 6. Advice */}
+                              {ext.doctor_advice && ext.doctor_advice.length > 0 && (
+                                <div className="flex items-start gap-2.5">
+                                  <span className="text-sm mt-0.5">💡</span>
+                                  <div>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                                      Doctor's Advice
+                                    </span>
+                                    <div className="text-xs text-slate-700 font-medium space-y-0.5 mt-0.5">
+                                      {ext.doctor_advice.map((adv: string, i: number) => (
+                                        <div key={i}>• {adv}</div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* 7. Follow-up */}
+                              {ext.follow_up && ext.follow_up.date_or_duration && (
+                                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs font-bold text-amber-900">
+                                  <span>📅</span>
+                                  <span>Follow-up: {ext.follow_up.date_or_duration}</span>
+                                </div>
+                              )}
+
+                              {/* 8. Timeline */}
+                              {ext.timeline_events && ext.timeline_events.length > 0 && (
+                                <div>
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+                                    Timeline Events
+                                  </span>
+                                  <div className="flex flex-wrap gap-2">
+                                    {ext.timeline_events.map((ev: any, i: number) => (
+                                      <div
+                                        key={i}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 rounded-full text-[11px] font-medium text-slate-700 border border-slate-200"
+                                      >
+                                        <span className="font-bold text-teal-800 font-mono">{ev.date}:</span>
+                                        <span>{ev.event}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            // Fallback for documents before structured extraction
+                            <div className="text-xs text-slate-600 font-mono bg-slate-50 p-3.5 rounded-xl border border-slate-200 whitespace-pre-wrap max-h-40 overflow-y-auto">
+                              {doc.ocr_text || "Processing completed. Click 'View Original Report' to inspect."}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -2167,6 +2438,125 @@ export default function DoctorPage() {
           </>
         )}
       </div>
+
+      {/* ORIGINAL DOCUMENT INSPECTION MODAL */}
+      {viewingDocModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden shadow-2xl">
+            {/* Modal Header */}
+            <div className="p-4 bg-slate-100 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-xl">📄</span>
+                <div>
+                  <div className="font-extrabold text-sm text-slate-900 uppercase font-mono">
+                    {viewingDocModal.filename || "Scanned Report"}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-medium">
+                    Clinical Verification Document • Doc ID: {viewingDocModal.id.slice(0, 12)}...
+                  </div>
+                </div>
+              </div>
+
+              {/* Viewer Controls */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDocZoom((z) => Math.max(0.6, z - 0.2))}
+                  className="w-8 h-8 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 font-bold text-xs"
+                  title="Zoom Out"
+                >
+                  −
+                </button>
+                <span className="text-[10px] font-mono font-bold text-slate-600 w-10 text-center">
+                  {Math.round(docZoom * 100)}%
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setDocZoom((z) => Math.min(2.5, z + 0.2))}
+                  className="w-8 h-8 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 font-bold text-xs"
+                  title="Zoom In"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDocRotation((r) => (r + 90) % 360)}
+                  className="px-2.5 h-8 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 font-bold text-xs flex items-center gap-1"
+                  title="Rotate 90 degrees"
+                >
+                  🔄
+                </button>
+                <a
+                  href={`/api/documents/${viewingDocModal.id}/file?page=${viewingDocPage}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-2.5 h-8 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 font-bold text-xs flex items-center gap-1 text-slate-700"
+                  title="Open in new window"
+                >
+                  ↗
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setViewingDocModal(null)}
+                  className="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 flex items-center justify-center font-bold text-slate-700 text-sm ml-2"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-auto p-4 bg-slate-900 flex items-center justify-center min-h-[400px]">
+              <img
+                src={`/api/documents/${viewingDocModal.id}/file?page=${viewingDocPage}`}
+                alt="Original Report"
+                style={{
+                  transform: `scale(${docZoom}) rotate(${docRotation}deg)`,
+                  transition: "transform 0.15s ease",
+                }}
+                className="max-h-[75vh] max-w-full object-contain rounded-lg shadow-2xl"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = "none";
+                  const fallback = document.getElementById("doc-fallback-view");
+                  if (fallback) fallback.style.display = "block";
+                }}
+              />
+              <div id="doc-fallback-view" className="hidden text-center text-white p-8">
+                <span className="text-4xl block mb-2">📑</span>
+                <p className="text-sm font-bold">Document Preview</p>
+                <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
+                  {viewingDocModal.ocr_text || "The original scan file is securely stored on the server."}
+                </p>
+              </div>
+            </div>
+
+            {/* Multi-page switcher footer */}
+            {viewingDocModal.pages && viewingDocModal.pages.length > 1 && (
+              <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  disabled={viewingDocPage <= 0}
+                  onClick={() => setViewingDocPage((p) => Math.max(0, p - 1))}
+                  className="px-3 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold disabled:opacity-50"
+                >
+                  ← Prev Page
+                </button>
+                <span className="text-xs font-bold text-slate-700 font-mono">
+                  Page {viewingDocPage + 1} of {viewingDocModal.pages.length}
+                </span>
+                <button
+                  type="button"
+                  disabled={viewingDocPage >= viewingDocModal.pages.length - 1}
+                  onClick={() => setViewingDocPage((p) => Math.min(viewingDocModal.pages.length - 1, p + 1))}
+                  className="px-3 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold disabled:opacity-50"
+                >
+                  Next Page →
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
