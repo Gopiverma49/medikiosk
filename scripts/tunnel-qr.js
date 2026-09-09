@@ -30,6 +30,7 @@ function handleOutput(data) {
       // Generate scannable QR code in terminal
       qrcode.generate(baseUrl, { small: true }, (qr) => {
         console.log(qr);
+        console.log(`🌐 Public URL: ${baseUrl}`);
       });
 
       console.log('='.repeat(60) + '\n');

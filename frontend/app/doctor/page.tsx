@@ -6,6 +6,7 @@ import {
   VerificationBadge,
 } from "../../components/ClinicalComponents";
 import type { Summary, Patient, TokenQueueItem, TokenItem, TreatmentRecord, PrescribedMedicine } from "../../lib/types";
+import { cleanSymptomText, formatShortIllnessName, getPastAssociatedSymptoms } from "../../lib/clinicalUtils";
 
 const TABS = ["summary", "past_records", "documents", "prescription"] as const;
 type Tab = (typeof TABS)[number];
@@ -29,53 +30,6 @@ export interface DoctorClinicalSummary {
   allergies: string;
   pastMedicalHistory?: string;
   stepDetails: ClinicalStepDetail[];
-}
-
-function cleanSymptomText(str: string): string {
-  if (!str) return "None reported";
-  return str
-    .replace(/\[\s*['"](.*?)['"]\s*\]/g, "$1")
-    .replace(/\(\s*\[.*?\]\s*\)/g, "")
-    .replace(/\(\s*['"](.*?)['"]\s*\)/g, "($1)")
-    .replace(/['"[\]]/g, "")
-    .replace(/_/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function formatShortIllnessName(rec: TreatmentRecord): string {
-  let name = (rec.illness_name || rec.diagnosis || "Medical Consultation").trim();
-  name = name.replace(/^follow[- ]up:\s*/i, "").replace(/^past\s+/i, "");
-  if (name.includes("Duration:")) {
-    name = name.split("Duration:")[0].trim();
-  }
-  if (!name && rec.symptoms) {
-    name = rec.symptoms.split(",")[0].trim();
-  }
-  const words = (name || "Medical Consultation").split(/\s+/);
-  if (words.length > 5) {
-    name = words.slice(0, 4).join(" ");
-  }
-  return cleanSymptomText(name) || "Medical Consultation";
-}
-
-function getPastAssociatedSymptoms(rec: TreatmentRecord): string {
-  if (!rec.symptoms) return "";
-  const shortName = formatShortIllnessName(rec).toLowerCase();
-  const parts = rec.symptoms
-    .split(",")
-    .map((s) => cleanSymptomText(s))
-    .filter((s) => {
-      const low = s.toLowerCase();
-      return (
-        s &&
-        low !== "none reported" &&
-        low !== "general symptoms" &&
-        low !== "general consultation" &&
-        !shortName.includes(low)
-      );
-    });
-  return parts.join(", ");
 }
 
 function extractDoctorSummary(rawText: string, facts: any[] = []): DoctorClinicalSummary {
@@ -690,7 +644,7 @@ export default function DoctorPage() {
       if (!p) {
         p = await api.getPatient(pId);
       }
-      setPatient(p);
+      setPatient(p || null);
 
       if (p) {
         const past = await api.getPatientTreatments(p.id).catch(() => []);
@@ -698,7 +652,7 @@ export default function DoctorPage() {
       }
 
       let targetEncId = encIdOverride;
-      if (!targetEncId) {
+      if (!targetEncId && p) {
         const encounters = await api.listPatientEncounters(p.id);
         if (encounters.length > 0) {
           targetEncId = encounters[0].id;

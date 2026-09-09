@@ -1,4 +1,3 @@
-import pytest
 from app.models import Patient, Encounter, ClinicalFact, ConsultationRoom, FactSource, VerificationStatus
 
 

@@ -14,13 +14,6 @@ from typing import Optional
 from ai.providers.factory import get_nlp_provider
 
 
-CONCEPT_KEYWORDS = {
-    "en": {"chest pain": "chest_pain", "breathless": "dyspnea", "sweat": "sweating"},
-    "hi": {"सीने में दर्द": "chest_pain"},
-    "kn": {"ಎದೆ ನೋವು": "chest_pain"},
-}
-
-
 def normalize_text_to_concept(text: str, language: str) -> Optional[dict]:
     """Returns {"concept": ..., "duration": {...}|None} or None if nothing recognized.
     Delegates to the pluggable NLP provider so this stays vendor-agnostic."""

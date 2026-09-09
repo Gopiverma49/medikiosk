@@ -5,8 +5,21 @@ See .env.example at the repository root for all supported keys.
 import os
 from functools import lru_cache
 
+try:
+    from dotenv import load_dotenv
+    _repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    _env_file = os.path.join(_repo_root, ".env")
+    if os.path.isfile(_env_file):
+        load_dotenv(_env_file)
+except ImportError:
+    pass
+
 
 class Settings:
+    # --- Base paths ---
+    BASE_DIR: str = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")), "uploads", "documents"))
+
     # --- Database ---
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL", "postgresql+psycopg2://medikiosk:medikiosk@db:5432/medikiosk"

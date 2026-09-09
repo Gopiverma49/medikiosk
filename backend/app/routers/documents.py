@@ -10,6 +10,7 @@ from ..models import Document, ClinicalFact, DocumentExtraction, VerificationSta
 from ..schemas import (
     DocumentUploadOut, DocumentOutDetailed, DocumentConfirmIn, ClinicalDocumentExtraction
 )
+from ..config import get_settings
 from ..services.audit import log_event
 from ..services.contradiction_engine import detect_contradictions
 from ..services.document_extractor import extract_clinical_document
@@ -27,7 +28,8 @@ DOC_TYPE_MAP = {
     "other": "clinical_report",
 }
 
-UPLOAD_BASE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "uploads", "documents")
+def _get_upload_base_dir() -> str:
+    return get_settings().UPLOAD_DIR
 
 
 def _enrich_doc_out(doc: Document) -> DocumentOutDetailed:
@@ -87,6 +89,7 @@ async def scan_upload_document(
     encounter_id: str = Form(...),
     doc_type: str = Form("prescription"),
     patient_id: Optional[str] = Form(None),
+    client_ocr_text: Optional[str] = Form(None),
     files: List[UploadFile] = File(...),
     db: Session = Depends(get_db),
 ):
@@ -117,11 +120,14 @@ async def scan_upload_document(
     db.flush()
 
     # Create permanent document storage directory
-    doc_storage_dir = os.path.join(UPLOAD_BASE_DIR, str(doc.id))
+    doc_storage_dir = os.path.join(_get_upload_base_dir(), str(doc.id))
     os.makedirs(doc_storage_dir, exist_ok=True)
 
     saved_page_rel_paths = []
     accumulated_text_parts = []
+
+    if client_ocr_text and client_ocr_text.strip():
+        accumulated_text_parts.append(client_ocr_text.strip())
 
     for idx, f in enumerate(files):
         ext = os.path.splitext(f.filename or "")[1] or ".jpg"
@@ -132,25 +138,57 @@ async def scan_upload_document(
         rel_path = f"{doc.id}/{clean_name}"
         saved_page_rel_paths.append(rel_path)
 
+        # Attempt to read text directly if file has readable text/utf-8 content (e.g. text/report files)
+        try:
+            with open(target_path, "rb") as bf:
+                raw_bytes = bf.read()
+                try:
+                    decoded = raw_bytes.decode("utf-8")
+                    clean_words = [w for w in decoded.split() if len(w) > 2 and any(c.isalnum() for c in w)]
+                    if len(clean_words) >= 3:
+                        accumulated_text_parts.append(decoded)
+                except UnicodeDecodeError:
+                    pass
+        except Exception:
+            pass
+
     doc.storage_path = saved_page_rel_paths[0] if saved_page_rel_paths else None
     doc.pages = saved_page_rel_paths
 
-    # Run OCR & Clinical Entity Extraction
-    ocr_provider = get_ocr_provider()
-    ocr_res = ocr_provider.call("extract_text", doc.doc_type)
-    if ocr_res.ok and ocr_res.data:
-        accumulated_text_parts.append(str(ocr_res.data))
-        doc.ocr_confidence = ocr_res.confidence or 0.95
-    else:
-        # Fallback to readable placeholder text for document type
-        accumulated_text_parts.append(f"Scanned {normalized_type.replace('_', ' ').title()}")
-        doc.ocr_confidence = 0.90
+    # Run Local OCR on uploaded images if no text has been extracted yet
+    if not accumulated_text_parts:
+        from ..services.ocr_service import run_local_ocr
+        for rel_p in saved_page_rel_paths:
+            abs_p = os.path.join(_get_upload_base_dir(), rel_p)
+            file_ext = os.path.splitext(abs_p)[1].lower()
+            if file_ext in (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff"):
+                ocr_out = run_local_ocr(abs_p)
+                if ocr_out and ocr_out.strip():
+                    accumulated_text_parts.append(ocr_out.strip())
+
+    settings = get_settings()
+    # Check production provider or test sample if still empty
+    if not accumulated_text_parts:
+        if settings.OCR_PROVIDER == "production":
+            first_file_path = os.path.join(doc_storage_dir, f"page_1{os.path.splitext(files[0].filename or '')[1] or '.jpg'}")
+            ocr_provider = get_ocr_provider()
+            ocr_res = ocr_provider.call("extract_text", first_file_path)
+            if ocr_res.ok and ocr_res.data:
+                accumulated_text_parts.append(str(ocr_res.data))
+                doc.ocr_confidence = ocr_res.confidence or 0.95
+        elif files and files[0].filename and "sample" in files[0].filename.lower() and settings.OCR_PROVIDER == "mock":
+            ocr_provider = get_ocr_provider()
+            ocr_res = ocr_provider.call("extract_text", doc.doc_type)
+            if ocr_res.ok and ocr_res.data:
+                accumulated_text_parts.append(str(ocr_res.data))
+                doc.ocr_confidence = ocr_res.confidence or 0.95
 
     raw_combined_text = "\n".join(accumulated_text_parts)
     doc.ocr_text = raw_combined_text
+    doc.ocr_confidence = 0.95 if raw_combined_text else 0.90
 
     # Extract structured clinical information (zero hallucination, strict schema)
-    extraction = extract_clinical_document(raw_combined_text, doc_type=normalized_type)
+    extraction = extract_clinical_document(raw_combined_text, doc_type=normalized_type) if raw_combined_text else ClinicalDocumentExtraction()
     doc.extracted_data = extraction.model_dump()
     doc.status = "review_required"
 
@@ -355,7 +393,7 @@ def get_document_file(document_id: str, page: int = Query(0, ge=0), db: Session 
         # Generate on-the-fly clean placeholder image for demo/mock files
         raise HTTPException(status_code=404, detail="Scanned document file not found on disk")
 
-    abs_path = os.path.join(UPLOAD_BASE_DIR, target_rel_path)
+    abs_path = os.path.join(_get_upload_base_dir(), target_rel_path)
     if not os.path.isfile(abs_path):
         raise HTTPException(status_code=404, detail="Original report file is not accessible")
 

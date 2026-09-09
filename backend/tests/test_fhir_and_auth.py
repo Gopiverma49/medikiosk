@@ -25,7 +25,6 @@ def test_fhir_status_never_claims_production_abdm(client):
 def test_login_returns_role_scoped_token(client):
     from app.database import get_db
     from app.main import app
-    from app.seed import seed
     # Seed demo users into the overridden test session.
     db_gen = app.dependency_overrides[get_db]()
     db = next(db_gen)

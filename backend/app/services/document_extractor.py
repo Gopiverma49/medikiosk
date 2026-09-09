@@ -25,7 +25,7 @@ Strict clinical rules:
 - Native support for Indian medical documents (DD/MM/YYYY, OD/BD/TDS/HS/SOS, brand names).
 """
 import re
-from typing import Dict, Any, List, Optional
+from typing import List, Optional
 from ..schemas import (
     ClinicalDocumentExtraction, MedicineExtractionItem, TestExtractionItem,
     SymptomExtractionItem, VitalsExamination, FollowUpInfo, TimelineEventItem
@@ -35,14 +35,24 @@ from ..schemas import (
 FREQUENCY_MAP = {
     "od": "OD (Once daily)",
     "once daily": "OD (Once daily)",
+    "once a day": "OD (Once daily)",
+    "1 time a day": "OD (Once daily)",
+    "1 times a day": "OD (Once daily)",
     "bd": "BD (Twice daily)",
     "bid": "BD (Twice daily)",
     "twice daily": "BD (Twice daily)",
+    "twice a day": "BD (Twice daily)",
+    "2 times a day": "BD (Twice daily)",
+    "2 times daily": "BD (Twice daily)",
     "tds": "TDS (Thrice daily)",
     "tid": "TDS (Thrice daily)",
     "thrice daily": "TDS (Thrice daily)",
+    "thrice a day": "TDS (Thrice daily)",
+    "3 times a day": "TDS (Thrice daily)",
+    "3 times daily": "TDS (Thrice daily)",
     "qid": "QID (4 times daily)",
     "four times daily": "QID (4 times daily)",
+    "4 times a day": "QID (4 times daily)",
     "hs": "HS (At bedtime)",
     "bedtime": "HS (At bedtime)",
     "sos": "SOS (As needed / When required)",
@@ -50,6 +60,9 @@ FREQUENCY_MAP = {
     "stat": "STAT (Immediately)",
     "weekly": "Weekly",
     "alternate day": "Alternate days",
+    "1-2 times a day": "1-2 times daily",
+    "1 to 2 times a day": "1-2 times daily",
+    "12 times a day": "1-2 times daily",
 }
 
 # Indian timing abbreviations
@@ -107,17 +120,20 @@ LAB_TEST_PATTERNS = [
 
 
 def extract_date(text: str) -> Optional[str]:
-    """Extract Indian format DD/MM/YYYY or standard YYYY-MM-DD date."""
+    """Extract Indian format DD/MM/YYYY or standard YYYY-MM-DD date or written date."""
     # Match DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
     m = re.search(r"\b(\d{1,2})[/\-\.](\d{1,2})[/\-\.](\d{4})\b", text)
     if m:
         day, month, year = m.groups()
         return f"{int(day):02d}/{int(month):02d}/{year}"
 
-    # Match DD Month YYYY (e.g. 12 Aug 2026, 12 August 2026)
-    m = re.search(r"\b(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{4})\b", text, re.I)
+    # Match DD(st|nd|rd|th)? Month (YYYY optional) (e.g. 7th September, 12 Aug 2026)
+    m = re.search(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*(?:\s+(\d{4}))?\b", text, re.I)
     if m:
-        return f"{m.group(1)} {m.group(2).title()} {m.group(3)}"
+        day, mon, yr = m.groups()
+        from datetime import datetime
+        year_str = yr or str(datetime.now().year)
+        return f"{int(day):02d} {mon.title()} {year_str}"
 
     # Match YYYY-MM-DD
     m = re.search(r"\b(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})\b", text)
@@ -182,16 +198,10 @@ def extract_medicines(text: str) -> List[MedicineExtractionItem]:
     medicines: List[MedicineExtractionItem] = []
     seen_names = set()
 
-    # Split text into lines or clinical segments
-    lines = re.split(r"[\n\r;|\u2022]+", text)
+    # Split text into clean non-empty lines
+    lines = [line.strip() for line in re.split(r"[\n\r;|\u2022]+", text) if line.strip()]
 
-    for raw_line in lines:
-        line = raw_line.strip()
-        if not line:
-            continue
-
-        # Look for medication patterns like:
-        # "Tab. Metformin 500mg BD x 30 days PC" or "Dolo 650 1 tab TDS SOS"
+    for idx, line in enumerate(lines):
         matched_name = None
         for med in COMMON_MED_NAMES:
             if re.search(rf"\b{med}\b", line, re.I):
@@ -212,44 +222,50 @@ def extract_medicines(text: str) -> List[MedicineExtractionItem]:
             continue
         seen_names.add(matched_name.lower())
 
-        # Extract strength: e.g. 500mg, 650 mg, 5 ml, 10mcg
+        # Check adjacent line for dosage/frequency continuation
+        next_line = lines[idx + 1] if idx + 1 < len(lines) else ""
+        comb_line = line
+        if next_line and not any(re.search(rf"\b{m}\b", next_line, re.I) for m in COMMON_MED_NAMES):
+            comb_line = f"{line} {next_line}"
+
+        # Extract strength: e.g. 500mg, 650 mg, 5 ml, 10mcg, 200 MG
         strength = None
-        str_m = re.search(r"\b(\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|iu|%))\b", line, re.I)
+        str_m = re.search(r"\b(\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|iu|%))\b", comb_line, re.I)
         if str_m:
             strength = str_m.group(1).strip()
 
-        # Extract frequency: OD, BD, TDS, QID, HS, SOS
+        # Extract frequency: OD, BD, TDS, QID, HS, SOS, times a day
         frequency = None
-        freq_m = re.search(r"\b(od|bd|bid|tds|tid|qid|hs|sos|prn|stat|once daily|twice daily|thrice daily)\b", line, re.I)
+        freq_m = re.search(r"\b(od|bd|bid|tds|tid|qid|hs|sos|prn|stat|once daily|twice daily|thrice daily|once a day|twice a day|thrice a day|\d+(?:-\d+)?\s+times\s+(?:a|per)\s+day|\d+(?:-\d+)?\s+times\s+daily|12\s+times\s+a\s+day)\b", comb_line, re.I)
         if freq_m:
             raw_f = freq_m.group(1).lower()
             frequency = FREQUENCY_MAP.get(raw_f, raw_f.upper())
 
         # Extract timing: AC, PC, before food, after food
         timing = None
-        timing_m = re.search(r"\b(ac|pc|before food|after food|before meals|after meals|empty stomach)\b", line, re.I)
+        timing_m = re.search(r"\b(ac|pc|before food|after food|before meals|after meals|empty stomach)\b", comb_line, re.I)
         if timing_m:
             raw_t = timing_m.group(1).lower()
             timing = TIMING_MAP.get(raw_t, raw_t.title())
 
         # Extract duration: e.g. "5 days", "1 week", "x 10 days"
         duration = None
-        dur_m = re.search(r"(?:x\s*|\bfor\s*)?(\d+\s*(?:days?|weeks?|months?))\b", line, re.I)
+        dur_m = re.search(r"(?:x\s*|\bfor\s*)?(\d+\s*(?:days?|weeks?|months?))\b", comb_line, re.I)
         if dur_m:
             duration = dur_m.group(1).strip()
 
         # Extract route
         route = "Oral"
-        if re.search(r"\b(?:inj|injection|iv|im)\b", line, re.I):
+        if re.search(r"\b(?:inj|injection|iv|im)\b", comb_line, re.I):
             route = "Injection (IV/IM)"
-        elif re.search(r"\b(?:inhaler|puff|nebulizer|rotacap)\b", line, re.I):
+        elif re.search(r"\b(?:inhaler|puff|nebulizer|rotacap)\b", comb_line, re.I):
             route = "Inhalation"
-        elif re.search(r"\b(?:ointment|gel|cream|drop|drops)\b", line, re.I):
+        elif re.search(r"\b(?:ointment|gel|cream|drop|drops)\b", comb_line, re.I):
             route = "Topical"
 
         # Extract dosage: e.g. 1 tablet, 2 puffs, 5 ml
         dosage = None
-        dos_m = re.search(r"\b(\d+\s*(?:tablet|tab|capsule|cap|puff|puffs|ml|tsp|drops?))\b", line, re.I)
+        dos_m = re.search(r"\b(\d+\s*(?:tablet|tab|capsule|cap|puff|puffs|ml|tsp|drops?))\b", comb_line, re.I)
         if dos_m:
             dosage = dos_m.group(1).strip()
         elif strength:
@@ -257,7 +273,7 @@ def extract_medicines(text: str) -> List[MedicineExtractionItem]:
 
         # Instructions: e.g. "with warm water", "after food"
         instructions = None
-        if "water" in line.lower():
+        if "water" in comb_line.lower():
             instructions = "Take with water"
         elif timing:
             instructions = f"Take {timing.lower()}"

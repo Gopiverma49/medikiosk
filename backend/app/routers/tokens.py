@@ -5,16 +5,16 @@ and real-time WebSocket synchronization with hospital display boards.
 """
 import json
 import asyncio
-from datetime import datetime, timezone, date, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Set
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, or_
+from sqlalchemy import desc
 
 from ..database import get_db, SessionLocal
-from ..models import TokenQueue, TokenStatus, Patient, Encounter, TriageEvent, ClinicalFact, ConsultationRoom, TreatmentRecord, ClinicalSummary, gen_uuid, utcnow
+from ..models import TokenQueue, TokenStatus, Patient, Encounter, TriageEvent, ClinicalFact, ConsultationRoom, TreatmentRecord, ClinicalSummary, utcnow
 from ..schemas import (
     TokenGenerateIn, TokenCallIn, PatientTokenOut, TokenQueueItemOut,
     TokenDisplayStateOut, TokenColumnDisplay,

@@ -3,7 +3,25 @@
  * proxied to NEXT_PUBLIC_API_BASE by the rewrite rule in next.config.js, so
  * this file never needs to know the backend's real host in dev vs Docker.
  */
-import type { ClinicalFact, Patient, Encounter, Contradiction, RedFlagRule, Summary } from "./types";
+import type {
+  ClinicalFact,
+  Patient,
+  Encounter,
+  Contradiction,
+  RedFlagRule,
+  Summary,
+  TreatmentRecord,
+  PrescribedMedicine,
+  DocumentOutDetailed,
+  ClinicalDocumentExtraction,
+  DoctorAccount,
+  NurseAccount,
+  ConsultationRoomItem,
+  TokenItem,
+  TokenQueueItem,
+  TokenDisplayState,
+  AdminPatientRecord,
+} from "./types";
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const { headers, ...restOptions } = options;
@@ -11,7 +29,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const defaultHeaders: Record<string, string> = isFormData ? {} : { "Content-Type": "application/json" };
   const res = await fetch(`/api${path}`, {
     cache: "no-store",
-    headers: { ...defaultHeaders, ...(headers as Record<string, string> || {}) },
+    headers: { ...defaultHeaders, ...((headers as Record<string, string>) || {}) },
     ...restOptions,
   });
   if (!res.ok) {
@@ -42,20 +60,34 @@ export const api = {
       body: JSON.stringify({ patient_id }),
     }),
   getPatientTreatments: (patient_id: string) =>
-    request<import("./types").TreatmentRecord[]>(`/patients/${patient_id}/treatments`),
-  savePrescription: (patient_id: string, payload: { encounter_id?: string; diagnosis?: string; doctor_notes?: string; doctor_name?: string; prescribed_medicines: import("./types").PrescribedMedicine[] }) =>
-    request<import("./types").TreatmentRecord>(`/patients/${patient_id}/prescriptions`, {
+    request<TreatmentRecord[]>(`/patients/${patient_id}/treatments`),
+  savePrescription: (
+    patient_id: string,
+    payload: {
+      encounter_id?: string;
+      diagnosis?: string;
+      doctor_notes?: string;
+      doctor_name?: string;
+      prescribed_medicines: PrescribedMedicine[];
+    }
+  ) =>
+    request<TreatmentRecord>(`/patients/${patient_id}/prescriptions`, {
       method: "POST",
       body: JSON.stringify({ patient_id, ...payload }),
     }),
   getEncounterPrescription: (encounter_id: string) =>
-    request<import("./types").TreatmentRecord | null>(`/encounters/${encounter_id}/prescription`),
-  createPatient: (data: Partial<Patient>) =>
-    request<Patient>("/patients", { method: "POST", body: JSON.stringify(data) }),
+    request<TreatmentRecord | null>(`/encounters/${encounter_id}/prescription`),
+  createPatient: (patient: Partial<Patient>) =>
+    request<Patient>("/patients", { method: "POST", body: JSON.stringify(patient) }),
   getPatient: (id: string) => request<Patient>(`/patients/${id}`),
   listPatients: () => request<Patient[]>("/patients"),
   listPatientEncounters: (patient_id: string) => request<Encounter[]>(`/patients/${patient_id}/encounters`),
   createEncounter: (patient_id: string, mode: string = "general", previous_illness_id?: string) =>
+    request<Encounter>("/encounters", {
+      method: "POST",
+      body: JSON.stringify({ patient_id, mode, previous_illness_id }),
+    }),
+  startEncounter: (patient_id: string, mode = "allopathy", previous_illness_id?: string) =>
     request<Encounter>("/encounters", {
       method: "POST",
       body: JSON.stringify({ patient_id, mode, previous_illness_id }),
@@ -66,7 +98,13 @@ export const api = {
   // --- history / adaptive questionnaire ---
   startHistory: (encounter_id: string) =>
     request(`/history/start?encounter_id=${encounter_id}`, { method: "POST" }),
-  submitAnswer: (payload: { encounter_id: string; question_concept: string; raw_answer: any; certainty?: string; source_language?: string }) =>
+  submitAnswer: (payload: {
+    encounter_id: string;
+    question_concept: string;
+    raw_answer: any;
+    certainty?: string;
+    source_language?: string;
+  }) =>
     request<ClinicalFact>("/history/answer", { method: "POST", body: JSON.stringify(payload) }),
   getHistory: (encounter_id: string) => request<ClinicalFact[]>(`/history/${encounter_id}`),
 
@@ -76,22 +114,28 @@ export const api = {
 
   // --- facts ---
   listFacts: (encounter_id: string) => request<ClinicalFact[]>(`/clinical-facts/${encounter_id}`),
-  verifyFact: (fact_id: string, performed_by = "Dr. (demo) Physician") =>
+  verifyFact: (fact_id: string, performed_by = "Physician") =>
     request<ClinicalFact>("/clinical-facts/verify", { method: "POST", body: JSON.stringify({ fact_id, performed_by }) }),
-  correctFact: (fact_id: string, new_value: any, new_label?: string, performed_by = "Dr. (demo) Physician") =>
-    request<ClinicalFact>("/clinical-facts/correct", { method: "POST", body: JSON.stringify({ fact_id, new_value, new_label, performed_by }) }),
-  rejectFact: (fact_id: string, performed_by = "Dr. (demo) Physician") =>
+  correctFact: (fact_id: string, new_value: any, new_label?: string, performed_by = "Physician") =>
+    request<ClinicalFact>("/clinical-facts/correct", {
+      method: "POST",
+      body: JSON.stringify({ fact_id, new_value, new_label, performed_by }),
+    }),
+  rejectFact: (fact_id: string, performed_by = "Physician") =>
     request<ClinicalFact>("/clinical-facts/reject", { method: "POST", body: JSON.stringify({ fact_id, performed_by }) }),
 
   // --- documents ---
   uploadDocument: (encounter_id: string, doc_type: string, filename: string) =>
-    request(`/documents/upload?encounter_id=${encounter_id}&doc_type=${doc_type}&filename=${encodeURIComponent(filename)}`, { method: "POST" }),
+    request(
+      `/documents/upload?encounter_id=${encounter_id}&doc_type=${doc_type}&filename=${encodeURIComponent(filename)}`,
+      { method: "POST" }
+    ),
   processDocument: (document_id: string) => request(`/documents/${document_id}/process`, { method: "POST" }),
-  listDocuments: (encounter_id: string) => request<import("./types").DocumentOutDetailed[]>(`/documents/${encounter_id}/list`),
-  getDocument: (document_id: string) => request<import("./types").DocumentOutDetailed>(`/documents/${document_id}`),
-  listPatientDocuments: (patient_id: string) => request<import("./types").DocumentOutDetailed[]>(`/documents/patient/${patient_id}/list`),
-  confirmDocument: (document_id: string, extracted_data: import("./types").ClinicalDocumentExtraction, confirmed_by: string = "Patient") =>
-    request<import("./types").DocumentOutDetailed>(`/documents/${document_id}/confirm`, {
+  listDocuments: (encounter_id: string) => request<DocumentOutDetailed[]>(`/documents/${encounter_id}/list`),
+  getDocument: (document_id: string) => request<DocumentOutDetailed>(`/documents/${document_id}`),
+  listPatientDocuments: (patient_id: string) => request<DocumentOutDetailed[]>(`/documents/patient/${patient_id}/list`),
+  confirmDocument: (document_id: string, extracted_data: ClinicalDocumentExtraction, confirmed_by: string = "Patient") =>
+    request<DocumentOutDetailed>(`/documents/${document_id}/confirm`, {
       method: "POST",
       body: JSON.stringify({ extracted_data, confirmed_by }),
     }),
@@ -99,18 +143,22 @@ export const api = {
     encounterId: string,
     files: File[],
     docType: string = "prescription",
-    patientId?: string
-  ): Promise<import("./types").DocumentOutDetailed> => {
+    patientId?: string,
+    clientOcrText?: string
+  ): Promise<DocumentOutDetailed> => {
     const formData = new FormData();
     formData.append("encounter_id", encounterId);
     formData.append("doc_type", docType);
     if (patientId) {
       formData.append("patient_id", patientId);
     }
+    if (clientOcrText) {
+      formData.append("client_ocr_text", clientOcrText);
+    }
     files.forEach((file) => {
       formData.append("files", file);
     });
-    return request<import("./types").DocumentOutDetailed>("/documents/scan-upload", {
+    return request<DocumentOutDetailed>("/documents/scan-upload", {
       method: "POST",
       body: formData,
     });
@@ -131,7 +179,8 @@ export const api = {
 
   // --- red flags / triage ---
   listRules: () => request<RedFlagRule[]>("/red-flags/rules"),
-  createRule: (rule: Partial<RedFlagRule>) => request<RedFlagRule>("/red-flags/rules", { method: "POST", body: JSON.stringify(rule) }),
+  createRule: (rule: Partial<RedFlagRule>) =>
+    request<RedFlagRule>("/red-flags/rules", { method: "POST", body: JSON.stringify(rule) }),
   updateRule: (rule_id: string, rule: Partial<RedFlagRule>) =>
     request<RedFlagRule>(`/red-flags/rules/${rule_id}`, { method: "PUT", body: JSON.stringify(rule) }),
   testRule: (rule_id: string, inputs: Record<string, any>) =>
@@ -141,12 +190,19 @@ export const api = {
   getTriageStatus: (encounter_id: string) => request(`/triage/${encounter_id}`),
 
   // --- summaries ---
-  generateSummary: (encounter_id: string) => request<Summary>(`/summaries/generate?encounter_id=${encounter_id}`, { method: "POST" }),
+  generateSummary: (encounter_id: string) =>
+    request<Summary>(`/summaries/generate?encounter_id=${encounter_id}`, { method: "POST" }),
   getSummary: (encounter_id: string) => request<Summary>(`/summaries/${encounter_id}`),
   confirmSummary: (summary_id: string, confirmed_by?: string) =>
-    request<Summary>(`/summaries/${summary_id}/confirm${confirmed_by ? `?confirmed_by=${encodeURIComponent(confirmed_by)}` : ""}`, { method: "POST" }),
+    request<Summary>(
+      `/summaries/${summary_id}/confirm${confirmed_by ? `?confirmed_by=${encodeURIComponent(confirmed_by)}` : ""}`,
+      { method: "POST" }
+    ),
   rejectSummary: (summary_id: string, rejected_by?: string) =>
-    request<Summary>(`/summaries/${summary_id}/reject${rejected_by ? `?rejected_by=${encodeURIComponent(rejected_by)}` : ""}`, { method: "POST" }),
+    request<Summary>(
+      `/summaries/${summary_id}/reject${rejected_by ? `?rejected_by=${encodeURIComponent(rejected_by)}` : ""}`,
+      { method: "POST" }
+    ),
   editSummary: (summary_id: string, text: string, edited_by?: string) =>
     request<Summary>(`/summaries/${summary_id}/edit`, {
       method: "POST",
@@ -160,24 +216,30 @@ export const api = {
   // --- AYUSH ---
   getAyushFields: () => request("/ayush/fields"),
   submitAyushAnswer: (encounter_id: string, concept: string, value?: string) =>
-    request(`/ayush/answer?encounter_id=${encounter_id}&concept=${concept}${value ? `&value=${encodeURIComponent(value)}` : ""}`, { method: "POST" }),
+    request(
+      `/ayush/answer?encounter_id=${encounter_id}&concept=${concept}${value ? `&value=${encodeURIComponent(value)}` : ""}`,
+      { method: "POST" }
+    ),
 
   // --- auth ---
   login: (payload: { username: string; password: string }) =>
-    request<{ access_token: string; token_type: string; role: string; username?: string; full_name?: string }>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+    request<{ access_token: string; token_type: string; role: string; username?: string; full_name?: string }>(
+      "/auth/login",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    ),
 
   // --- admin doctor & patient management ---
-  listDoctors: () => request<import("./types").DoctorAccount[]>("/admin/doctors"),
+  listDoctors: () => request<DoctorAccount[]>("/admin/doctors"),
   createDoctor: (data: { username: string; password: string; full_name: string }) =>
-    request<import("./types").DoctorAccount>("/admin/doctors", {
+    request<DoctorAccount>("/admin/doctors", {
       method: "POST",
       body: JSON.stringify(data),
     }),
   updateDoctor: (id: string, data: { username?: string; password?: string; full_name?: string }) =>
-    request<import("./types").DoctorAccount>(`/admin/doctors/${id}`, {
+    request<DoctorAccount>(`/admin/doctors/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),
     }),
@@ -185,14 +247,14 @@ export const api = {
     request<{ ok: boolean; message: string }>(`/admin/doctors/${id}`, {
       method: "DELETE",
     }),
-  listNurses: () => request<import("./types").NurseAccount[]>("/admin/nurses"),
+  listNurses: () => request<NurseAccount[]>("/admin/nurses"),
   createNurse: (data: { username: string; password: string; full_name: string }) =>
-    request<import("./types").NurseAccount>("/admin/nurses", {
+    request<NurseAccount>("/admin/nurses", {
       method: "POST",
       body: JSON.stringify(data),
     }),
   updateNurse: (id: string, data: { username?: string; password?: string; full_name?: string }) =>
-    request<import("./types").NurseAccount>(`/admin/nurses/${id}`, {
+    request<NurseAccount>(`/admin/nurses/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),
     }),
@@ -200,19 +262,22 @@ export const api = {
     request<{ ok: boolean; message: string }>(`/admin/nurses/${id}`, {
       method: "DELETE",
     }),
-  listAllPatientsAdmin: () => request<import("./types").AdminPatientRecord[]>("/admin/patients"),
+  listAllPatientsAdmin: () => request<AdminPatientRecord[]>("/admin/patients"),
   deletePatientAdmin: (id: string) =>
     request<{ ok: boolean; message: string }>(`/admin/patients/${id}`, {
       method: "DELETE",
     }),
-  listRoomsAdmin: () => request<import("./types").ConsultationRoomItem[]>("/admin/rooms"),
+  listRoomsAdmin: () => request<ConsultationRoomItem[]>("/admin/rooms"),
   createRoomAdmin: (data: { name: string; department?: string; default_doctor?: string }) =>
-    request<import("./types").ConsultationRoomItem>("/admin/rooms", {
+    request<ConsultationRoomItem>("/admin/rooms", {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  updateRoomAdmin: (id: string, data: { name?: string; department?: string; default_doctor?: string; is_active?: boolean }) =>
-    request<import("./types").ConsultationRoomItem>(`/admin/rooms/${id}`, {
+  updateRoomAdmin: (
+    id: string,
+    data: { name?: string; department?: string; default_doctor?: string; is_active?: boolean }
+  ) =>
+    request<ConsultationRoomItem>(`/admin/rooms/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),
     }),
@@ -232,27 +297,27 @@ export const api = {
 
   // --- tokens ---
   generateToken: (patient_id: string, encounter_id?: string, department?: string) =>
-    request<import("./types").TokenItem>("/tokens/generate", {
+    request<TokenItem>("/tokens/generate", {
       method: "POST",
       body: JSON.stringify({ patient_id, encounter_id, department }),
     }),
-  getDisplayState: () => request<import("./types").TokenDisplayState>("/tokens/display-state"),
-  getActiveTokens: () => request<import("./types").TokenItem[]>("/tokens/active"),
+  getDisplayState: () => request<TokenDisplayState>("/tokens/display-state"),
+  getActiveTokens: () => request<TokenItem[]>("/tokens/active"),
   getTokenQueue: (status?: string) =>
-    request<import("./types").TokenQueueItem[]>(`/tokens/queue${status ? `?status=${status}` : ""}`),
+    request<TokenQueueItem[]>(`/tokens/queue${status ? `?status=${status}` : ""}`),
   callToken: (token_id: string, payload: { doctor_id?: string; doctor_name: string; room_number?: string }) =>
-    request<import("./types").TokenItem>(`/tokens/${token_id}/call`, {
+    request<TokenItem>(`/tokens/${token_id}/call`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
   startConsultation: (token_id: string) =>
-    request<import("./types").TokenItem>(`/tokens/${token_id}/start-consultation`, { method: "POST" }),
+    request<TokenItem>(`/tokens/${token_id}/start-consultation`, { method: "POST" }),
   completeToken: (token_id: string) =>
-    request<import("./types").TokenItem>(`/tokens/${token_id}/complete`, { method: "POST" }),
+    request<TokenItem>(`/tokens/${token_id}/complete`, { method: "POST" }),
   recallToken: (token_id: string) =>
-    request<import("./types").TokenItem>(`/tokens/${token_id}/recall`, { method: "POST" }),
+    request<TokenItem>(`/tokens/${token_id}/recall`, { method: "POST" }),
   getPatientActiveToken: (patient_id: string) =>
-    request<import("./types").TokenItem | null>(`/tokens/patient/${patient_id}`),
+    request<TokenItem | null>(`/tokens/patient/${patient_id}`),
   getRoomAvailability: () =>
     request<{ all_rooms: string[]; occupied: Record<string, string> }>("/tokens/rooms"),
   claimRoom: (doctor_name: string, room_number: string) =>
@@ -266,5 +331,3 @@ export const api = {
       body: JSON.stringify({ doctor_name }),
     }),
 };
-
-

@@ -6,7 +6,6 @@ ABDM connectivity unless actually configured and tested against the real
 ABDM gateway with valid facility/HIP credentials — see docs/SECURITY.md.
 """
 from abc import ABC, abstractmethod
-from typing import Any
 
 
 class FHIRProvider(ABC):

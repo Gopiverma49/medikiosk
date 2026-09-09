@@ -296,7 +296,7 @@ class DoctorUpdate(BaseModel):
     full_name: Optional[str] = None
 
 
-class DoctorOut(BaseModel):
+class StaffUserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
     username: str
@@ -304,6 +304,10 @@ class DoctorOut(BaseModel):
     role: str
     created_at: datetime
     updated_at: Optional[datetime] = None
+
+
+class DoctorOut(StaffUserOut):
+    pass
 
 
 class NurseCreate(BaseModel):
@@ -318,14 +322,8 @@ class NurseUpdate(BaseModel):
     full_name: Optional[str] = None
 
 
-class NurseOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: str
-    username: str
-    full_name: Optional[str] = None
-    role: str
-    created_at: datetime
-    updated_at: Optional[datetime] = None
+class NurseOut(StaffUserOut):
+    pass
 
 
 # --- Token Management Schemas ---

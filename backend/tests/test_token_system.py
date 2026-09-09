@@ -1,6 +1,4 @@
-import pytest
-from datetime import datetime, timezone, timedelta
-from app.models import Patient, TokenQueue, TokenStatus, Encounter
+from app.models import Patient
 from app.routers.tokens import _get_current_cycle_start, _generate_next_token_number
 
 

@@ -1,5 +1,4 @@
 import io
-import pytest
 from app.services.document_extractor import extract_clinical_document
 
 

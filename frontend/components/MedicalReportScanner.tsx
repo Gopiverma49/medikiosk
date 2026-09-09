@@ -57,6 +57,7 @@ export function MedicalReportScanner({
   const [editableExt, setEditableExt] = useState<ClinicalDocumentExtraction | null>(null);
   const [showOriginalModal, setShowOriginalModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showRawOcr, setShowRawOcr] = useState(false);
 
   // Stop camera stream safely
   const stopCameraStream = () => {
@@ -280,19 +281,16 @@ export function MedicalReportScanner({
     setErrorMsg(null);
 
     try {
-      setProcessingStep(lang === "hi" ? "दस्तावेज़ छवि अपलोड की जा रही है..." : "Uploading document pages securely...");
-      await new Promise((r) => setTimeout(r, 600));
+      setProcessingStep(lang === "hi" ? "दस्तावेज़ छवि सुरक्षित रूप से अपलोड हो रही है..." : "Saving document pages securely...");
+      await new Promise((r) => setTimeout(r, 400));
 
-      setProcessingStep(lang === "hi" ? "ऑप्टिकल विज़न और ओसीआर निष्कर्षण..." : "Performing Optical Vision & OCR analysis...");
-      await new Promise((r) => setTimeout(r, 600));
-
-      setProcessingStep(lang === "hi" ? "चिकित्सीय जानकारी और दवाइयों का विश्लेषण..." : "Extracting clinical entities & Indian medications...");
+      setProcessingStep(lang === "hi" ? "फोटो से लिखावट और टेक्स्ट पढ़ा जा रहा है (OCR)..." : "Reading handwriting & text from photo (OCR)...");
 
       const files = pages.map((p) => p.file);
       const res = await api.uploadScanDocument(encounterId, files, docType, patientId);
 
-      setProcessingStep(lang === "hi" ? "सत्यापन स्क्रीन तैयार हो रही है..." : "Validating structured clinical schema...");
-      await new Promise((r) => setTimeout(r, 500));
+      setProcessingStep(lang === "hi" ? "दवाइयों और जांच रिपोर्ट का सारांश तैयार हो रहा है..." : "Extracting medications and clinical summary...");
+      await new Promise((r) => setTimeout(r, 400));
 
       setUploadedDoc(res);
       setEditableExt(
@@ -354,14 +352,17 @@ export function MedicalReportScanner({
 
   const addMedicine = () => {
     if (!editableExt) return;
+    const name = prompt(lang === "hi" ? "दवा का नाम दर्ज करें:" : "Enter medicine name (e.g. Paracetamol):");
+    if (!name || !name.trim()) return;
+    const dose = prompt(lang === "hi" ? "खुराक / आवृत्ति (वैकल्पिक):" : "Dose / Frequency (optional, e.g. 500mg Once Daily):");
     const newMed: MedicineExtractionItem = {
-      name: "New Medicine",
-      strength: "500 mg",
-      dosage: "1 tablet",
+      name: name.trim(),
+      strength: dose && dose.trim() ? dose.trim() : null,
+      dosage: null,
       route: "Oral",
-      frequency: "BD (Twice daily)",
-      timing: "After food / meals (PC)",
-      duration: "5 days",
+      frequency: null,
+      timing: null,
+      duration: null,
     };
     setEditableExt({ ...editableExt, medicines: [...editableExt.medicines, newMed] });
   };
@@ -383,9 +384,12 @@ export function MedicalReportScanner({
 
   const addTest = () => {
     if (!editableExt) return;
+    const name = prompt(lang === "hi" ? "जांच / टेस्ट का नाम दर्ज करें:" : "Enter test name (e.g. Blood Sugar):");
+    if (!name || !name.trim()) return;
+    const val = prompt(lang === "hi" ? "परिणाम मान दर्ज करें:" : "Enter value (e.g. 110 mg/dL):");
     const newTest: TestExtractionItem = {
-      name: "Blood Test",
-      value: "",
+      name: name.trim(),
+      value: val ? val.trim() : "",
       unit: "mg/dL",
       reference_range: "Normal",
       flag: "Normal",
@@ -442,33 +446,11 @@ export function MedicalReportScanner({
           <h2 className="text-2xl sm:text-3xl font-black text-slate-900 mb-2">
             {lang === "hi" ? "दस्तावेज़ / रिपोर्ट स्कैन करें" : "Scan Medical Report"}
           </h2>
-          <p className="text-slate-500 text-sm max-w-md mx-auto mb-6">
+          <p className="text-slate-500 text-sm max-w-md mx-auto mb-8">
             {lang === "hi"
-              ? "पर्चा, खून की जांच रिपोर्ट या डिस्चार्ज समरी स्कैन करें। हमारी मेडिकल एआई महत्वपूर्ण जानकारी स्वचालित रूप से निकालेगी।"
-              : "Capture or upload previous prescriptions, lab reports, or discharge summaries for instant clinical extraction."}
+              ? "दस्तावेज़ की फोटो लें या फाइल अपलोड करें।"
+              : "Capture or upload your medical report for clinical extraction."}
           </p>
-
-          {/* Doc Type Selector */}
-          <div className="flex flex-wrap justify-center gap-2 mb-8">
-            {[
-              { id: "prescription", label: lang === "hi" ? "💊 डॉक्टर का पर्चा (Rx)" : "💊 Prescription (Rx)" },
-              { id: "lab_report", label: lang === "hi" ? "🧪 लैब रिपोर्ट" : "🧪 Lab Report" },
-              { id: "discharge_summary", label: lang === "hi" ? "🏥 डिस्चार्ज समरी" : "🏥 Discharge Summary" },
-            ].map((type) => (
-              <button
-                key={type.id}
-                type="button"
-                onClick={() => setDocType(type.id)}
-                className={`px-4 py-2.5 rounded-2xl text-xs font-bold border transition ${
-                  docType === type.id
-                    ? "bg-teal-600 border-teal-600 text-white shadow-md"
-                    : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                {type.label}
-              </button>
-            ))}
-          </div>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center max-w-md mx-auto">
             <button
@@ -787,375 +769,231 @@ export function MedicalReportScanner({
         </div>
       )}
 
-      {/* STAGE 5: EDITABLE CONFIRMATION REVIEW SCREEN */}
+      {/* STAGE 5: SUMMARIZED CONFIRMATION REVIEW SCREEN (MATCHING REFERENCE DESIGN) */}
       {stage === "review" && editableExt && (
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-4 border-b border-slate-200">
+        <div className="space-y-4 max-w-lg mx-auto">
+          {/* Header Row: Title & View Original Report button */}
+          <div className="flex items-start justify-between pb-3 border-b border-slate-200 gap-3">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold mb-1">
-                <span>⚠️</span>
-                <span>{lang === "hi" ? "पुष्टि आवश्यक है" : "Review & Confirmation Required"}</span>
-              </div>
-              <h3 className="text-2xl font-black text-slate-900">
-                {lang === "hi" ? "निकाली गई जानकारी की समीक्षा करें" : "Review Extracted Clinical Information"}
+              <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight uppercase leading-tight">
+                {lang === "hi" ? "निकाली गई जानकारी" : "REVIEW EXTRACTED"}
+                <br />
+                <span className="text-slate-900">{lang === "hi" ? "का क्लिनिकल सारांश" : "CLINICAL SUMMARY"}</span>
               </h3>
-              <p className="text-xs text-slate-500">
-                {lang === "hi"
-                  ? "कृपया सहेजने से पहले सुनिश्चित करें कि दवाइयाँ और परिणाम आपके मूल पर्चे से मेल खाते हैं।"
-                  : "Please verify all extracted medicines, tests, and details match your paper report before saving."}
-              </p>
             </div>
 
-            {/* Quick Inspection of Original Scan */}
+            {/* View Original Scanned Image Button */}
             <button
               type="button"
               onClick={() => setShowOriginalModal(true)}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold border border-slate-300 flex items-center gap-1.5 shadow-sm"
+              className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-800 rounded-xl text-xs font-bold border border-slate-300 flex items-center gap-1.5 shadow-xs flex-shrink-0 transition"
             >
-              <span>👁️</span>
-              <span>{lang === "hi" ? "मूल रिपोर्ट देखें" : "View Original Report"}</span>
+              <span className="text-base">👁️</span>
+              <span className="text-[11px] font-bold text-slate-800 leading-tight text-left">
+                {lang === "hi" ? "मूल रिपोर्ट\nदेखें" : "View Original\nReport"}
+              </span>
             </button>
           </div>
 
-          {/* Section 1: Basic Clinical Header (Date & Reason) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200">
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">
-                {lang === "hi" ? "रिपोर्ट / परामर्श तिथि" : "Report / Visit Date"}
-              </label>
-              <input
-                type="text"
-                value={editableExt.report_date || ""}
-                onChange={(e) => setEditableExt({ ...editableExt, report_date: e.target.value })}
-                placeholder="DD/MM/YYYY"
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-teal-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">
-                {lang === "hi" ? "परामर्श का कारण" : "Reason for Visit"}
-              </label>
-              <input
-                type="text"
-                value={editableExt.reason_for_visit || ""}
-                onChange={(e) => setEditableExt({ ...editableExt, reason_for_visit: e.target.value })}
-                placeholder="e.g. Fever, cough, follow-up"
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-teal-500 focus:outline-none"
-              />
-            </div>
-          </div>
-
-          {/* Section 2: Diagnoses */}
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                {lang === "hi" ? "निदान (Diagnosis)" : "Clinical Diagnosis"}
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  const val = prompt(lang === "hi" ? "निदान दर्ज करें:" : "Enter diagnosis:");
-                  if (val && val.trim()) {
-                    setEditableExt({ ...editableExt, diagnosis: [...editableExt.diagnosis, val.trim()] });
-                  }
-                }}
-                className="text-xs text-teal-700 font-extrabold hover:underline"
-              >
-                + {lang === "hi" ? "जोड़ें" : "Add"}
-              </button>
+          {/* Unified Clinical Content Flow */}
+          <div className="space-y-3.5 py-1">
+            {/* 1. VISIT DETAILS */}
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 text-xs font-black text-slate-900 tracking-wider uppercase">
+                <span>📅</span>
+                <span>{lang === "hi" ? "मुलाकात का विवरण" : "VISIT DETAILS"}</span>
+              </div>
+              <div className="text-xs text-slate-800 leading-relaxed">
+                {editableExt.report_date ? (
+                  <>
+                    <span className="font-bold text-slate-900">{lang === "hi" ? "तारीख:" : "Date:"}</span>{" "}
+                    <span>{editableExt.report_date}</span>
+                  </>
+                ) : null}
+                {editableExt.report_date && editableExt.reason_for_visit && (
+                  <span className="text-slate-400 mx-1.5 font-normal">|</span>
+                )}
+                {editableExt.reason_for_visit ? (
+                  <>
+                    <span className="font-bold text-slate-900">{lang === "hi" ? "मुलाकात का कारण:" : "Reason for Visit:"}</span>{" "}
+                    <span>{editableExt.reason_for_visit}</span>
+                  </>
+                ) : null}
+                {!editableExt.report_date && !editableExt.reason_for_visit && (
+                  <span className="text-slate-400 italic">{lang === "hi" ? "दस्तावेज़ में तारीख/कारण नहीं मिला" : "Not specified in report"}</span>
+                )}
+              </div>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              {editableExt.diagnosis.length > 0 ? (
-                editableExt.diagnosis.map((d, i) => (
-                  <span
-                    key={i}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-300 rounded-full text-xs font-bold text-slate-800"
-                  >
-                    <span>{d}</span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setEditableExt({
-                          ...editableExt,
-                          diagnosis: editableExt.diagnosis.filter((_, idx) => idx !== i),
-                        })
-                      }
-                      className="text-slate-400 hover:text-rose-600 font-bold ml-1"
-                    >
-                      ✕
-                    </button>
-                  </span>
-                ))
-              ) : (
-                <span className="text-xs text-slate-400 italic">
-                  {lang === "hi" ? "कोई निदान नहीं मिला।" : "No explicit diagnosis extracted."}
+            {/* 2. CLINICAL DIAGNOSIS */}
+            {editableExt.diagnosis && editableExt.diagnosis.length > 0 && (
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5 text-xs font-black text-slate-900 tracking-wider uppercase">
+                  <span>📋</span>
+                  <span>{lang === "hi" ? "क्लिनिकल निदान" : "CLINICAL DIAGNOSIS"}</span>
+                </div>
+                <div className="text-xs text-slate-800 leading-relaxed">
+                  <span className="font-bold text-slate-900">{lang === "hi" ? "प्राथमिक:" : "Primary:"}</span>{" "}
+                  <span>{editableExt.diagnosis[0]}</span>
+                  {editableExt.diagnosis.length > 1 && (
+                    <>
+                      <span className="text-slate-400 mx-1.5 font-normal">|</span>
+                      <span className="font-bold text-slate-900">{lang === "hi" ? "द्वितीयक:" : "Secondary:"}</span>{" "}
+                      <span>{editableExt.diagnosis.slice(1).join(", ")}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 3. LABORATORY BLOOD COUNTS OR BADGE */}
+            {editableExt.tests && editableExt.tests.length > 0 ? (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 text-xs font-black text-slate-900 tracking-wider uppercase">
+                  <span>🔬</span>
+                  <span>{lang === "hi" ? "प्रयोगशाला रक्त जांच" : "LABORATORY BLOOD COUNTS"}</span>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-0.5">
+                  {editableExt.tests.map((t, idx) => {
+                    const isHigh = t.flag?.toLowerCase().includes("high") || t.flag?.toLowerCase().includes("abnormal");
+                    return (
+                      <div
+                        key={idx}
+                        className={`px-3 py-1 rounded-lg text-xs font-medium border flex items-center gap-1 shadow-2xs ${
+                          isHigh
+                            ? "bg-rose-100 text-rose-900 border-rose-200"
+                            : "bg-teal-50 text-teal-900 border-teal-200"
+                        }`}
+                      >
+                        <span className="font-bold">{t.name}:</span>
+                        <span>
+                          {t.value} {t.unit || ""}
+                          {t.flag && t.flag !== "Normal" ? ` (${t.flag})` : ""}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div>
+                <span className="inline-block px-3 py-1 bg-teal-800 text-white rounded-lg text-xs font-bold shadow-2xs">
+                  {lang === "hi" ? "कोई प्रयोगशाला जांच नहीं मिली" : "No Laboratory Tests Extracted"}
                 </span>
+              </div>
+            )}
+
+            {/* 4. EXTRACTED MEDICINES */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-black text-slate-900 tracking-wider uppercase">
+                  <span>💊</span>
+                  <span>{lang === "hi" ? "निकाली गई दवाइयाँ" : "EXTRACTED MEDICINES"}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={addMedicine}
+                  className="text-[11px] font-bold text-teal-700 hover:text-teal-900"
+                >
+                  + {lang === "hi" ? "दवा जोड़ें" : "Add Medicine"}
+                </button>
+              </div>
+
+              {editableExt.medicines && editableExt.medicines.length > 0 ? (
+                <ul className="space-y-1 text-xs text-slate-800">
+                  {editableExt.medicines.map((med, idx) => {
+                    const details: string[] = [];
+                    if (med.frequency) details.push(med.frequency);
+                    if (med.timing) details.push(med.timing);
+                    if (med.duration) details.push(`for ${med.duration}`);
+
+                    return (
+                      <li key={idx} className="flex items-start justify-between gap-2 group">
+                        <div className="flex items-start gap-1.5 leading-relaxed">
+                          <span className="text-slate-900 font-bold">•</span>
+                          <span>
+                            <span className="font-semibold text-slate-900">{med.name}</span>
+                            {med.strength && <span className="text-slate-700 font-medium"> ({med.strength})</span>}
+                            {details.length > 0 && (
+                              <span className="text-slate-600"> - {details.join(", ")}</span>
+                            )}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeMedicine(idx)}
+                          className="text-slate-300 hover:text-rose-600 text-xs px-1"
+                          title="Remove medicine"
+                        >
+                          ✕
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <div>
+                  <span className="inline-block px-3 py-1 bg-slate-600 text-white rounded-lg text-xs font-bold shadow-2xs">
+                    {lang === "hi" ? "कोई दवा नहीं मिली" : "No Medicines Extracted"}
+                  </span>
+                </div>
               )}
             </div>
-          </div>
 
-          {/* Section 3: Prescribed Medicines (CRITICAL EDITABLE TABLE) */}
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-base">💊</span>
-                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  {lang === "hi" ? "दवाइयाँ (Medicines)" : "Extracted Medicines"} ({editableExt.medicines.length})
-                </span>
+            {/* 5. FOLLOW-UP / REVIEW PLAN */}
+            <div className="space-y-1 pt-1">
+              <div className="text-xs font-bold text-slate-900">
+                {lang === "hi" ? "फॉलो-अप / समीक्षा योजना" : "Follow-up / Review Plan"}
               </div>
-              <button
-                type="button"
-                onClick={addMedicine}
-                className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-sm"
-              >
-                + {lang === "hi" ? "दवा जोड़ें" : "Add Medicine"}
-              </button>
+              <div className="text-xs text-slate-600 italic">
+                {editableExt.follow_up?.date_or_duration
+                  ? editableExt.follow_up.date_or_duration
+                  : editableExt.doctor_advice && editableExt.doctor_advice.length > 0
+                  ? editableExt.doctor_advice.join(", ")
+                  : (lang === "hi" ? "उदा. 5 दिनों के बाद समीक्षा, आवश्यकतानुसार" : "e.g. Review after 5 days, SOS")}
+              </div>
             </div>
 
-            {editableExt.medicines.length === 0 ? (
-              <p className="text-xs text-slate-400 italic py-2">
-                {lang === "hi" ? "कोई दवा नहीं मिली।" : "No medications detected on this document."}
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {editableExt.medicines.map((med, idx) => (
-                  <div
-                    key={idx}
-                    className="p-3.5 bg-white border border-slate-200 rounded-2xl shadow-sm space-y-2 relative"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => removeMedicine(idx)}
-                      className="absolute top-2 right-2 text-slate-400 hover:text-rose-600 p-1 text-xs font-bold"
-                      title="Remove medicine"
-                    >
-                      ✕
-                    </button>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pr-6">
-                      <div>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase">Medicine Name</span>
-                        <input
-                          type="text"
-                          value={med.name}
-                          onChange={(e) => updateMedicine(idx, "name", e.target.value)}
-                          className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900"
-                        />
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase">Strength</span>
-                        <input
-                          type="text"
-                          value={med.strength || ""}
-                          onChange={(e) => updateMedicine(idx, "strength", e.target.value)}
-                          placeholder="e.g. 500 mg, 650 mg"
-                          className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900"
-                        />
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase">Frequency</span>
-                        <select
-                          value={med.frequency || "OD (Once daily)"}
-                          onChange={(e) => updateMedicine(idx, "frequency", e.target.value)}
-                          className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900"
-                        >
-                          <option value="OD (Once daily)">OD (Once daily)</option>
-                          <option value="BD (Twice daily)">BD (Twice daily)</option>
-                          <option value="TDS (Thrice daily)">TDS (Thrice daily)</option>
-                          <option value="QID (4 times daily)">QID (4 times daily)</option>
-                          <option value="HS (At bedtime)">HS (At bedtime)</option>
-                          <option value="SOS (As needed / When required)">SOS (As needed)</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <div>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase">Timing</span>
-                        <input
-                          type="text"
-                          value={med.timing || ""}
-                          onChange={(e) => updateMedicine(idx, "timing", e.target.value)}
-                          placeholder="e.g. After meals, Before food"
-                          className="w-full px-2.5 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-700 font-medium"
-                        />
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase">Duration</span>
-                        <input
-                          type="text"
-                          value={med.duration || ""}
-                          onChange={(e) => updateMedicine(idx, "duration", e.target.value)}
-                          placeholder="e.g. 5 days, 1 month"
-                          className="w-full px-2.5 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-700 font-medium"
-                        />
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase">Instructions</span>
-                        <input
-                          type="text"
-                          value={med.instructions || ""}
-                          onChange={(e) => updateMedicine(idx, "instructions", e.target.value)}
-                          placeholder="e.g. Take with warm water"
-                          className="w-full px-2.5 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-700 font-medium"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
+            {/* 6. Raw OCR Drawer */}
+            {uploadedDoc?.ocr_text && (
+              <div className="pt-2 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setShowRawOcr(!showRawOcr)}
+                  className="text-[11px] font-bold text-slate-400 hover:text-slate-600 flex items-center gap-1"
+                >
+                  <span>{showRawOcr ? "▲" : "▼"}</span>
+                  <span>{lang === "hi" ? "फोटो से पढ़ा गया टेक्स्ट देखें" : "View text detected from photo"}</span>
+                </button>
+                {showRawOcr && (
+                  <pre className="mt-2 p-3 bg-slate-50 rounded-xl text-[11px] font-mono text-slate-700 whitespace-pre-wrap leading-relaxed border border-slate-200 max-h-36 overflow-y-auto">
+                    {uploadedDoc.ocr_text}
+                  </pre>
+                )}
               </div>
             )}
-          </div>
-
-          {/* Section 4: Lab Tests */}
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-base">🧪</span>
-                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  {lang === "hi" ? "जांच / लैब टेस्ट (Tests)" : "Laboratory & Diagnostic Tests"} ({editableExt.tests.length})
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={addTest}
-                className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-sm"
-              >
-                + {lang === "hi" ? "जांच जोड़ें" : "Add Test"}
-              </button>
-            </div>
-
-            {editableExt.tests.length === 0 ? (
-              <p className="text-xs text-slate-400 italic py-1">
-                {lang === "hi" ? "कोई लैब टेस्ट नहीं मिला।" : "No laboratory tests detected."}
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs bg-white rounded-xl overflow-hidden border border-slate-200">
-                  <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
-                    <tr>
-                      <th className="p-2.5">Test Name</th>
-                      <th className="p-2.5">Value</th>
-                      <th className="p-2.5">Unit</th>
-                      <th className="p-2.5">Reference Range</th>
-                      <th className="p-2.5 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium">
-                    {editableExt.tests.map((t, idx) => (
-                      <tr key={idx}>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={t.name}
-                            onChange={(e) => updateTest(idx, "name", e.target.value)}
-                            className="w-full px-2 py-1 bg-slate-50 border border-slate-300 rounded font-semibold text-slate-900"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={t.value || ""}
-                            onChange={(e) => updateTest(idx, "value", e.target.value)}
-                            className="w-20 px-2 py-1 bg-slate-50 border border-slate-300 rounded font-bold text-slate-900"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={t.unit || ""}
-                            onChange={(e) => updateTest(idx, "unit", e.target.value)}
-                            className="w-20 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-slate-600"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={t.reference_range || ""}
-                            onChange={(e) => updateTest(idx, "reference_range", e.target.value)}
-                            className="w-full px-2 py-1 bg-slate-50 border border-slate-300 rounded text-slate-500"
-                          />
-                        </td>
-                        <td className="p-2 text-center">
-                          <button
-                            type="button"
-                            onClick={() => removeTest(idx)}
-                            className="text-slate-400 hover:text-rose-600 font-bold px-1"
-                          >
-                            ✕
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* Section 5: Follow-Up / Advice */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200">
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">
-                {lang === "hi" ? "फॉलो-अप / पुनः समीक्षा" : "Follow-up / Review Plan"}
-              </label>
-              <input
-                type="text"
-                value={editableExt.follow_up?.date_or_duration || ""}
-                onChange={(e) =>
-                  setEditableExt({
-                    ...editableExt,
-                    follow_up: {
-                      required: true,
-                      date_or_duration: e.target.value,
-                      notes: e.target.value,
-                    },
-                  })
-                }
-                placeholder="e.g. Review after 5 days, SOS"
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">
-                {lang === "hi" ? "डॉक्टर की सलाह" : "Doctor's Advice / Notes"}
-              </label>
-              <input
-                type="text"
-                value={editableExt.doctor_advice.join("; ")}
-                onChange={(e) =>
-                  setEditableExt({
-                    ...editableExt,
-                    doctor_advice: e.target.value.split(";").map((s) => s.trim()).filter(Boolean),
-                  })
-                }
-                placeholder="e.g. Warm fluids; Bed rest"
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900"
-              />
-            </div>
           </div>
 
           {/* Action Confirmation Row */}
-          <div className="flex flex-col sm:flex-row gap-4 pt-4 border-t border-slate-200">
+          <div className="flex flex-col sm:flex-row gap-3 pt-3 border-t border-slate-200">
             <button
               type="button"
               onClick={() => setStage("preview")}
-              className="py-4 px-6 border-2 border-slate-300 hover:bg-slate-100 rounded-2xl font-bold text-slate-700 text-sm transition text-center"
+              className="py-3.5 px-6 border-2 border-slate-300 hover:bg-slate-100 rounded-2xl font-bold text-slate-700 text-sm transition text-center"
             >
-              ← {lang === "hi" ? "स्कैन पर वापस जाएँ" : "Back to Scan"}
+              ← {lang === "hi" ? "पुनः फोटो लें" : "Retake Photo"}
             </button>
             <button
               type="button"
               disabled={isSaving}
               onClick={handleConfirmSave}
-              className="flex-1 py-4 px-8 bg-teal-600 hover:bg-teal-700 active:scale-98 text-white rounded-2xl font-black text-base shadow-xl transition flex items-center justify-center gap-2"
+              className="flex-1 py-3.5 px-8 bg-teal-600 hover:bg-teal-700 active:scale-98 text-white rounded-2xl font-black text-base shadow-lg transition flex items-center justify-center gap-2"
             >
               <span>✓</span>
               <span>
                 {isSaving
                   ? (lang === "hi" ? "सहेजा जा रहा है..." : "Saving...")
-                  : (lang === "hi" ? "पुष्टि करें और स्वास्थ्य रिकॉर्ड में सहेजें" : "Confirm & Save to Health Record")}
+                  : (lang === "hi" ? "पुष्टि करें और आगे बढ़ें →" : "Confirm & Save to Health Record →")}
               </span>
             </button>
           </div>

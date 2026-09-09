@@ -12,25 +12,21 @@ DEFAULT_SQLITE_URL = f"sqlite:///{DEFAULT_SQLITE_PATH.replace(os.sep, '/')}"
 
 db_url = settings.DATABASE_URL or DEFAULT_SQLITE_URL
 
-# In local dev or if postgres driver isn't installed, smoothly use SQLite
+connect_args = {"check_same_thread": False} if db_url.startswith("sqlite") else {}
+
+# In local dev or if postgres is unreachable/driver missing, smoothly use SQLite
 if not db_url.startswith("sqlite"):
     try:
-        import psycopg2  # noqa: F401
-    except ImportError:
+        temp_engine = create_engine(db_url, connect_args=connect_args)
+        with temp_engine.connect() as conn:
+            pass
+        engine = temp_engine
+    except Exception:
+        logging.warning("Database at %s is unreachable, falling back to SQLite: %s", db_url, DEFAULT_SQLITE_PATH)
         db_url = DEFAULT_SQLITE_URL
-
-connect_args = {}
-engine_kwargs = {}
-
-if db_url.startswith("sqlite"):
-    connect_args = {"check_same_thread": False}
+        engine = create_engine(DEFAULT_SQLITE_URL, connect_args={"check_same_thread": False})
 else:
-    engine_kwargs["pool_pre_ping"] = True
-
-try:
-    engine = create_engine(db_url, connect_args=connect_args, **engine_kwargs)
-except Exception:
-    engine = create_engine(DEFAULT_SQLITE_URL, connect_args={"check_same_thread": False})
+    engine = create_engine(db_url, connect_args=connect_args)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

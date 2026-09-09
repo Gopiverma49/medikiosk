@@ -10,6 +10,7 @@ import { KioskVoiceIndicator } from "../../components/KioskVoiceIndicator";
 import AdaptiveSymptomEngine, { SymptomAnswerRecord } from "../../components/symptoms/AdaptiveSymptomEngine";
 import { MedicalReportScanner } from "../../components/MedicalReportScanner";
 import type { Patient, TreatmentRecord, TokenItem, DocumentOutDetailed } from "../../lib/types";
+import { cleanSymptomText } from "../../lib/clinicalUtils";
 
 type FlowStep =
   | "lang_mode" // Step 1: Language & Interaction Mode
@@ -26,21 +27,6 @@ type FlowStep =
   | "symptoms_adaptive" // Step 5: Adaptive Question Engine
   | "documents_upload" // Step 5: Optional Document Scan
   | "completed"; // Final Done Screen
-
-function cleanSymptomText(str: string): string {
-  if (!str) return "";
-  return str
-    .replace(/\{.*?['"]displayLabel['"]:\s*['"](.*?)['"].*?\}/g, "$1")
-    .replace(/\[\s*['"](.*?)['"]\s*\]/g, "$1")
-    .replace(/\(\s*\[.*?\]\s*\)/g, "")
-    .replace(/\(\s*['"](.*?)['"]\s*\)/g, "($1)")
-    .replace(/_/g, " ")
-    .replace(/\b(true|false|none|null|undefined)\b/gi, "")
-    .replace(/,\s*,/g, ",")
-    .replace(/^\s*,\s*|\s*,\s*$/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 export default function PatientPage() {
   // Session State

@@ -1,4 +1,3 @@
-import pytest
 from app.models import Patient, TreatmentRecord
 
 

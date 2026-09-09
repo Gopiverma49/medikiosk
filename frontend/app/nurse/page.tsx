@@ -9,55 +9,9 @@ import type {
   TreatmentRecord,
   PrescribedMedicine,
 } from "../../lib/types";
+import { cleanSymptomText, formatShortIllnessName, getPastAssociatedSymptoms } from "../../lib/clinicalUtils";
 
 type NurseTab = "queue" | "history";
-
-function cleanSymptomText(str: string): string {
-  if (!str) return "None reported";
-  return str
-    .replace(/\[\s*['"](.*?)['"]\s*\]/g, "$1")
-    .replace(/\(\s*\[.*?\]\s*\)/g, "")
-    .replace(/\(\s*['"](.*?)['"]\s*\)/g, "($1)")
-    .replace(/['"[\]]/g, "")
-    .replace(/_/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function formatShortIllnessName(rec: TreatmentRecord): string {
-  let name = (rec.illness_name || rec.diagnosis || "Medical Consultation").trim();
-  name = name.replace(/^follow[- ]up:\s*/i, "").replace(/^past\s+/i, "");
-  if (name.includes("Duration:")) {
-    name = name.split("Duration:")[0].trim();
-  }
-  if (!name && rec.symptoms) {
-    name = rec.symptoms.split(",")[0].trim();
-  }
-  const words = (name || "Medical Consultation").split(/\s+/);
-  if (words.length > 5) {
-    name = words.slice(0, 4).join(" ");
-  }
-  return cleanSymptomText(name) || "Medical Consultation";
-}
-
-function getPastAssociatedSymptoms(rec: TreatmentRecord): string {
-  if (!rec.symptoms) return "";
-  const shortName = formatShortIllnessName(rec).toLowerCase();
-  const parts = rec.symptoms
-    .split(",")
-    .map((s) => cleanSymptomText(s))
-    .filter((s) => {
-      const low = s.toLowerCase();
-      return (
-        s &&
-        low !== "none reported" &&
-        low !== "general symptoms" &&
-        low !== "general consultation" &&
-        !shortName.includes(low)
-      );
-    });
-  return parts.join(", ");
-}
 
 export default function NursePage() {
   // --- Nurse Authentication State ---

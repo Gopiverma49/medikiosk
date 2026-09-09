@@ -1,7 +1,7 @@
 import asyncio
-from typing import List, Optional
+from typing import List
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -11,7 +11,7 @@ from ..models import (
     ClinicalSummary, RedFlagEvent, TriageEvent, Contradiction, ContradictionResolution,
     HumanVerification, TreatmentRecord
 )
-from ..schemas import DoctorCreate, DoctorUpdate, DoctorOut, NurseCreate, NurseUpdate, NurseOut, PatientOut, RoomCreateIn, RoomUpdateIn, RoomOut
+from ..schemas import DoctorCreate, DoctorUpdate, DoctorOut, NurseCreate, NurseUpdate, NurseOut, RoomCreateIn, RoomUpdateIn, RoomOut
 from ..security import hash_password
 from ..services.audit import log_event
 from .tokens import _build_display_state, broadcast_token_event, ACTIVE_DOCTOR_ROOMS

@@ -12,3 +12,8 @@ evaluation/results.json
 evaluation/report.html
 *.tsbuildinfo
 .pytest_cache/
+backend/uploads/
+uploads/
+*.traineddata
+.tesseract-cache/
+medikiosk-ocr/
