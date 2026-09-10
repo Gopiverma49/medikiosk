@@ -19,7 +19,7 @@ interface BodyLocationSelectorProps {
 export default function BodyLocationSelector({
   lang,
   onSelect,
-  onUnknown,
+  onUnknown: _onUnknown,
 }: BodyLocationSelectorProps) {
   const [selectedMain, setSelectedMain] = useState<BodyLocationItem | null>(null);
   const [side, setSide] = useState<"left" | "right" | "both" | "central">("left");

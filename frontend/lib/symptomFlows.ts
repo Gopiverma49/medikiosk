@@ -1,5 +1,3 @@
-import { Language } from "./translations";
-
 export type QuestionType =
   | "single_choice"
   | "multi_choice"

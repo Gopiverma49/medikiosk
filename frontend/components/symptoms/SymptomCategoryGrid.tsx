@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { Language, t } from "@/lib/translations";
-import { SYMPTOM_CATEGORIES, SymptomCategory } from "@/lib/symptomFlows";
+import { SYMPTOM_CATEGORIES } from "@/lib/symptomFlows";
 
 interface SymptomCategoryGridProps {
   lang: Language;

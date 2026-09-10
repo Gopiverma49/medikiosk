@@ -3,10 +3,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { api } from "../../lib/api";
 import { useKioskLanguage } from "../../lib/kioskLanguage";
 import { t } from "../../lib/translations";
-import {
-  PriorityPill,
-  VerificationBadge,
-} from "../../components/ClinicalComponents";
+import { PriorityPill } from "../../components/ClinicalComponents";
 import { PasswordInput } from "../../components/PasswordInput";
 import type { Summary, Patient, TokenQueueItem, TokenItem, TreatmentRecord, PrescribedMedicine } from "../../lib/types";
 import { cleanSymptomText, formatShortIllnessName, getPastAssociatedSymptoms } from "../../lib/clinicalUtils";
@@ -320,12 +317,9 @@ export default function DoctorPage() {
   const [occupiedRooms, setOccupiedRooms] = useState<Record<string, string>>({});
 
   // --- Clinical Workspace State (Fresh on every login/session) ---
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [selectedPatientId, setSelectedPatientId] = useState<string>("");
   const [patient, setPatient] = useState<Patient | null>(null);
   const [encounterId, setEncounterId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("summary");
-  const [priority, setPriority] = useState("ROUTINE");
   const [summary, setSummary] = useState<Summary | null>(null);
   const [documents, setDocuments] = useState<any[]>([]);
   const [clinicalFacts, setClinicalFacts] = useState<any[]>([]);
@@ -367,7 +361,6 @@ export default function DoctorPage() {
 
   // Reset workspace state
   const resetWorkspace = () => {
-    setSelectedPatientId("");
     setPatient(null);
     setEncounterId(null);
     setSummary(null);
@@ -600,11 +593,7 @@ export default function DoctorPage() {
       setDiagnosisInput("");
       setPastTreatments([]);
 
-      const [pList] = await Promise.all([
-        api.listPatients(),
-        loadTokenQueue(userContext?.full_name),
-      ]);
-      setPatients(pList);
+      await loadTokenQueue(userContext?.full_name);
     } catch (err) {
       console.error("Failed to load doctor dashboard:", err);
     } finally {
@@ -619,35 +608,31 @@ export default function DoctorPage() {
         api.listDocuments(encId) as Promise<any[]>,
         api.listFacts(encId).catch(() => []) as Promise<any[]>,
       ]);
-      setPriority(triage.priority || "ROUTINE");
       setDocuments(docs);
       setClinicalFacts(factsList || []);
+
+      let s: Summary | null = null;
       try {
-        let s = await api.getSummary(encId);
-        if (!s) {
-          s = await api.generateSummary(encId);
-        }
-        setSummary(s);
+        s = await api.getSummary(encId);
       } catch {
+        // Summary might not exist yet
+      }
+      if (!s) {
         try {
-          const s = await api.generateSummary(encId);
-          setSummary(s);
+          s = await api.generateSummary(encId);
         } catch {
-          setSummary(null);
+          s = null;
         }
       }
+      setSummary(s);
     } catch (e) {
       console.warn("Error loading encounter:", e);
     }
   }
 
   async function selectPatient(pId: string, encIdOverride?: string | null) {
-    setSelectedPatientId(pId);
     try {
-      let p = patients.find((x) => x.id === pId || x.patient_id === pId);
-      if (!p) {
-        p = await api.getPatient(pId);
-      }
+      const p = await api.getPatient(pId);
       setPatient(p || null);
 
       if (p) {

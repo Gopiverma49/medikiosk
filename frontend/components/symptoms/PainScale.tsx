@@ -13,7 +13,7 @@ interface PainScaleProps {
 export default function PainScale({
   lang,
   onSelect,
-  onUnknown,
+  onUnknown: _onUnknown,
   defaultValue,
 }: PainScaleProps) {
   const [selectedVal, setSelectedVal] = useState<number | null>(

@@ -46,6 +46,12 @@ function playHospitalChime() {
   }
 }
 
+// Timing constants for display board
+const CLOCK_INTERVAL_MS = 1000;
+const ROOM_FLASH_DURATION_MS = 3000;
+const WS_RECONNECT_DELAY_MS = 3000;
+const WS_POLL_INTERVAL_MS = 3000;
+
 export default function TokenDisplayPage() {
   const { baseLanguage } = useKioskLanguage();
   const [displayState, setDisplayState] = useState<TokenDisplayState>({
@@ -74,7 +80,7 @@ export default function TokenDisplayPage() {
       setCurrentDate(d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" }));
     };
     updateTime();
-    const interval = setInterval(updateTime, 1000);
+    const interval = setInterval(updateTime, CLOCK_INTERVAL_MS);
     return () => clearInterval(interval);
   }, []);
 
@@ -86,7 +92,7 @@ export default function TokenDisplayPage() {
     setFlashingRooms((prev) => ({ ...prev, [roomName]: true }));
     setTimeout(() => {
       setFlashingRooms((prev) => ({ ...prev, [roomName]: false }));
-    }, 3000);
+    }, ROOM_FLASH_DURATION_MS);
   }, [soundEnabled]);
 
   // Check state changes across all dynamic rooms
@@ -186,7 +192,7 @@ export default function TokenDisplayPage() {
 
         ws.onclose = () => {
           setIsConnected(false);
-          reconnectTimeout = setTimeout(connectWebSocket, 3000);
+          reconnectTimeout = setTimeout(connectWebSocket, WS_RECONNECT_DELAY_MS);
         };
 
         ws.onerror = () => {
@@ -195,12 +201,12 @@ export default function TokenDisplayPage() {
         };
       } catch {
         setIsConnected(false);
-        reconnectTimeout = setTimeout(connectWebSocket, 3000);
+        reconnectTimeout = setTimeout(connectWebSocket, WS_RECONNECT_DELAY_MS);
       }
     };
 
     connectWebSocket();
-    pollInterval = setInterval(loadState, 3000);
+    pollInterval = setInterval(loadState, WS_POLL_INTERVAL_MS);
 
     return () => {
       if (ws) ws.close();
@@ -261,8 +267,12 @@ export default function TokenDisplayPage() {
               <h1 className="text-xl md:text-2xl font-black tracking-tight text-slate-900 leading-none">
                 {t("token_board_title", baseLanguage)}
               </h1>
-              <span className="bg-blue-100 text-blue-800 text-[11px] font-black uppercase px-2.5 py-0.5 rounded-full tracking-wider border border-blue-200">
-                {t("live_status", baseLanguage)}
+              <span className={`text-[11px] font-black uppercase px-2.5 py-0.5 rounded-full tracking-wider border ${
+                isConnected
+                  ? "bg-blue-100 text-blue-800 border-blue-200"
+                  : "bg-amber-100 text-amber-800 border-amber-200 animate-pulse"
+              }`}>
+                {isConnected ? t("live_status", baseLanguage) : "Connecting..."}
               </span>
             </div>
             <p className="text-xs md:text-sm text-slate-500 font-semibold mt-1">

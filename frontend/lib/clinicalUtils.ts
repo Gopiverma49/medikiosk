@@ -65,3 +65,26 @@ export function getPastAssociatedSymptoms(rec: TreatmentRecord): string {
     });
   return parts.join(", ");
 }
+
+/**
+ * Format ISO or UTC date string into standard Indian Standard Time (IST) presentation.
+ */
+export function formatIndiaDateTime(dateStr?: string | null): string {
+  if (!dateStr) return "—";
+  let iso = dateStr.trim();
+  if (!iso.endsWith("Z") && !iso.includes("+") && !iso.includes("-", 10)) {
+    iso = `${iso.replace(" ", "T")}Z`;
+  }
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return dateStr;
+
+  return d.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}

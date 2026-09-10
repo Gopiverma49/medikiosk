@@ -6,9 +6,9 @@
  */
 
 export class VoiceService {
+  private static currentUtterance: SpeechSynthesisUtterance | null = null;
   private static recognition: any = null;
   private static isListening: boolean = false;
-  private static currentUtterance: SpeechSynthesisUtterance | null = null;
   private static audioCtx: AudioContext | null = null;
   private static cachedVoices: SpeechSynthesisVoice[] = [];
   private static isWarmed: boolean = false;
@@ -255,10 +255,7 @@ export class VoiceService {
       recog.interimResults = false;
       recog.maxAlternatives = 1;
 
-      let gotResult = false;
-
       recog.onresult = (event: any) => {
-        gotResult = true;
         const transcript = event.results[0][0].transcript;
         onResult(transcript);
       };

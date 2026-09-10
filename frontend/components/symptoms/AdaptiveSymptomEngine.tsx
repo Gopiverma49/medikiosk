@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { Language, t } from "@/lib/translations";
 import { VoiceService } from "@/lib/voice";
 import {
@@ -8,7 +8,6 @@ import {
   QUESTION_DEFINITIONS,
   AdaptiveQuestion,
   DURATION_OPTIONS,
-  SymptomCategory,
 } from "@/lib/symptomFlows";
 import SymptomCategoryGrid from "./SymptomCategoryGrid";
 import BodyLocationSelector from "./BodyLocationSelector";

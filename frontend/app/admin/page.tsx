@@ -4,29 +4,10 @@ import { api } from "../../lib/api";
 import { useKioskLanguage } from "../../lib/kioskLanguage";
 import { t } from "../../lib/translations";
 import { PasswordInput } from "../../components/PasswordInput";
+import { formatIndiaDateTime } from "../../lib/clinicalUtils";
 import type { DoctorAccount, NurseAccount, AdminPatientRecord, ConsultationRoomItem } from "../../lib/types";
 
 type AdminSection = "doctors" | "nurses" | "patients" | "rooms";
-
-function formatIndiaDateTime(dateStr?: string | null): string {
-  if (!dateStr) return "—";
-  let iso = dateStr.trim();
-  if (!iso.endsWith("Z") && !iso.includes("+") && !iso.includes("-", 10)) {
-    iso = `${iso.replace(" ", "T")}Z`;
-  }
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return dateStr;
-
-  return d.toLocaleString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
 
 export default function AdminPage() {
   const { baseLanguage } = useKioskLanguage();

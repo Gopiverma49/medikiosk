@@ -1,5 +1,4 @@
 import os
-import io
 import base64
 import logging
 import subprocess

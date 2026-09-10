@@ -1,13 +1,12 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
 import { api } from "../lib/api";
-import { Language, t } from "../lib/translations";
+import { Language } from "../lib/translations";
 import type {
   ClinicalDocumentExtraction,
   DocumentOutDetailed,
   MedicineExtractionItem,
   TestExtractionItem,
-  SymptomExtractionItem,
 } from "../lib/types";
 
 interface Props {
@@ -34,7 +33,7 @@ export function MedicalReportScanner({
   onCancel,
 }: Props) {
   const [stage, setStage] = useState<ScanStage>("idle");
-  const [docType, setDocType] = useState<string>("prescription");
+  const docType = "prescription";
   const [pages, setPages] = useState<CapturedPage[]>([]);
   const [activePageIndex, setActivePageIndex] = useState<number>(0);
 
@@ -343,13 +342,6 @@ export function MedicalReportScanner({
   };
 
   // Helpers for editing items in review screen
-  const updateMedicine = (index: number, field: keyof MedicineExtractionItem, val: string) => {
-    if (!editableExt) return;
-    const nextMeds = [...editableExt.medicines];
-    nextMeds[index] = { ...nextMeds[index], [field]: val };
-    setEditableExt({ ...editableExt, medicines: nextMeds });
-  };
-
   const addMedicine = () => {
     if (!editableExt) return;
     const name = prompt(lang === "hi" ? "दवा का नाम दर्ज करें:" : "Enter medicine name (e.g. Paracetamol):");
@@ -372,36 +364,6 @@ export function MedicalReportScanner({
     setEditableExt({
       ...editableExt,
       medicines: editableExt.medicines.filter((_, i) => i !== index),
-    });
-  };
-
-  const updateTest = (index: number, field: keyof TestExtractionItem, val: string) => {
-    if (!editableExt) return;
-    const nextTests = [...editableExt.tests];
-    nextTests[index] = { ...nextTests[index], [field]: val };
-    setEditableExt({ ...editableExt, tests: nextTests });
-  };
-
-  const addTest = () => {
-    if (!editableExt) return;
-    const name = prompt(lang === "hi" ? "जांच / टेस्ट का नाम दर्ज करें:" : "Enter test name (e.g. Blood Sugar):");
-    if (!name || !name.trim()) return;
-    const val = prompt(lang === "hi" ? "परिणाम मान दर्ज करें:" : "Enter value (e.g. 110 mg/dL):");
-    const newTest: TestExtractionItem = {
-      name: name.trim(),
-      value: val ? val.trim() : "",
-      unit: "mg/dL",
-      reference_range: "Normal",
-      flag: "Normal",
-    };
-    setEditableExt({ ...editableExt, tests: [...editableExt.tests, newTest] });
-  };
-
-  const removeTest = (index: number) => {
-    if (!editableExt) return;
-    setEditableExt({
-      ...editableExt,
-      tests: editableExt.tests.filter((_, i) => i !== index),
     });
   };
 

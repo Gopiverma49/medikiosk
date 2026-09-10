@@ -1,14 +1,9 @@
 "use client";
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { api } from "../../lib/api";
-import { t, Language } from "../../lib/translations";
+import { t } from "../../lib/translations";
 import { VoiceService } from "../../lib/voice";
-import {
-  useKioskLanguage,
-  BASE_LANGUAGE_OPTIONS,
-  SupportedLanguage,
-} from "../../lib/kioskLanguage";
+import { useKioskLanguage } from "../../lib/kioskLanguage";
 import { KioskStepIndicator } from "../../components/KioskStepIndicator";
 import { KioskKeypad } from "../../components/KioskKeypad";
 import { KioskScanner } from "../../components/KioskScanner";
@@ -17,6 +12,10 @@ import AdaptiveSymptomEngine, { SymptomAnswerRecord } from "../../components/sym
 import { MedicalReportScanner } from "../../components/MedicalReportScanner";
 import type { Patient, TreatmentRecord, TokenItem, DocumentOutDetailed } from "../../lib/types";
 import { cleanSymptomText } from "../../lib/clinicalUtils";
+
+// Configuration constants
+const INACTIVITY_TIMEOUT_MS = 30000;
+const COMPLETION_COUNTDOWN_SECONDS = 7;
 
 type FlowStep =
   | "lang_mode" // Step 1: Language & Interaction Mode
@@ -35,16 +34,13 @@ type FlowStep =
   | "completed"; // Final Done Screen
 
 export default function PatientPage() {
-  const router = useRouter();
   const {
     baseLanguage,
     sessionLanguage,
     setSessionLanguage,
-    resetSessionLanguage,
   } = useKioskLanguage();
 
   const lang = sessionLanguage;
-  const setLang = setSessionLanguage;
 
   // Session State
   const [interactionMode, setInteractionMode] = useState<"touch" | "voice">("touch");
@@ -55,7 +51,6 @@ export default function PatientPage() {
   const [patientIdInput, setPatientIdInput] = useState("");
   const [patient, setPatient] = useState<Patient | null>(null);
   const [treatments, setTreatments] = useState<TreatmentRecord[]>([]);
-  const [selectedIllnessId, setSelectedIllnessId] = useState<string | null>(null);
   const [encounterId, setEncounterId] = useState<string | null>(null);
   const [generatedToken, setGeneratedToken] = useState<TokenItem | null>(null);
 
@@ -75,17 +70,16 @@ export default function PatientPage() {
 
   // Loading & Document Status
   const [isLoading, setIsLoading] = useState(false);
-  const [docStatus, setDocStatus] = useState<Record<string, string>>({});
   const [scannedDocs, setScannedDocs] = useState<DocumentOutDetailed[]>([]);
 
   // Voice Guidance State
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [voiceTranscript, setVoiceTranscript] = useState("");
+  const [isListening] = useState(false);
+  const [voiceTranscript] = useState("");
   const [voiceError, setVoiceError] = useState<string | null>(null);
 
-  // Auto-Reset 7-second Timer State (Completion screen)
-  const [autoResetSeconds, setAutoResetSeconds] = useState<number>(7);
+  // Auto-Reset Countdown Timer State (Completion screen)
+  const [autoResetSeconds, setAutoResetSeconds] = useState<number>(COMPLETION_COUNTDOWN_SECONDS);
 
   // Map step to numerical indicator (1 to 5)
   const getStepNumber = (s: FlowStep): number => {
@@ -118,10 +112,8 @@ export default function PatientPage() {
     setPatient(null);
     setTreatments([]);
     setPatientIdInput("");
-    setSelectedIllnessId(null);
     setEncounterId(null);
     setGeneratedToken(null);
-    setDocStatus({});
     setScannedDocs([]);
     setHistoryStack([]);
     setInteractionMode("touch");
@@ -266,10 +258,10 @@ export default function PatientPage() {
     }
   }, [step, interactionMode, playVoicePrompt]);
 
-  // Completion screen: 7-second countdown auto-restart back to Step 1 in Base Language
+  // Completion screen: countdown auto-restart back to Step 1 in Base Language
   useEffect(() => {
     if (step === "completed") {
-      setAutoResetSeconds(7);
+      setAutoResetSeconds(COMPLETION_COUNTDOWN_SECONDS);
       const interval = setInterval(() => {
         setAutoResetSeconds((prev) => {
           if (prev <= 1) {
@@ -285,7 +277,7 @@ export default function PatientPage() {
     }
   }, [step, restartPatientSession]);
 
-  // Global 30-second inactivity timeout: restarts session back to Step 1 in Base Language (stays on current Patient page)
+  // Global inactivity timeout: restarts session back to Step 1 in Base Language (stays on current Patient page)
   useEffect(() => {
     if (step === "completed") return;
 
@@ -295,7 +287,7 @@ export default function PatientPage() {
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
         restartPatientSession();
-      }, 30000); // 30 seconds
+      }, INACTIVITY_TIMEOUT_MS);
     };
 
     const activityEvents = ["touchstart", "touchend", "click", "keydown", "mousemove", "scroll"];
@@ -426,7 +418,6 @@ export default function PatientPage() {
     if (!targetPatient) return;
     setIsLoading(true);
     try {
-      setSelectedIllnessId(prevIllnessId);
       const enc = await api.createEncounter(targetPatient.id, "general", prevIllnessId || undefined);
       setEncounterId(enc.id);
       await api.recordConsent(enc.id, true);
@@ -476,22 +467,6 @@ export default function PatientPage() {
     } finally {
       setIsLoading(false);
       goTo("documents_upload");
-    }
-  };
-
-  const uploadAndProcessDoc = async (docType: string, filename: string) => {
-    if (!encounterId) return;
-    setDocStatus((s) => ({ ...s, [docType]: "processing" }));
-    try {
-      const doc: any = await api.uploadDocument(encounterId, docType, filename);
-      const result: any = await api.processDocument(doc.id);
-      setDocStatus((s) => ({ ...s, [docType]: result.ok ? "processed" : "failed" }));
-      if (result.ok) {
-        await api.detectContradictions(encounterId);
-        await api.evaluateTriage(encounterId);
-      }
-    } catch (e) {
-      setDocStatus((s) => ({ ...s, [docType]: "failed" }));
     }
   };
 
