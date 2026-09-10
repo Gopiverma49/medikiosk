@@ -1,7 +1,9 @@
 # 🏥 MediKiosk — Smart Multilingual Hospital Intake & Physician Workflow Platform
 
-> **Accessible digital check-in, real-time multi-room queue management, and physician AI verification workspace for busy outpatient hospital departments (OPDs).**  
 > Supports **English** and **हिंदी (Hindi)** with large touch controls, voice guidance, live barcode scanning, and multi-room TV token broadcast.
+
+> 📖 **Comprehensive Folder-by-Folder Documentation:**  
+> Detailed architecture, file-by-file breakdowns, and data flow guides for every module are located in the [**`MASTER README/`**](MASTER%20README/README.md) directory.
 
 ---
 
