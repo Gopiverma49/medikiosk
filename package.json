@@ -10,6 +10,7 @@
     "dev:frontend": "npm --prefix frontend run dev",
     "dev:backend": "python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --app-dir backend",
     "seed": "python -m app.seed --app-dir backend",
+    "clean:ports": "npx --yes kill-port 3000 8000",
     "build:frontend": "npm --prefix frontend run build",
     "typecheck": "npm --prefix frontend run typecheck"
   },

@@ -9,9 +9,20 @@ export type QuestionType =
   | "yes_no"
   | "text_or_voice";
 
+export interface LocalizedString {
+  en: string;
+  hi: string;
+  mr?: string;
+  kn?: string;
+  ta?: string;
+  or?: string;
+  ne?: string;
+  [lang: string]: string | undefined;
+}
+
 export interface SymptomOption {
   id: string;
-  label: { en: string; hi: string };
+  label: LocalizedString;
   concept_value?: any;
   triggers_followup?: string[]; // IDs of conditional follow-up questions
 }
@@ -19,8 +30,8 @@ export interface SymptomOption {
 export interface AdaptiveQuestion {
   id: string;
   concept: string;
-  title?: { en: string; hi: string };
-  prompt: { en: string; hi: string };
+  title?: LocalizedString;
+  prompt: LocalizedString;
   type: QuestionType;
   options?: SymptomOption[];
   allowUnknown?: boolean;
@@ -33,8 +44,8 @@ export interface AdaptiveQuestion {
 export interface SymptomCategory {
   id: string;
   icon: string;
-  label: { en: string; hi: string };
-  description: { en: string; hi: string };
+  label: LocalizedString;
+  description: LocalizedString;
   questionIds: string[];
 }
 
@@ -42,92 +53,300 @@ export const SYMPTOM_CATEGORIES: SymptomCategory[] = [
   {
     id: "fever",
     icon: "🌡️",
-    label: { en: "Fever", hi: "बुखार" },
-    description: { en: "High temperature, chills, sweating", hi: "तेज़ तापमान, ठंड लगना, पसीना" },
+    label: {
+      en: "Fever",
+      hi: "बुखार",
+      mr: "ताप",
+      kn: "ಜ್ವರ",
+      ta: "காய்ச்சல்",
+      or: "ଜ୍ୱର",
+      ne: "ज्वरो",
+    },
+    description: {
+      en: "High temperature, chills, sweating",
+      hi: "तेज़ तापमान, ठंड लगना, पसीना",
+      mr: "अंग गरम, थंडी वाजणे, घाम",
+      kn: "ಹೆಚ್ಚಿನ ಉಷ್ಣಾಂಶ, ಚಳಿ, ಬೆವರು",
+      ta: "அதிக உடல் சூடு, நடுக்கம், வியர்வை",
+      or: "ଅଧିକ ତାପମାତ୍ରା, ଥଣ୍ଡା ଲାଗିବା, ଝାଳ",
+      ne: "उच्च तापक्रम, काम्रो, पसिना",
+    },
     questionIds: ["fever_duration", "fever_associated", "fever_chills"],
   },
   {
     id: "pain",
     icon: "⚡",
-    label: { en: "Pain", hi: "दर्द / तकलीफ" },
-    description: { en: "Body ache, leg, arm, back, or chest pain", hi: "शरीर में दर्द, हाथ-पैर, पीठ या छाती में दर्द" },
+    label: {
+      en: "Pain",
+      hi: "दर्द / तकलीफ",
+      mr: "वेदना / दुखणे",
+      kn: "ನೋವು",
+      ta: "வலி",
+      or: "ଯନ୍ତ୍ରଣା",
+      ne: "दुखाइ",
+    },
+    description: {
+      en: "Body ache, leg, arm, back, or chest pain",
+      hi: "शरीर में दर्द, हाथ-पैर, पीठ या छाती में दर्द",
+      mr: "अंगदुखी, हात-पाय, पाठ किंवा छातीत दुखणे",
+      kn: "ಮೈಕೈ ನೋವು, ಕಾಲು, ಬೆನ್ನು ಅಥವಾ ಎದೆ ನೋವು",
+      ta: "உடல் வலி, கை, கால், முதுகு அல்லது நெஞ்சு வலி",
+      or: "ଦେହ ହାତ ବିନ୍ଧା, ପିଠି ବା ଛାତି ଯନ୍ତ୍ରଣା",
+      ne: "जीउ दुखाइ, हात-खुट्टा, ढाड वा छाती दुखाइ",
+    },
     questionIds: ["pain_location", "pain_severity", "pain_duration", "pain_character"],
   },
   {
     id: "cough_cold",
     icon: "🤧",
-    label: { en: "Cough / Cold", hi: "खांसी / जुकाम" },
-    description: { en: "Running nose, throat irritation, sputum", hi: "बहती नाक, गले में खराश, बलगम" },
+    label: {
+      en: "Cough / Cold",
+      hi: "खांसी / जुकाम",
+      mr: "खोकला / सर्दी",
+      kn: "ಕೆಮ್ಮು / ಶೀತ",
+      ta: "இருமல் / சளி",
+      or: "କାଶ / ଥଣ୍ଡା",
+      ne: "खोकी / रुघा",
+    },
+    description: {
+      en: "Running nose, throat irritation, sputum",
+      hi: "बहती नाक, गले में खराश, बलगम",
+      mr: "नाक वाहणे, घशात खवखव, कफ",
+      kn: "ಮೂಗು ಸೋರುವುದು, ಗಂಟಲು ಕೆರೆತ, ಕಫ",
+      ta: "மூக்கொழுகுதல், தொண்டை கரகரப்பு, சளி",
+      or: "ନାକରୁ ପାଣି ବୋହିବା, ଗଳା ଖରାପ, କଫ",
+      ne: "नाक बग्ने, घाँटी खसखस, खकार",
+    },
     questionIds: ["cough_duration", "cough_type", "cough_fever_present"],
   },
   {
     id: "headache",
     icon: "🤕",
-    label: { en: "Headache / Dizziness", hi: "सिरदर्द / चक्कर" },
-    description: { en: "Head pressure, migraine, vertigo", hi: "सिर में भारीपन, माइग्रेन, चक्कर आना" },
+    label: {
+      en: "Headache / Dizziness",
+      hi: "सिरदर्द / चक्कर",
+      mr: "डोकेदुखी / चक्कर",
+      kn: "ತಲೆನೋವು / ತಲೆತಿರುಗುವಿಕೆ",
+      ta: "தலைவலி / மயக்கம்",
+      or: "ମୁଣ୍ଡବିନ୍ଧା / ମୁଣ୍ଡ ବୁଲାଇବା",
+      ne: "टाउको दुखाइ / चक्कर",
+    },
+    description: {
+      en: "Head pressure, migraine, vertigo",
+      hi: "सिर में भारीपन, माइग्रेन, चक्कर आना",
+      mr: "डोके जड होणे, मायग्रेन, चक्कर",
+      kn: "ತಲೆಭಾರ, ಮೈಗ್ರೇನ್, ತಲೆತಿರುಗುವುದು",
+      ta: "தலை பாரம், மைக்ரேன், மயக்கம்",
+      or: "ମୁଣ୍ଡ ଭାରି ଲାଗିବା, ମାଇଗ୍ରେନ୍, ଚକ୍କର",
+      ne: "टाउको भारी, माइग्रेन, रिङ्गटा",
+    },
     questionIds: ["headache_duration", "headache_severity", "headache_sudden"],
   },
   {
     id: "eye_problem",
     icon: "👁️",
-    label: { en: "Eye Problem", hi: "आंख की समस्या" },
-    description: { en: "Redness, vision change, irritation", hi: "लालिमा, धुंधला दिखना, जलन" },
+    label: {
+      en: "Eye Problem",
+      hi: "आंख की समस्या",
+      mr: "डोळ्यांची समस्या",
+      kn: "ಕಣ್ಣಿನ ಸಮಸ್ಯೆ",
+      ta: "கண் பிரச்சனை",
+      or: "ଆଖି ସମସ୍ୟା",
+      ne: "आँखाको समस्या",
+    },
+    description: {
+      en: "Redness, vision change, irritation",
+      hi: "लालिमा, धुंधला दिखना, जलन",
+      mr: "लाली, अंधुक दिसणे, जळजळ",
+      kn: "ಕೆಂಪಾಗುವುದು, ಮಸುಕು ದೃಷ್ಟಿ, ಉರಿ",
+      ta: "சிவத்தல், மங்கலான பார்வை, எரிச்சல்",
+      or: "ଲାଲ୍ ପଡିବା, ଅସ୍ପଷ୍ଟ ଦୃଷ୍ଟି, ପୋଡାଜଳା",
+      ne: "रातो हुनु, धमिलो देखिनु, पोल्नु",
+    },
     questionIds: ["eye_which", "eye_symptoms", "eye_duration"],
   },
   {
     id: "stomach_problem",
     icon: "🤢",
-    label: { en: "Stomach Problem", hi: "पेट की समस्या" },
-    description: { en: "Acidity, vomiting, loose motions, cramps", hi: "एसिडिटी, उल्टी, दस्त, पेट में मरोड़" },
+    label: {
+      en: "Stomach Problem",
+      hi: "पेट की समस्या",
+      mr: "पोटाची समस्या",
+      kn: "ಹೊಟ್ಟೆಯ ಸಮಸ್ಯೆ",
+      ta: "வயிற்றுப் பிரச்சனை",
+      or: "ପେଟ ସମସ୍ୟା",
+      ne: "पेटको समस्या",
+    },
+    description: {
+      en: "Acidity, vomiting, loose motions, cramps",
+      hi: "एसिडिटी, उल्टी, दस्त, पेट में मरोड़",
+      mr: "अ‍ॅसिडिटी, उलटी, जुलाब, पोटात मुरडा",
+      kn: "ಅಸಿಡಿಟಿ, ವಾಂತಿ, ಭೇದಿ, ಹೊಟ್ಟೆ ಸೆಳೆತ",
+      ta: "அசிடிட்டி, வாந்தி, பேதி, வயிற்றுப் பிடிப்பு",
+      or: "ଏସିଡିଟି, ବାନ୍ତି, ଝାଡା, ପେଟ ମୋଡି ହେବା",
+      ne: "एसिडिटी, बान्ता, पखाला, पेट बटारिने",
+    },
     questionIds: ["stomach_symptoms", "stomach_duration", "stomach_severity"],
   },
   {
     id: "breathing_problem",
     icon: "🫁",
-    label: { en: "Breathing Problem", hi: "सांस लेने में तकलीफ" },
-    description: { en: "Shortness of breath, wheezing, tightness", hi: "सांस फूलना, घरघराहट, सीने में जकड़न" },
+    label: {
+      en: "Breathing Problem",
+      hi: "सांस लेने में तकलीफ",
+      mr: "श्वास घेण्यास त्रास",
+      kn: "ಉಸಿರಾಟದ ತೊಂದರೆ",
+      ta: "சுவாசப் பிரச்சனை",
+      or: "ଶ୍ୱାସକ୍ରିୟାରେ କଷ୍ଟ",
+      ne: "श्वासप्रश्वासमा समस्या",
+    },
+    description: {
+      en: "Shortness of breath, wheezing, tightness",
+      hi: "सांस फूलना, घरघराहट, सीने में जकड़न",
+      mr: "श्वास लागणे, घरघर, छातीत आवळणे",
+      kn: "ಉಬ್ಬಸ, ಉಸಿರುಕಟ್ಟುವುದು, ಎದೆ ಬಿಗಿತ",
+      ta: "மூச்சுத்திணறல், இளைப்பு, நெஞ்சு இறுக்கம்",
+      or: "ଶ୍ୱାସ ଫୁଲିବା, ଘରଘର ଶବ୍ଦ, ଛାତି ଜକଡ଼ିବା",
+      ne: "सास फुल्ने, घर्घराहट, छाती कस्सिने",
+    },
     questionIds: ["breathing_onset", "breathing_severity", "breathing_chest_pain"],
   },
   {
     id: "skin_problem",
     icon: "🧴",
-    label: { en: "Skin Problem", hi: "त्वचा / दाने / खुजली" },
-    description: { en: "Rashes, itching, allergy, swelling", hi: "दाने, खुजली, एलर्जी, सूजन" },
+    label: {
+      en: "Skin Problem",
+      hi: "त्वचा / दाने / खुजली",
+      mr: "त्वचा / पुरळ / खाज",
+      kn: "ಚರ್ಮ / ದದ್ದು / ತುರಿಕೆ",
+      ta: "தோல் / தடிப்பு / அரிப்பு",
+      or: "ଚର୍ମ / କୁଣ୍ଡିଆ / ଦାଗ",
+      ne: "छाला / दाद / चिलाउने",
+    },
+    description: {
+      en: "Rashes, itching, allergy, swelling",
+      hi: "दाने, खुजली, एलर्जी, सूजन",
+      mr: "पुरळ, खाज, अ‍ॅलर्जी, सूज",
+      kn: "ದದ್ದು, ತುರಿಕೆ, ಅಲರ್ಜಿ, ಊತ",
+      ta: "தடிப்பு, அரிப்பு, அலர்ஜி, வீக்கம்",
+      or: "କୁଣ୍ଡିଆ, ଫୋଟକା, ଆଲର୍ଜି, ଫୁଲିବା",
+      ne: "दाग, चिलाउने, एलर्जी, सुन्निने",
+    },
     questionIds: ["skin_symptoms", "skin_duration", "skin_spreading"],
   },
   {
     id: "injury",
     icon: "🩹",
-    label: { en: "Injury", hi: "चोट / दुर्घटना" },
-    description: { en: "Fall, cut, burn, sports impact", hi: "गिरना, घाव, जलना, चोट लगना" },
+    label: {
+      en: "Injury",
+      hi: "चोट / दुर्घटना",
+      mr: "इजा / जखम",
+      kn: "ಗಾಯ / ಅಪಘಾತ",
+      ta: "காயம் / விபத்து",
+      or: "ଆଘାତ / ଦୁର୍ଘଟଣା",
+      ne: "चोटपटक / दुर्घटना",
+    },
+    description: {
+      en: "Fall, cut, burn, sports impact",
+      hi: "गिरना, घाव, जलना, चोट लगना",
+      mr: "पडणे, कापणे, भाजणे, मार लागणे",
+      kn: "ಬೀಳುವುದು, ಕತ್ತರಿಸುವುದು, ಸುಟ್ಟ ಗಾಯ",
+      ta: "கீழே விழுதல், வெட்டுக் காயம், தீக்காயம்",
+      or: "ପଡିଯିବା, କଟିବା, ପୋଡିବା, ଆଘାତ",
+      ne: "लड्नु, काटिनु, पोल्नु, चोट लाग्नु",
+    },
     questionIds: ["injury_mechanism", "injury_location", "injury_duration", "injury_bleeding"],
   },
   {
     id: "dental_problem",
     icon: "🦷",
-    label: { en: "Dental Problem", hi: "दांत / मुंह की समस्या" },
-    description: { en: "Toothache, gum swelling, bleeding", hi: "दांत दर्द, मसूड़ों में सूजन, खून आना" },
+    label: {
+      en: "Dental Problem",
+      hi: "दांत / मुंह की समस्या",
+      mr: "दातांची / तोंडाची समस्या",
+      kn: "ಹಲ್ಲಿನ / ಬಾಯಿಯ ಸಮಸ್ಯೆ",
+      ta: "பல் / வாய் பிரச்சனை",
+      or: "ଦାନ୍ତ / ପାଟି ସମସ୍ୟା",
+      ne: "दाँत / मुखको समस्या",
+    },
+    description: {
+      en: "Toothache, gum swelling, bleeding",
+      hi: "दांत दर्द, मसूड़ों में सूजन, खून आना",
+      mr: "दातदुखी, हिरड्यांची सूज, रक्त येणे",
+      kn: "ಹಲ್ಲು ನೋವು, ವಸಡು ಊತ, ರಕ್ತಸ್ರಾವ",
+      ta: "பல் வலி, ஈறு வீக்கம், ரத்தக் கசிவு",
+      or: "ଦାନ୍ତ ବିନ୍ଧା, ମାଢି ଫୁଲିବା, ରକ୍ତ ବାହାରିବା",
+      ne: "दाँत दुखाइ, गिजा सुन्निने, रगत आउने",
+    },
     questionIds: ["dental_symptoms", "dental_duration", "dental_severity"],
   },
   {
     id: "urine_problem",
     icon: "🚽",
-    label: { en: "Urine Problem", hi: "पेशाब में समस्या" },
-    description: { en: "Burning sensation, frequency, pain", hi: "पेशाब में जलन, बार-बार जाना, दर्द" },
+    label: {
+      en: "Urine Problem",
+      hi: "पेशाब में समस्या",
+      mr: "लघवीची समस्या",
+      kn: "ಮೂತ್ರದ ಸಮಸ್ಯೆ",
+      ta: "சிறுநீர் பிரச்சனை",
+      or: "ପରିସ୍ରା ସମସ୍ୟା",
+      ne: "पिसाबको समस्या",
+    },
+    description: {
+      en: "Burning sensation, frequency, pain",
+      hi: "पेशाब में जलन, बार-बार जाना, दर्द",
+      mr: "लघवी करताना जळजळ, वारंवार लागणे, वेदना",
+      kn: "ಉರಿ ಮೂತ್ರ, ಆಗಾಗ್ಗೆ ಮೂತ್ರ ವಿಸರ್ಜನೆ, ನೋವು",
+      ta: "சிறுநீர் எரிச்சல், அடிக்கடி போதல், வலி",
+      or: "ପରିସ୍ରା ପୋଡା, ବାରମ୍ବାର ଲାଗିବା, ଯନ୍ତ୍ରଣା",
+      ne: "पिसाब पोल्ने, छिनछिनमा लाग्ने, दुखाइ",
+    },
     questionIds: ["urine_symptoms", "urine_duration", "urine_blood"],
   },
   {
     id: "animal_bite",
     icon: "🐕",
-    label: { en: "Animal Bite / Scratch", hi: "जानवर का काटना / खरोंच" },
-    description: { en: "Dog, cat, monkey, or other animal exposure", hi: "कुत्ता, बिल्ली, बंदर या अन्य जानवर का हमला" },
+    label: {
+      en: "Animal Bite / Scratch",
+      hi: "जानवर का काटना / खरोंच",
+      mr: "प्राण्याने चावणे / नखे मारणे",
+      kn: "ಪ್ರಾಣಿ ಕಡಿತ / ಪರಚುವುದು",
+      ta: "விலங்கு கடித்தல் / கீறல்",
+      or: "ପଶୁ କାମୁଡା / ଆଞ୍ଚୁଡିବା",
+      ne: "जनावरले टोकेको / कोतरेको",
+    },
+    description: {
+      en: "Dog, cat, monkey, or other animal exposure",
+      hi: "कुत्ता, बिल्ली, बंदर या अन्य जानवर का हमला",
+      mr: "कुत्रा, मांजर, माकड किंवा इतर प्राणी",
+      kn: "ನಾಯಿ, ಬೆಕ್ಕು, ಮಂಗ ಅಥವಾ ಇತರೆ ಪ್ರಾಣಿ",
+      ta: "நாய், பூனை, குரங்கு அல்லது பிற விலங்கு",
+      or: "କୁକୁର, ବିରାଡ଼ି, ମାଙ୍କଡ଼ କିମ୍ବା ଅନ୍ୟାନ୍ୟ ପଶୁ",
+      ne: "कुकुर, बिरालो, बाँदर वा अन्य जनावर",
+    },
     questionIds: ["animal_type", "animal_skin_broken", "animal_time_elapsed", "animal_bleeding"],
   },
   {
     id: "other_problem",
     icon: "📝",
-    label: { en: "Other Problem", hi: "अन्य कोई समस्या" },
-    description: { en: "Describe in your own words (voice / text)", hi: "अपनी भाषा में बोलकर या लिखकर बताएं" },
+    label: {
+      en: "Other Problem",
+      hi: "अन्य कोई समस्या",
+      mr: "इतर कोणतीही समस्या",
+      kn: "ಇತರೆ ಯಾವುದೇ ಸಮಸ್ಯೆ",
+      ta: "பிற பிரச்சனைகள்",
+      or: "ଅନ୍ୟ କୌଣସି ସମସ୍ୟା",
+      ne: "अन्य कुनै समस्या",
+    },
+    description: {
+      en: "Describe in your own words (voice / text)",
+      hi: "अपनी भाषा में बोलकर या लिखकर बताएं",
+      mr: "आपल्या भाषेत बोलून किंवा लिहून सांगा",
+      kn: "ನಿಮ್ಮ ಸ್ವಂತ ಮಾತಿನಲ್ಲಿ ತಿಳಿಸಿ",
+      ta: "உங்கள் சொந்த வார்த்தைகளில் கூறவும்",
+      or: "ନିଜ ଭାଷାରେ କହି ବା ଲେଖି ଜଣାନ୍ତୁ",
+      ne: "आफ्नै शब्दमा बोलेर वा लेखेर बताउनुहोस्",
+    },
     questionIds: ["other_description", "other_duration", "other_severity"],
   },
 ];
@@ -729,8 +948,8 @@ export const QUESTION_DEFINITIONS: Record<string, AdaptiveQuestion> = {
 
 export interface BodyLocationItem {
   id: string;
-  label: { en: string; hi: string };
-  subLocations?: { id: string; label: { en: string; hi: string } }[];
+  label: LocalizedString;
+  subLocations?: { id: string; label: LocalizedString }[];
   isChest?: boolean;
 }
 
@@ -818,7 +1037,13 @@ export const BODY_LOCATIONS: BodyLocationItem[] = [
   },
 ];
 
-export const DURATION_OPTIONS = [
+export interface DurationOption {
+  id: string;
+  value: string;
+  label: LocalizedString;
+}
+
+export const DURATION_OPTIONS: DurationOption[] = [
   { id: "today", value: "today", label: { en: "Today (Less than 24 hours)", hi: "आज (24 घंटे से कम)" } },
   { id: "1_3_days", value: "1–3 days", label: { en: "1–3 days ago", hi: "1–3 दिन पहले" } },
   { id: "4_7_days", value: "4–7 days", label: { en: "4–7 days ago", hi: "4–7 दिन पहले" } },

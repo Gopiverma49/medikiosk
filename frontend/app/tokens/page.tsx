@@ -2,6 +2,8 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "../../lib/api";
 import type { TokenDisplayState, TokenColumnDisplay } from "../../lib/types";
+import { useKioskLanguage } from "../../lib/kioskLanguage";
+import { t } from "../../lib/translations";
 
 // Clean resonant synthesized hospital chime via Web Audio API
 function playHospitalChime() {
@@ -45,6 +47,7 @@ function playHospitalChime() {
 }
 
 export default function TokenDisplayPage() {
+  const { baseLanguage } = useKioskLanguage();
   const [displayState, setDisplayState] = useState<TokenDisplayState>({
     column1: null,
     column2: null,
@@ -256,14 +259,14 @@ export default function TokenDisplayPage() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl md:text-2xl font-black tracking-tight text-slate-900 leading-none">
-                OPD Token Call Board
+                {t("token_board_title", baseLanguage)}
               </h1>
               <span className="bg-blue-100 text-blue-800 text-[11px] font-black uppercase px-2.5 py-0.5 rounded-full tracking-wider border border-blue-200">
-                Live Status
+                {t("live_status", baseLanguage)}
               </span>
             </div>
             <p className="text-xs md:text-sm text-slate-500 font-semibold mt-1">
-              Outpatient Department • {displayRooms.length} Active Consultation Rooms
+              {t("opd_active_rooms", baseLanguage)} ({displayRooms.length})
             </p>
           </div>
         </div>
@@ -290,7 +293,7 @@ export default function TokenDisplayPage() {
             }`}
             title="Toggle chime on call"
           >
-            <span>{soundEnabled ? "🔔 Audio On" : "🔕 Muted"}</span>
+            <span>{soundEnabled ? t("audio_on", baseLanguage) : t("audio_muted", baseLanguage)}</span>
           </button>
 
           <button
@@ -299,7 +302,7 @@ export default function TokenDisplayPage() {
             className="p-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 transition text-sm font-bold shadow-2xs"
             title="Toggle Fullscreen"
           >
-            {isFullscreen ? "⤓ Exit" : "⛶ Fullscreen"}
+            {isFullscreen ? t("exit_fullscreen", baseLanguage) : t("fullscreen", baseLanguage)}
           </button>
         </div>
       </header>
@@ -313,6 +316,7 @@ export default function TokenDisplayPage() {
               roomTitle={room.room_number || `ROOM ${String.fromCharCode(65 + idx)}`}
               data={room}
               isFlashing={Boolean(flashingRooms[room.room_number])}
+              baseLanguage={baseLanguage}
             />
           ))}
         </div>
@@ -326,12 +330,14 @@ export default function TokenDisplayPage() {
           </div>
           <div>
             <div className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">
-              Waiting Queue
+              {t("waiting_queue", baseLanguage)}
             </div>
             <div className="text-xl md:text-2xl font-black text-slate-800 font-mono flex items-center gap-2">
               <span className="text-blue-600">{displayState.waiting_count}</span>
               <span className="text-sm font-bold text-slate-600 font-sans">
-                {displayState.waiting_count === 1 ? "Patient Waiting" : "Patients Waiting in Queue"}
+                {displayState.waiting_count === 1
+                  ? t("patient_waiting_single", baseLanguage)
+                  : t("patient_waiting_plural", baseLanguage)}
               </span>
             </div>
           </div>
@@ -339,7 +345,7 @@ export default function TokenDisplayPage() {
 
         <div className="text-xs text-slate-500 font-medium flex items-center gap-2 bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl">
           <span className="w-2 h-2 rounded-full bg-blue-500 inline-block animate-ping" />
-          <span>Please proceed to your assigned room when your token is called.</span>
+          <span>{t("queue_instruction", baseLanguage)}</span>
         </div>
       </footer>
     </div>
@@ -350,9 +356,10 @@ interface RoomCardProps {
   roomTitle: string;
   data: TokenColumnDisplay | null;
   isFlashing: boolean;
+  baseLanguage: any;
 }
 
-function RoomCard({ roomTitle, data, isFlashing }: RoomCardProps) {
+function RoomCard({ roomTitle, data, isFlashing, baseLanguage }: RoomCardProps) {
   const hasActivePatient = Boolean(data && data.token_number && data.token_number.trim() !== "");
   const doctorName = data?.doctor_name && data.doctor_name.trim() !== "" ? data.doctor_name : "—";
 
@@ -378,10 +385,10 @@ function RoomCard({ roomTitle, data, isFlashing }: RoomCardProps) {
         </div>
       </div>
 
-      {/* Card Center: PATIENT TOKEN DISPLAY (Compact internal space + Giant Token Number) */}
+      {/* Card Center: PATIENT TOKEN DISPLAY */}
       <div className="py-4 md:py-6 px-4 text-center flex flex-col items-center justify-center my-auto">
         <div className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1">
-          {hasActivePatient ? "NOW CONSULTING" : "ROOM STATUS"}
+          {hasActivePatient ? t("now_consulting", baseLanguage) : t("room_status", baseLanguage)}
         </div>
 
         {hasActivePatient ? (
@@ -398,13 +405,14 @@ function RoomCard({ roomTitle, data, isFlashing }: RoomCardProps) {
             {/* Active Consultation Badge */}
             <div className="mt-2.5 inline-flex items-center gap-2 px-4 py-1.5 bg-emerald-100 border border-emerald-300 text-emerald-900 rounded-full text-xs font-black shadow-xs">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-ping" />
-              <span>In Consultation • {roomTitle}</span>
+              <span>{t("in_consultation", baseLanguage)} • {roomTitle}</span>
             </div>
 
             {/* Patient Name if present */}
             {data?.patient_name && (
               <div className="mt-2 text-xs font-bold text-slate-700">
-                Patient: <span className="text-slate-900 font-extrabold text-sm">{data.patient_name}</span>
+                {t("patient_label_tv", baseLanguage)}{" "}
+                <span className="text-slate-900 font-extrabold text-sm">{data.patient_name}</span>
               </div>
             )}
           </div>
@@ -414,13 +422,13 @@ function RoomCard({ roomTitle, data, isFlashing }: RoomCardProps) {
               ─ ─ ─
             </div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 border border-slate-200 text-slate-500 rounded-full text-xs font-bold mt-2">
-              <span>Ready for Next Patient</span>
+              <span>{t("ready_next_patient", baseLanguage)}</span>
             </div>
           </div>
         )}
       </div>
 
-      {/* Card Footer: CONSULTING DOCTOR & STATION DETAILS (Without Busy/Available badge) */}
+      {/* Card Footer: CONSULTING DOCTOR & STATION DETAILS */}
       <div className="px-5 py-3.5 border-t border-slate-200 bg-slate-50/80 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center text-blue-700 font-bold flex-shrink-0 text-xs">
@@ -428,10 +436,10 @@ function RoomCard({ roomTitle, data, isFlashing }: RoomCardProps) {
           </div>
           <div className="truncate">
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 leading-tight">
-              ATTENDING PHYSICIAN
+              {t("attending_physician", baseLanguage)}
             </div>
             <div className={`text-xs md:text-sm font-extrabold tracking-tight truncate ${doctorName !== "—" ? "text-slate-900" : "text-slate-400 italic"}`}>
-              {doctorName !== "—" ? doctorName : "Doctor Not Logged In"}
+              {doctorName !== "—" ? doctorName : t("doctor_not_logged_in", baseLanguage)}
             </div>
           </div>
         </div>

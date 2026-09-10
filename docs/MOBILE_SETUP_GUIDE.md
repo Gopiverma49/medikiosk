@@ -60,17 +60,13 @@ npm run dev:all
 This automatically starts:
 1. **FastAPI Backend** (listening on `0.0.0.0:8000`)
 2. **Next.js Frontend** (listening on `0.0.0.0:3000`)
-3. **Secure HTTPS Tunnel** (prints your phone URL `https://*.trycloudflare.com`)
+3. **Connectivity Suite** (prints both Local Wi-Fi & Public HTTPS Tunnel QR codes)
 
 ---
 
 ### Step 4: Open the App on Your Phone
-1. Open **Google Chrome** (Android) or **Safari** (iOS) on your phone.
-2. In the URL address bar, enter:
-   ```text
-   http://YOUR_LAPTOP_IP:3000
-   ```
-   *(Replace `YOUR_LAPTOP_IP` with the IPv4 address from Step 2, e.g., `http://192.168.1.24:3000`)*
+1. **Option 1 (Fastest):** Scan the **Local Wi-Fi QR Code** in your terminal using your phone camera (when connected to the same Wi-Fi / Hotspot).
+2. **Option 2 (Anywhere):** Scan the **Public HTTPS Tunnel QR Code** in your terminal to open MediKiosk over 4G/5G or external networks with valid SSL.
 
 ---
 

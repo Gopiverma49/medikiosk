@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { Language } from "@/lib/translations";
-import { BODY_LOCATIONS, BodyLocationItem } from "@/lib/symptomFlows";
+import { BODY_LOCATIONS, BodyLocationItem, LocalizedString } from "@/lib/symptomFlows";
 
 interface BodyLocationSelectorProps {
   lang: Language;
@@ -36,7 +36,7 @@ export default function BodyLocationSelector({
     }
   };
 
-  const handleSubSelect = (sub: { id: string; label: { en: string; hi: string } }) => {
+  const handleSubSelect = (sub: { id: string; label: LocalizedString }) => {
     const isBilateral = selectedMain?.id === "arm" || selectedMain?.id === "leg";
     const sidePrefix = isBilateral
       ? side === "left"

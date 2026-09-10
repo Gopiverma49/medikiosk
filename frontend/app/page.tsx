@@ -1,19 +1,32 @@
+"use client";
 import Link from "next/link";
+import { useKioskLanguage, BASE_LANGUAGE_OPTIONS } from "../lib/kioskLanguage";
+import { t } from "../lib/translations";
 
 export default function Home() {
+  const { baseLanguage } = useKioskLanguage();
+  const currentRegion = BASE_LANGUAGE_OPTIONS.find((b) => b.code === baseLanguage);
+
   return (
     <div className="space-y-10 py-4 max-w-6xl mx-auto">
       {/* Hero Welcome Banner */}
       <div className="bg-white border border-slate-200 rounded-3xl p-8 md:p-12 shadow-xs relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="relative z-10 max-w-2xl">
-          <span className="text-xs font-bold font-mono tracking-widest text-emerald-700 uppercase block mb-2">
-            WELCOME TO MEDIKIOSK
-          </span>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className="text-xs font-bold font-mono tracking-widest text-emerald-700 uppercase">
+              {t("app_title", baseLanguage)}
+            </span>
+            {currentRegion && (
+              <span className="text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                📍 {currentRegion.code === "en" ? "English" : `${currentRegion.nativeName} (${currentRegion.enName})`}
+              </span>
+            )}
+          </div>
           <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight text-slate-900 mb-3">
-            MediKiosk Platform
+            {t("welcome_heading", baseLanguage)}
           </h1>
           <p className="text-slate-600 text-base md:text-lg leading-relaxed">
-            AI-assisted multilingual clinical intake, document digitization, contradiction detection, and physician verification workspace for high-density hospital outpatient departments.
+            {t("welcome_subheading", baseLanguage)} {t("welcome_hero_desc", baseLanguage)}
           </p>
         </div>
 
@@ -30,11 +43,11 @@ export default function Home() {
         </div>
       </div>
 
-      {/* 4 Main Portals */}
+      {/* 5 Main Portals */}
       <div>
         <div className="mb-6 px-1">
           <h2 className="text-sm font-mono font-bold uppercase tracking-widest text-slate-500">
-            SELECT MAIN PORTAL
+            {t("select_main_portal", baseLanguage)}
           </h2>
         </div>
 
@@ -44,7 +57,7 @@ export default function Home() {
             href="/patient"
             target="_blank"
             rel="noopener noreferrer"
-            className="group bg-white border-2 border-slate-200 hover:border-emerald-500 rounded-3xl p-6 transition-all duration-200 transform hover:-translate-y-1.5 shadow-xs hover:shadow-xl flex flex-col text-center items-center justify-between"
+            className="group bg-white border-2 border-slate-200 hover:border-emerald-500 rounded-3xl p-6 transition-all duration-200 transform hover:-translate-y-1.5 shadow-xs hover:shadow-xl flex flex-col text-center items-center justify-between ring-2 ring-emerald-500/20"
           >
             <div>
               {/* Enlarged Icon */}
@@ -52,13 +65,13 @@ export default function Home() {
                 🏥
               </div>
               <div className="text-[11px] font-mono uppercase tracking-wider text-emerald-700 font-black mb-1">
-                PORTAL 1 • TERMINAL
+                {t("portal_1_tag", baseLanguage)}
               </div>
               <h2 className="text-xl font-black text-slate-900 mb-2 group-hover:text-emerald-800 transition-colors">
-                Patient Kiosk
+                {t("app_title", baseLanguage)}
               </h2>
               <p className="text-slate-600 text-xs leading-relaxed font-medium">
-                5-stage accessible patient intake with English/Hindi localization, first-time consent, touch or voice guidance, and instant token generation.
+                {t("portal_1_desc", baseLanguage)}
               </p>
             </div>
           </Link>
@@ -76,13 +89,13 @@ export default function Home() {
                 👨‍⚕️
               </div>
               <div className="text-[11px] font-mono uppercase tracking-wider text-blue-700 font-black mb-1">
-                PORTAL 2 • CONSULTATION
+                {t("portal_2_tag", baseLanguage)}
               </div>
               <h2 className="text-xl font-black text-slate-900 mb-2 group-hover:text-blue-800 transition-colors">
-                Doctor Station
+                {t("portal_2_title", baseLanguage)}
               </h2>
               <p className="text-slate-600 text-xs leading-relaxed font-medium">
-                Live upcoming token queue, patient call management, clinical summary verification, and document inspection.
+                {t("portal_2_desc", baseLanguage)}
               </p>
             </div>
           </Link>
@@ -100,13 +113,13 @@ export default function Home() {
                 👩‍⚕️
               </div>
               <div className="text-[11px] font-mono uppercase tracking-wider text-teal-700 font-black mb-1">
-                PORTAL 3 • NURSE DESK
+                {t("portal_3_tag", baseLanguage)}
               </div>
               <h2 className="text-xl font-black text-slate-900 mb-2 group-hover:text-teal-800 transition-colors">
-                Nurse Station
+                {t("portal_3_title", baseLanguage)}
               </h2>
               <p className="text-slate-600 text-xs leading-relaxed font-medium">
-                Live patient queue monitoring, token tracking, and patient past medicinal history lookup via ID card scan or number entry.
+                {t("portal_3_desc", baseLanguage)}
               </p>
             </div>
           </Link>
@@ -124,13 +137,13 @@ export default function Home() {
                 📺
               </div>
               <div className="text-[11px] font-mono uppercase tracking-wider text-purple-700 font-black mb-1">
-                PORTAL 4 • WAITING TV
+                {t("portal_4_tag", baseLanguage)}
               </div>
               <h2 className="text-xl font-black text-slate-900 mb-2 group-hover:text-purple-800 transition-colors">
-                Token Display
+                {t("portal_4_title", baseLanguage)}
               </h2>
               <p className="text-slate-600 text-xs leading-relaxed font-medium">
-                Dedicated 2-column live waiting-room TV display with simultaneous doctor calling, audio chime, and real-time sync.
+                {t("portal_4_desc", baseLanguage)}
               </p>
             </div>
           </Link>
@@ -148,13 +161,13 @@ export default function Home() {
                 ⚙️
               </div>
               <div className="text-[11px] font-mono uppercase tracking-wider text-slate-600 font-black mb-1">
-                PORTAL 5 • ADMIN
+                {t("portal_5_tag", baseLanguage)}
               </div>
               <h2 className="text-xl font-black text-slate-900 mb-2 group-hover:text-slate-900 transition-colors">
-                Hospital Admin
+                {t("portal_5_title", baseLanguage)}
               </h2>
               <p className="text-slate-600 text-xs leading-relaxed font-medium">
-                Physician and nurse accounts management, patient records audit, emergency triage rules, and room controls.
+                {t("portal_5_desc", baseLanguage)}
               </p>
             </div>
           </Link>

@@ -1,6 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
+import { useKioskLanguage } from "../../lib/kioskLanguage";
+import { t } from "../../lib/translations";
+import { PasswordInput } from "../../components/PasswordInput";
 import type { DoctorAccount, NurseAccount, AdminPatientRecord, ConsultationRoomItem } from "../../lib/types";
 
 type AdminSection = "doctors" | "nurses" | "patients" | "rooms";
@@ -26,6 +29,7 @@ function formatIndiaDateTime(dateStr?: string | null): string {
 }
 
 export default function AdminPage() {
+  const { baseLanguage } = useKioskLanguage();
   // --- Admin Authentication State ---
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
@@ -419,10 +423,10 @@ export default function AdminPage() {
           🔒
         </div>
         <h1 className="text-2xl font-black text-slate-900 text-center mb-1">
-          Hospital Admin Portal
+          {t("admin_portal_title", baseLanguage)}
         </h1>
         <p className="text-slate-500 text-xs text-center mb-6">
-          Authorized personnel only. Manage doctor IDs, patient records, and consultation rooms.
+          {t("admin_portal_desc", baseLanguage)}
         </p>
 
         {authError && (
@@ -434,7 +438,7 @@ export default function AdminPage() {
         <form onSubmit={handleAdminLogin} className="space-y-4">
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-              Admin Username
+              {t("login_username", baseLanguage)}
             </label>
             <input
               type="text"
@@ -448,15 +452,14 @@ export default function AdminPage() {
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-              Admin Password
+              {t("login_password", baseLanguage)}
             </label>
-            <input
-              type="password"
+            <PasswordInput
               required
               value={passwordInput}
               onChange={(e) => setPasswordInput(e.target.value)}
               placeholder="••••••••"
-              className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-teal-600 rounded-xl text-sm font-semibold text-slate-800 outline-none"
+              accentColor="teal"
             />
           </div>
 
@@ -464,7 +467,7 @@ export default function AdminPage() {
             type="submit"
             className="w-full py-3.5 bg-teal-800 hover:bg-teal-900 active:scale-98 text-white font-black text-base rounded-xl shadow-lg transition"
           >
-            Access Admin Management →
+            {t("login_btn_admin", baseLanguage)} →
           </button>
         </form>
       </div>
@@ -1054,13 +1057,12 @@ export default function AdminPage() {
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
                   {editingDoctor ? "New Password (leave blank to keep current)" : "Password"}
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   required={!editingDoctor}
                   value={doctorForm.password}
                   onChange={(e) => setDoctorForm({ ...doctorForm, password: e.target.value })}
                   placeholder="••••••••"
-                  className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-teal-600 rounded-xl text-sm font-semibold text-slate-800 outline-none"
+                  accentColor="teal"
                 />
               </div>
 
@@ -1140,13 +1142,12 @@ export default function AdminPage() {
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
                   {editingNurse ? "New Password (leave blank to keep current)" : "Password"}
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   required={!editingNurse}
                   value={nurseForm.password}
                   onChange={(e) => setNurseForm({ ...nurseForm, password: e.target.value })}
                   placeholder="••••••••"
-                  className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-teal-600 rounded-xl text-sm font-semibold text-slate-800 outline-none"
+                  accentColor="teal"
                 />
               </div>
 

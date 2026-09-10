@@ -1,8 +1,11 @@
 "use client";
 import React, { useEffect, useState, useCallback } from "react";
 import { api } from "../../lib/api";
+import { useKioskLanguage } from "../../lib/kioskLanguage";
+import { t } from "../../lib/translations";
 import { PriorityPill } from "../../components/ClinicalComponents";
 import { KioskScanner } from "../../components/KioskScanner";
+import { PasswordInput } from "../../components/PasswordInput";
 import type {
   TokenQueueItem,
   Patient,
@@ -14,6 +17,7 @@ import { cleanSymptomText, formatShortIllnessName, getPastAssociatedSymptoms } f
 type NurseTab = "queue" | "history";
 
 export default function NursePage() {
+  const { baseLanguage } = useKioskLanguage();
   // --- Nurse Authentication State ---
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
@@ -205,10 +209,10 @@ export default function NursePage() {
           👩‍⚕️
         </div>
         <h1 className="text-2xl font-black text-slate-900 text-center mb-1">
-          Nurse Station Portal
+          {t("nurse_portal_title", baseLanguage)}
         </h1>
         <p className="text-slate-500 text-xs text-center mb-6">
-          Authorized hospital nursing staff login. View live patient token queue and inspect past medicinal history.
+          {t("nurse_portal_desc", baseLanguage)}
         </p>
 
         {authError && (
@@ -220,7 +224,7 @@ export default function NursePage() {
         <form onSubmit={handleNurseLogin} className="space-y-4">
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-              Nurse Username / ID
+              {t("login_username", baseLanguage)}
             </label>
             <input
               type="text"
@@ -234,15 +238,14 @@ export default function NursePage() {
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-              Password
+              {t("login_password", baseLanguage)}
             </label>
-            <input
-              type="password"
+            <PasswordInput
               required
               value={passwordInput}
               onChange={(e) => setPasswordInput(e.target.value)}
               placeholder="••••••••"
-              className="w-full p-3 bg-slate-50 border-2 border-slate-300 focus:border-teal-600 rounded-xl text-sm font-semibold text-slate-800 outline-none"
+              accentColor="teal"
             />
           </div>
 
@@ -250,7 +253,7 @@ export default function NursePage() {
             type="submit"
             className="w-full py-3.5 bg-teal-700 hover:bg-teal-800 active:scale-98 text-white font-black text-sm rounded-xl shadow-lg transition"
           >
-            Sign In to Nurse Station →
+            {t("login_btn_nurse", baseLanguage)} →
           </button>
         </form>
 

@@ -85,14 +85,14 @@ npm run dev
 
 MediKiosk is fully responsive and supports running directly on smartphones and tablets:
 
-1. **Option A (Secure HTTPS Tunnel — Works Anywhere over 4G/5G/Wi-Fi):**
-   - Run `npm run dev:all` (or `npm run dev:tunnel`).
-   - Copy the generated `https://*.trycloudflare.com` link and open it in Chrome/Safari on your phone.
-   - Enables full camera barcode scanning and microphone voice input out of the box.
+1. **Option A (Instant Local Wi-Fi Access — Fastest & Most Reliable):**
+   - Connect your phone to the same Wi-Fi / Hotspot.
+   - Scan the **Local Wi-Fi QR Code** printed in your terminal or navigate to `http://YOUR_LOCAL_IP:3000`.
 
-2. **Option B (Same Wi-Fi Local IP):**
-   - Run `ipconfig` (Windows) or `ifconfig` (Mac/Linux) to find your laptop's local IPv4 address (e.g. `192.168.1.50`).
-   - Open `http://YOUR_LOCAL_IP:3000` on your phone browser.
+2. **Option B (Secure HTTPS Cloud Tunnel — Works Anywhere over 4G/5G):**
+   - Run `npm run dev:all` (or `npm run dev:tunnel`).
+   - Scan the **Public HTTPS Tunnel QR Code** printed in your terminal.
+   - Enables full camera barcode scanning and microphone voice input out of the box with zero external configuration.
 
 ---
 

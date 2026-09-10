@@ -1,8 +1,14 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { api } from "../../lib/api";
 import { t, Language } from "../../lib/translations";
 import { VoiceService } from "../../lib/voice";
+import {
+  useKioskLanguage,
+  BASE_LANGUAGE_OPTIONS,
+  SupportedLanguage,
+} from "../../lib/kioskLanguage";
 import { KioskStepIndicator } from "../../components/KioskStepIndicator";
 import { KioskKeypad } from "../../components/KioskKeypad";
 import { KioskScanner } from "../../components/KioskScanner";
@@ -29,8 +35,18 @@ type FlowStep =
   | "completed"; // Final Done Screen
 
 export default function PatientPage() {
+  const router = useRouter();
+  const {
+    baseLanguage,
+    sessionLanguage,
+    setSessionLanguage,
+    resetSessionLanguage,
+  } = useKioskLanguage();
+
+  const lang = sessionLanguage;
+  const setLang = setSessionLanguage;
+
   // Session State
-  const [lang, setLang] = useState<Language>("en");
   const [interactionMode, setInteractionMode] = useState<"touch" | "voice">("touch");
   const [step, setStep] = useState<FlowStep>("lang_mode");
   const [historyStack, setHistoryStack] = useState<FlowStep[]>([]);
@@ -96,7 +112,7 @@ export default function PatientPage() {
     }
   };
 
-  const resetSession = () => {
+  const restartPatientSession = useCallback(() => {
     VoiceService.stopSpeaking();
     VoiceService.stopListening();
     setPatient(null);
@@ -108,8 +124,17 @@ export default function PatientPage() {
     setDocStatus({});
     setScannedDocs([]);
     setHistoryStack([]);
+    setInteractionMode("touch");
+    setRegForm({ name: "", phone: "", age: "", gender: "Male" });
+    setRegErrors({});
+    setConsentInfo(true);
+    setConsentVoice(true);
+    setConsentRest(true);
     setStep("lang_mode");
-  };
+    setSessionLanguage(baseLanguage);
+  }, [baseLanguage, setSessionLanguage]);
+
+  const resetSession = restartPatientSession;
 
   // Safe navigation with history stack
   const goTo = (nextStep: FlowStep) => {
@@ -152,15 +177,39 @@ export default function PatientPage() {
   };
 
   const cancelSession = () => {
-    const prompt = lang === "hi" ? "क्या आप इस सत्र को रद्द करना चाहते हैं?" : "Are you sure you want to cancel this session?";
-    if (window.confirm(prompt)) {
-      resetSession();
-    }
+    restartPatientSession();
   };
+
+  // Ensure every session starts with the chosen base language
+  useEffect(() => {
+    setSessionLanguage(baseLanguage);
+  }, [baseLanguage, setSessionLanguage]);
+
+  // Pre-warm speech synthesis engine on component mount and on first user gesture
+  useEffect(() => {
+    VoiceService.init();
+    const handleFirstGesture = () => {
+      VoiceService.warmUp();
+      window.removeEventListener("pointerdown", handleFirstGesture);
+      window.removeEventListener("keydown", handleFirstGesture);
+    };
+    window.addEventListener("pointerdown", handleFirstGesture, { passive: true, once: true });
+    window.addEventListener("keydown", handleFirstGesture, { passive: true, once: true });
+    return () => {
+      window.removeEventListener("pointerdown", handleFirstGesture);
+      window.removeEventListener("keydown", handleFirstGesture);
+    };
+  }, []);
+
+  const lastSpokenPromptRef = useRef<string | null>(null);
 
   // Trigger voice prompt for a given step if in voice mode
   const playVoicePrompt = useCallback((promptKey: any) => {
     if (interactionMode === "voice") {
+      if (lastSpokenPromptRef.current === promptKey && VoiceService.isCurrentlySpeaking()) {
+        return;
+      }
+      lastSpokenPromptRef.current = promptKey;
       const text = t(promptKey, lang);
       setIsSpeaking(true);
       setVoiceError(null);
@@ -217,7 +266,7 @@ export default function PatientPage() {
     }
   }, [step, interactionMode, playVoicePrompt]);
 
-  // Completion screen: 7-second countdown auto-reset
+  // Completion screen: 7-second countdown auto-restart back to Step 1 in Base Language
   useEffect(() => {
     if (step === "completed") {
       setAutoResetSeconds(7);
@@ -225,7 +274,7 @@ export default function PatientPage() {
         setAutoResetSeconds((prev) => {
           if (prev <= 1) {
             clearInterval(interval);
-            resetSession();
+            restartPatientSession();
             return 0;
           }
           return prev - 1;
@@ -234,18 +283,18 @@ export default function PatientPage() {
 
       return () => clearInterval(interval);
     }
-  }, [step]);
+  }, [step, restartPatientSession]);
 
-  // Global 30-second inactivity timeout: resets to start page if abandoned anywhere in patient flow
+  // Global 30-second inactivity timeout: restarts session back to Step 1 in Base Language (stays on current Patient page)
   useEffect(() => {
-    if (step === "lang_mode" || step === "completed") return;
+    if (step === "completed") return;
 
     let timeoutId: NodeJS.Timeout;
 
     const resetInactivityTimer = () => {
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
-        resetSession();
+        restartPatientSession();
       }, 30000); // 30 seconds
     };
 
@@ -259,7 +308,7 @@ export default function PatientPage() {
       clearTimeout(timeoutId);
       activityEvents.forEach((evt) => window.removeEventListener(evt, resetInactivityTimer));
     };
-  }, [step]);
+  }, [step, restartPatientSession]);
 
   // 1. Handle Patient Lookup
   const handleLookup = async (id: string) => {
@@ -533,62 +582,36 @@ export default function PatientPage() {
           />
         )}
 
-        {/* STEP 1: Language & Interaction Selection */}
+        {/* STEP 1: Interaction Selection (Touch or Voice) */}
         {step === "lang_mode" && (
-          <div className="bg-white border-2 border-slate-200 rounded-3xl p-8 md:p-12 shadow-xl text-center">
-            <h2 className="text-3xl md:text-4xl font-black text-slate-900 mb-2">
+          <div className="bg-white border-2 border-slate-200 rounded-3xl p-8 md:p-14 shadow-xl text-center animate-step-in flex flex-col items-center justify-center">
+            <h2 className="text-3xl md:text-5xl font-black text-slate-900 mb-3 tracking-tight">
               {t("welcome_heading", lang)}
             </h2>
-            <p className="text-slate-500 text-base md:text-lg mb-8">
+            <p className="text-slate-500 text-base md:text-xl max-w-2xl mx-auto mb-10 leading-relaxed font-medium">
               {t("welcome_subheading", lang)}
             </p>
 
-            <div className="mb-8">
-              <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4">
-                {t("choose_language", lang)}
-              </h3>
-              <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
-                <button
-                  type="button"
-                  onClick={() => setLang("en")}
-                  className={`py-5 px-6 rounded-2xl border-4 text-2xl font-black transition transform active:scale-95 shadow-md ${lang === "en"
-                    ? "border-teal-600 bg-teal-50 text-teal-900 ring-4 ring-teal-200"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
-                    }`}
-                >
-                  English
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLang("hi")}
-                  className={`py-5 px-6 rounded-2xl border-4 text-2xl font-black transition transform active:scale-95 shadow-md ${lang === "hi"
-                    ? "border-teal-600 bg-teal-50 text-teal-900 ring-4 ring-teal-200"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
-                    }`}
-                >
-                  हिंदी
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4">
+            <div className="w-full max-w-3xl mx-auto">
+              <h3 className="text-xs md:text-sm font-extrabold uppercase tracking-widest text-slate-400 mb-6 text-center">
                 {t("choose_interaction_mode", lang)}
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 w-full max-w-2xl mx-auto">
                 <button
                   type="button"
                   onClick={() => {
+                    VoiceService.stopSpeaking();
+                    VoiceService.stopListening();
                     setInteractionMode("touch");
                     goTo("id_method");
                   }}
-                  className="p-6 md:p-8 bg-slate-50 hover:bg-teal-50 border-4 border-slate-300 hover:border-teal-600 rounded-3xl text-left transition transform hover:-translate-y-1 active:scale-95 shadow-lg group"
+                  className="p-8 md:p-12 bg-slate-50 hover:bg-teal-50 active:bg-teal-100 border-4 border-slate-300 hover:border-teal-600 active:border-teal-600 rounded-3xl text-center flex flex-col items-center justify-center transition-all duration-200 shadow-xl hover:shadow-2xl group cursor-pointer select-none transform hover:-translate-y-1.5 active:scale-95"
                 >
-                  <div className="text-4xl mb-3">👆</div>
-                  <div className="text-2xl font-black text-slate-900 group-hover:text-teal-900 mb-1">
+                  <div className="text-6xl md:text-7xl mb-4 pointer-events-none transition-transform group-hover:scale-110">👆</div>
+                  <div className="text-2xl md:text-3xl font-black text-slate-900 group-hover:text-teal-900 pointer-events-none mb-2">
                     {t("mode_touch", lang)}
                   </div>
-                  <div className="text-sm text-slate-500 font-medium">
+                  <div className="text-sm md:text-base text-slate-500 font-semibold pointer-events-none">
                     {t("mode_touch_desc", lang)}
                   </div>
                 </button>
@@ -596,16 +619,25 @@ export default function PatientPage() {
                 <button
                   type="button"
                   onClick={() => {
+                    VoiceService.warmUp();
+                    VoiceService.playChime();
                     setInteractionMode("voice");
                     goTo("id_method");
+                    // Pre-trigger voice prompt immediately in user click gesture for instant playback
+                    lastSpokenPromptRef.current = "voice_speak_prompt_id";
+                    setIsSpeaking(true);
+                    setVoiceError(null);
+                    VoiceService.speak(t("voice_speak_prompt_id", lang), lang, () => {
+                      setIsSpeaking(false);
+                    });
                   }}
-                  className="p-6 md:p-8 bg-slate-50 hover:bg-teal-50 border-4 border-slate-300 hover:border-teal-600 rounded-3xl text-left transition transform hover:-translate-y-1 active:scale-95 shadow-lg group"
+                  className="p-8 md:p-12 bg-slate-50 hover:bg-teal-50 active:bg-teal-100 border-4 border-slate-300 hover:border-teal-600 active:border-teal-600 rounded-3xl text-center flex flex-col items-center justify-center transition-all duration-200 shadow-xl hover:shadow-2xl group cursor-pointer select-none transform hover:-translate-y-1.5 active:scale-95"
                 >
-                  <div className="text-4xl mb-3">🎤</div>
-                  <div className="text-2xl font-black text-slate-900 group-hover:text-teal-900 mb-1">
+                  <div className="text-6xl md:text-7xl mb-4 pointer-events-none transition-transform group-hover:scale-110">🎤</div>
+                  <div className="text-2xl md:text-3xl font-black text-slate-900 group-hover:text-teal-900 pointer-events-none mb-2">
                     {t("mode_voice", lang)}
                   </div>
-                  <div className="text-sm text-slate-500 font-medium">
+                  <div className="text-sm md:text-base text-slate-500 font-semibold pointer-events-none">
                     {t("mode_voice_desc", lang)}
                   </div>
                 </button>
@@ -616,7 +648,7 @@ export default function PatientPage() {
 
         {/* STEP 2: Choose ID Method */}
         {step === "id_method" && (
-          <div className="bg-white border-2 border-slate-200 rounded-3xl p-8 md:p-12 shadow-xl text-center">
+          <div className="bg-white border-2 border-slate-200 rounded-3xl p-8 md:p-12 shadow-xl text-center animate-step-in">
             <h2 className="text-3xl md:text-4xl font-black text-slate-900 mb-8">
               {t("id_method_title", lang)}
             </h2>
@@ -625,13 +657,13 @@ export default function PatientPage() {
               <button
                 type="button"
                 onClick={() => goTo("scan_id")}
-                className="p-8 bg-slate-50 hover:bg-teal-50 border-4 border-slate-300 hover:border-teal-600 rounded-3xl text-center transition transform hover:-translate-y-1 active:scale-95 shadow-lg"
+                className="p-8 bg-slate-50 hover:bg-teal-50 active:bg-teal-100 border-4 border-slate-300 hover:border-teal-600 active:border-teal-600 rounded-3xl text-center transition duration-150 shadow-lg cursor-pointer select-none"
               >
-                <div className="text-5xl mb-4">📷</div>
-                <div className="text-2xl font-black text-slate-900 mb-2">
+                <div className="text-5xl mb-4 pointer-events-none">📷</div>
+                <div className="text-2xl font-black text-slate-900 mb-2 pointer-events-none">
                   {t("scan_id", lang)}
                 </div>
-                <div className="text-sm text-slate-500 font-semibold">
+                <div className="text-sm text-slate-500 font-semibold pointer-events-none">
                   {t("scan_id_desc", lang)}
                 </div>
               </button>
@@ -639,13 +671,13 @@ export default function PatientPage() {
               <button
                 type="button"
                 onClick={() => goTo("keypad_id")}
-                className="p-8 bg-slate-50 hover:bg-teal-50 border-4 border-slate-300 hover:border-teal-600 rounded-3xl text-center transition transform hover:-translate-y-1 active:scale-95 shadow-lg"
+                className="p-8 bg-slate-50 hover:bg-teal-50 active:bg-teal-100 border-4 border-slate-300 hover:border-teal-600 active:border-teal-600 rounded-3xl text-center transition duration-150 shadow-lg cursor-pointer select-none"
               >
-                <div className="text-5xl mb-4">🔢</div>
-                <div className="text-2xl font-black text-slate-900 mb-2">
+                <div className="text-5xl mb-4 pointer-events-none">🔢</div>
+                <div className="text-2xl font-black text-slate-900 mb-2 pointer-events-none">
                   {t("enter_id", lang)}
                 </div>
-                <div className="text-sm text-slate-500 font-semibold">
+                <div className="text-sm text-slate-500 font-semibold pointer-events-none">
                   {t("enter_id_desc", lang)}
                 </div>
               </button>
@@ -654,7 +686,7 @@ export default function PatientPage() {
             <button
               type="button"
               onClick={goBack}
-              className="py-3 px-8 border-2 border-slate-300 hover:bg-slate-100 rounded-xl font-bold text-slate-600"
+              className="py-3 px-8 border-2 border-slate-300 hover:bg-slate-100 active:bg-slate-200 rounded-xl font-bold text-slate-600 cursor-pointer select-none transition"
             >
               ← {t("back", lang)}
             </button>
@@ -1385,10 +1417,22 @@ export default function PatientPage() {
             <div className="space-y-4">
               <button
                 type="button"
-                onClick={resetSession}
-                className="w-full py-5 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-black text-xl shadow-lg transition transform active:scale-95 flex items-center justify-center gap-2"
+                onClick={restartPatientSession}
+                className="w-full py-5 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-black text-xl shadow-lg transition transform active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
               >
-                ↻ {lang === "hi" ? "नया मरीज शुरू करें" : "Start Next Patient"}
+                ↻ {lang === "hi"
+                  ? "नया मरीज शुरू करें"
+                  : lang === "mr"
+                  ? "नवीन रुग्ण सुरू करा"
+                  : lang === "kn"
+                  ? "ಹೊಸ ರೋಗಿ ಪ್ರಾರಂಭಿಸಿ"
+                  : lang === "ta"
+                  ? "புதிய நோயாளி தொடங்கவும்"
+                  : lang === "or"
+                  ? "ନୂଆ ରୋଗୀ ଆରମ୍ଭ କରନ୍ତୁ"
+                  : lang === "ne"
+                  ? "नयाँ बिरामी सुरु गर्नुहोस्"
+                  : "Start Next Patient"}
               </button>
             </div>
           </div>
