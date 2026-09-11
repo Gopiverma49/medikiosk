@@ -74,12 +74,6 @@ def upgrade():
         *_timestamps(),
     )
 
-    op.create_table(
-        "clinical_concepts", _uuid_pk(),
-        sa.Column("concept_key", sa.String, nullable=False, unique=True),
-        sa.Column("display_name_en", sa.String, nullable=False),
-        sa.Column("category", sa.String, nullable=True),
-    )
 
     op.create_table(
         "documents", _uuid_pk(),
@@ -115,30 +109,6 @@ def upgrade():
         *_timestamps(),
     )
 
-    op.create_table(
-        "medications", _uuid_pk(),
-        sa.Column("encounter_id", postgresql.UUID(as_uuid=False), sa.ForeignKey("encounters.id"), nullable=False),
-        sa.Column("fact_id", postgresql.UUID(as_uuid=False), sa.ForeignKey("clinical_facts.id"), nullable=True),
-        sa.Column("name", sa.String, nullable=False),
-        sa.Column("dose", sa.String, nullable=True),
-        sa.Column("frequency", sa.String, nullable=True),
-        sa.Column("source", sa.String, nullable=False),
-        sa.Column("confidence", sa.Float, nullable=True),
-        sa.Column("verification_status", sa.String, default="UNVERIFIED"),
-        *_timestamps(),
-    )
-
-    op.create_table(
-        "allergies", _uuid_pk(),
-        sa.Column("encounter_id", postgresql.UUID(as_uuid=False), sa.ForeignKey("encounters.id"), nullable=False),
-        sa.Column("fact_id", postgresql.UUID(as_uuid=False), sa.ForeignKey("clinical_facts.id"), nullable=True),
-        sa.Column("substance", sa.String, nullable=False),
-        sa.Column("reaction", sa.String, nullable=True),
-        sa.Column("source", sa.String, nullable=False),
-        sa.Column("confidence", sa.Float, nullable=True),
-        sa.Column("verification_status", sa.String, default="UNVERIFIED"),
-        *_timestamps(),
-    )
 
     op.create_table(
         "document_extractions", _uuid_pk(),
@@ -150,17 +120,6 @@ def upgrade():
         *_timestamps(),
     )
 
-    op.create_table(
-        "lab_results", _uuid_pk(),
-        sa.Column("encounter_id", postgresql.UUID(as_uuid=False), sa.ForeignKey("encounters.id"), nullable=False),
-        sa.Column("fact_id", postgresql.UUID(as_uuid=False), sa.ForeignKey("clinical_facts.id"), nullable=True),
-        sa.Column("test_name", sa.String, nullable=False),
-        sa.Column("value", sa.Float, nullable=True),
-        sa.Column("unit", sa.String, nullable=True),
-        sa.Column("source", sa.String, nullable=False),
-        sa.Column("confidence", sa.Float, nullable=True),
-        *_timestamps(),
-    )
 
     op.create_table(
         "clinical_summaries", _uuid_pk(),
@@ -236,29 +195,6 @@ def upgrade():
         *_timestamps(),
     )
 
-    op.create_table(
-        "ai_provenance", _uuid_pk(),
-        sa.Column("encounter_id", postgresql.UUID(as_uuid=False), nullable=True),
-        sa.Column("operation", sa.String, nullable=False),
-        sa.Column("provider", sa.String, nullable=False),
-        sa.Column("model", sa.String, nullable=True),
-        sa.Column("input_reference", sa.String, nullable=True),
-        sa.Column("output_reference", sa.String, nullable=True),
-        sa.Column("confidence", sa.Float, nullable=True),
-        sa.Column("status", sa.String, default="success"),
-        *_timestamps(),
-    )
-
-    op.create_table(
-        "ai_evaluations", _uuid_pk(),
-        sa.Column("metric_name", sa.String, nullable=False),
-        sa.Column("precision", sa.Float, nullable=True),
-        sa.Column("recall", sa.Float, nullable=True),
-        sa.Column("f1", sa.Float, nullable=True),
-        sa.Column("extra", postgresql.JSON, nullable=True),
-        sa.Column("computed_at", sa.DateTime, nullable=True),
-        *_timestamps(),
-    )
 
     op.create_table(
         "human_verifications", _uuid_pk(),
@@ -282,10 +218,11 @@ def upgrade():
 
 def downgrade():
     for table in [
-        "audit_logs", "human_verifications", "ai_evaluations", "ai_provenance",
+        "audit_logs", "human_verifications",
         "contradiction_resolutions", "contradictions", "triage_events", "red_flag_events",
-        "red_flag_rule_versions", "red_flag_rules", "clinical_summaries", "lab_results",
-        "document_extractions", "allergies", "medications", "clinical_facts", "documents",
-        "clinical_concepts", "history_answers", "consents", "encounters", "patients", "users",
+        "red_flag_rule_versions", "red_flag_rules", "clinical_summaries",
+        "document_extractions", "clinical_facts", "documents",
+        "history_answers", "consents", "encounters", "patients", "users",
     ]:
         op.drop_table(table)
+

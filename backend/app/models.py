@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     Column, String, Integer, Float, Boolean, DateTime, ForeignKey, JSON, Text, Enum
 )
-from .db_types import GUID, EncryptedString, EncryptedText
+from .db_types import GUID, EncryptedString, EncryptedText, EncryptedSearchableString, EncryptedInteger
 from sqlalchemy.orm import relationship
 
 from .database import Base
@@ -68,20 +68,20 @@ class User(Base, TimestampMixin):
     """Staff / patient login identity used for JWT auth + RBAC."""
     __tablename__ = "users"
     id = Column(GUID(), primary_key=True, default=gen_uuid)
-    username = Column(String, unique=True, nullable=False, index=True)
+    username = Column(EncryptedSearchableString, unique=True, nullable=False, index=True)
     hashed_password = Column(String, nullable=False)
     role = Column(Enum(Role), nullable=False, default=Role.PATIENT)
-    full_name = Column(String, nullable=True)
+    full_name = Column(EncryptedString, nullable=True)
 
 
 class Patient(Base, TimestampMixin):
     __tablename__ = "patients"
     id = Column(GUID(), primary_key=True, default=gen_uuid)
-    patient_id = Column(String, unique=True, nullable=True, index=True)  # 10-digit ID e.g. 1000000001
+    patient_id = Column(EncryptedSearchableString, unique=True, nullable=True, index=True)  # 10-digit ID e.g. 1000000001
     name = Column(EncryptedString, nullable=False)
     phone = Column(EncryptedString, nullable=True)
     phone_hash = Column(String, unique=False, nullable=True, index=True)  # HMAC-SHA256 blind index for secure lookup
-    age = Column(Integer, nullable=True)
+    age = Column(EncryptedInteger, nullable=True)
     gender = Column(String, nullable=True)
     preferred_language = Column(String, nullable=True)  # en | hi | kn
     department = Column(String, nullable=True)

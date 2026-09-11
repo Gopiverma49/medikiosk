@@ -71,3 +71,55 @@ class EncryptedText(TypeDecorator):
             return None
         from .services.crypto import decrypt_field
         return decrypt_field(str(value))
+
+
+class EncryptedSearchableString(TypeDecorator):
+    """
+    Transparently encrypts plaintext to deterministic AES-256 ciphertext on INSERT/UPDATE,
+    and decrypts back to plaintext on SELECT.
+    Because encryption is deterministic under the KMS master key, exact-match equality
+    queries (WHERE col = :value) and UNIQUE constraints operate transparently while keeping
+    raw storage in database dumps unreadable.
+    """
+    impl = String
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        from .services.crypto import encrypt_deterministic
+        return encrypt_deterministic(str(value))
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        from .services.crypto import decrypt_field
+        return decrypt_field(str(value))
+
+
+class EncryptedInteger(TypeDecorator):
+    """
+    Transparently encrypts an integer to AES-256 ciphertext string on INSERT/UPDATE,
+    and decrypts back to Python int on SELECT.
+    """
+    impl = String
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None or value == "":
+            return None
+        from .services.crypto import encrypt_field
+        return encrypt_field(str(value))
+
+    def process_result_value(self, value, dialect):
+        if value is None or value == "":
+            return None
+        from .services.crypto import decrypt_field
+        decrypted = decrypt_field(str(value))
+        if decrypted is None or decrypted == "":
+            return None
+        try:
+            return int(decrypted)
+        except (ValueError, TypeError):
+            return None
+

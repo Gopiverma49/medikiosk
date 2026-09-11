@@ -6,10 +6,17 @@ import asyncio
 from typing import Optional
 from PIL import Image, ImageOps
 
+from ..config import get_settings
+
 logger = logging.getLogger(__name__)
 
 SCRIPTS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "scripts"))
 OCR_SCRIPT_PATH = os.path.join(SCRIPTS_DIR, "run_ocr.js")
+
+# Multi-modal Vision API Endpoints
+GEMINI_GENERATE_CONTENT_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
+DEFAULT_VISION_TIMEOUT_SECONDS = 20.0
 
 
 def _preprocess_image_for_ocr(image_path: str) -> Image.Image:
@@ -68,9 +75,10 @@ def run_ai_vision_ocr(image_path: str) -> Optional[str]:
     Multi-modal AI Vision extraction if API keys are configured in environment.
     Supports Google Gemini 1.5 Flash Vision, OpenAI GPT-4o-mini Vision, or local Ollama.
     """
-    gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    openai_key = os.getenv("OPENAI_API_KEY")
-    ollama_host = os.getenv("OLLAMA_HOST")
+    settings = get_settings()
+    gemini_key = settings.GEMINI_API_KEY
+    openai_key = settings.OPENAI_API_KEY
+    ollama_host = settings.OLLAMA_HOST
 
     if not (gemini_key or openai_key or ollama_host):
         return None
@@ -93,7 +101,7 @@ def run_ai_vision_ocr(image_path: str) -> Optional[str]:
 
         # 1. Google Gemini Vision (Flash 1.5)
         if gemini_key:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+            url = f"{GEMINI_GENERATE_CONTENT_URL}?key={gemini_key}"
             payload = {
                 "contents": [
                     {
@@ -109,7 +117,7 @@ def run_ai_vision_ocr(image_path: str) -> Optional[str]:
                     }
                 ]
             }
-            resp = httpx.post(url, json=payload, timeout=20.0)
+            resp = httpx.post(url, json=payload, timeout=DEFAULT_VISION_TIMEOUT_SECONDS)
             if resp.status_code == 200:
                 data = resp.json()
                 text = data["candidates"][0]["content"]["parts"][0]["text"]
@@ -118,7 +126,7 @@ def run_ai_vision_ocr(image_path: str) -> Optional[str]:
 
         # 2. OpenAI GPT-4o-mini Vision
         if openai_key:
-            url = "https://api.openai.com/v1/chat/completions"
+            url = OPENAI_CHAT_COMPLETIONS_URL
             headers = {"Authorization": f"Bearer {openai_key}"}
             payload = {
                 "model": "gpt-4o-mini",

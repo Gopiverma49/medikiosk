@@ -4,6 +4,7 @@ Handles token generation, queue management, doctor calling/assignment,
 and real-time WebSocket synchronization with hospital display boards.
 """
 import json
+import logging
 import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Set
@@ -13,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
+from ..config import get_settings
 from ..database import get_db, SessionLocal
 from ..models import TokenQueue, TokenStatus, Patient, Encounter, TriageEvent, ClinicalFact, ConsultationRoom, TreatmentRecord, ClinicalSummary, utcnow
 from ..schemas import (
@@ -20,7 +22,9 @@ from ..schemas import (
     TokenDisplayStateOut, TokenColumnDisplay,
 )
 from ..services.audit import log_event
+from .patients import resolve_patient
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["tokens"])
 
 
@@ -64,23 +68,24 @@ async def broadcast_token_event(event_type: str, payload: dict):
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
     except Exception as e:
-        print("WebSocket broadcast notice:", e)
+        logger.warning("WebSocket broadcast notice: %s", e)
 
 
 def _get_current_cycle_start(db: Optional[Session] = None) -> datetime:
     """
-    Returns the start datetime of the daily hospital token cycle (8:00 AM local time),
+    Returns the start datetime of the daily hospital token cycle (configured cycle start hour, default 8:00 AM local time),
     converted to UTC naive datetime to match TokenQueue.created_at stored in SQLite.
-    If current local time is before 8:00 AM, the cycle started yesterday at 8:00 AM local time.
-    If current local time is at or after 8:00 AM, the cycle started today at 8:00 AM local time.
+    If current local time is before cycle hour, the cycle started yesterday at cycle hour local time.
+    If current local time is at or after cycle hour, the cycle started today at cycle hour local time.
     Also respects any manual administrator token resets performed during the cycle.
     """
+    cycle_hour = get_settings().TOKEN_CYCLE_START_HOUR
     local_now = datetime.now().astimezone()
-    local_8am = local_now.replace(hour=8, minute=0, second=0, microsecond=0)
-    if local_now >= local_8am:
-        cycle_start_local = local_8am
+    local_cycle = local_now.replace(hour=cycle_hour, minute=0, second=0, microsecond=0)
+    if local_now >= local_cycle:
+        cycle_start_local = local_cycle
     else:
-        cycle_start_local = local_8am - timedelta(days=1)
+        cycle_start_local = local_cycle - timedelta(days=1)
 
     cycle_start_utc = cycle_start_local.astimezone(timezone.utc).replace(tzinfo=None)
 
@@ -273,9 +278,7 @@ def _build_display_state(db: Session) -> TokenDisplayStateOut:
 @router.post("/tokens/generate", response_model=PatientTokenOut)
 async def generate_patient_token(payload: TokenGenerateIn, db: Session = Depends(get_db)):
     """Generate or retrieve unique token for a patient/encounter intake."""
-    # Find patient
-    clean_id = payload.patient_id.strip()
-    patient = db.query(Patient).filter((Patient.id == clean_id) | (Patient.patient_id == clean_id)).first()
+    patient = resolve_patient(db, payload.patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
@@ -662,8 +665,7 @@ async def recall_patient_token(token_id: str, db: Session = Depends(get_db)):
 @router.get("/tokens/patient/{patient_id}", response_model=Optional[PatientTokenOut])
 def get_patient_active_token(patient_id: str, db: Session = Depends(get_db)):
     """Get most recent token for a patient."""
-    clean_id = patient_id.strip()
-    patient = db.query(Patient).filter((Patient.id == clean_id) | (Patient.patient_id == clean_id)).first()
+    patient = resolve_patient(db, patient_id)
     if not patient:
         return None
     return db.query(TokenQueue).filter(
@@ -689,7 +691,7 @@ async def websocket_token_endpoint(websocket: WebSocket):
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }, default=str))
     except Exception as e:
-        print("Error sending initial WS state:", e)
+        logger.warning("Error sending initial WS state: %s", e)
     finally:
         db.close()
 

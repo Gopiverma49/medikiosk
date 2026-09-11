@@ -1,6 +1,3 @@
-import os
-import pytest
-
 from app.services.crypto import (
     encrypt_field, decrypt_field, blind_index, mask_aadhaar_and_pii,
     compute_file_sha256, verify_file_sha256
@@ -111,5 +108,93 @@ def test_security_inspect_db_api_endpoint(client):
     # Hacker sees ciphertext
     assert sample["hacker_sees_raw_db"]["is_readable"] is False
     assert "enc:aes256gcm:" in sample["hacker_sees_raw_db"]["name"]
+    assert "enc:aes256gcm:" in sample["hacker_sees_raw_db"]["patient_id"]
+    assert "enc:aes256gcm:" in sample["hacker_sees_raw_db"]["age"]
     # Authorized doctor sees plaintext
     assert sample["authorized_doctor_sees"]["is_readable"] is True
+    assert sample["authorized_doctor_sees"]["age"] == 38
+
+
+def test_patient_id_and_age_raw_db_encryption(db_session):
+    """Verify patient_id and age are stored as AES-256 ciphertext in the raw database."""
+    from sqlalchemy import text
+    from app.models import Patient
+
+    p = Patient(
+        patient_id="1099887766",
+        name="Sunita Rao",
+        phone="9876543219",
+        age=55,
+        gender="Female",
+    )
+    db_session.add(p)
+    db_session.commit()
+    db_session.refresh(p)
+
+    # In ORM: values are transparently decrypted
+    assert p.patient_id == "1099887766"
+    assert p.age == 55
+    assert isinstance(p.age, int)
+
+    # In raw database: values are AES-256 ciphertext strings
+    raw_row = db_session.execute(
+        text("SELECT patient_id, age, name, phone FROM patients WHERE id = :id"),
+        {"id": p.id}
+    ).fetchone()
+    raw_pid, raw_age, raw_name, raw_phone = raw_row
+    assert raw_pid.startswith("enc:aes256gcm:")
+    assert raw_age.startswith("enc:aes256gcm:")
+    assert raw_name.startswith("enc:aes256gcm:")
+    assert raw_phone.startswith("enc:aes256gcm:")
+
+    # Exact-match equality query works via deterministic searchable encryption
+    found = db_session.query(Patient).filter(Patient.patient_id == "1099887766").first()
+    assert found is not None
+    assert found.id == p.id
+
+
+def test_user_credentials_raw_db_encryption(db_session):
+    """Verify user username and full_name are stored as AES-256 ciphertext in raw database."""
+    from sqlalchemy import text
+    from app.models import User, Role
+    from app.security import hash_password
+
+    u = User(
+        username="sec_doc",
+        hashed_password=hash_password("docpass123"),
+        role=Role.DOCTOR,
+        full_name="Dr. Security Test",
+    )
+    db_session.add(u)
+    db_session.commit()
+    db_session.refresh(u)
+
+    # In ORM: values are transparently decrypted
+    assert u.username == "sec_doc"
+    assert u.full_name == "Dr. Security Test"
+
+    # In raw database: values are AES-256 ciphertext strings
+    raw_row = db_session.execute(
+        text("SELECT username, full_name, hashed_password FROM users WHERE id = :id"),
+        {"id": u.id}
+    ).fetchone()
+    raw_uname, raw_fname, raw_pass = raw_row
+    assert raw_uname.startswith("enc:aes256gcm:")
+    assert raw_fname.startswith("enc:aes256gcm:")
+    assert raw_pass.startswith("$2b$")  # bcrypt
+
+    # Exact-match equality query works via deterministic searchable encryption
+    found = db_session.query(User).filter(User.username == "sec_doc").first()
+    assert found is not None
+    assert found.id == u.id
+
+
+def test_obsolete_tables_not_in_orm_metadata():
+    """Verify obsolete tables are not in SQLAlchemy Base metadata."""
+    from app.database import Base
+
+    table_names = set(Base.metadata.tables.keys())
+    obsolete = ["ai_evaluations", "ai_provenance", "allergies", "clinical_concepts", "lab_results", "medications"]
+    for dead in obsolete:
+        assert dead not in table_names
+

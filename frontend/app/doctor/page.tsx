@@ -483,25 +483,50 @@ export default function DoctorPage() {
     let ws: WebSocket | null = null;
     let pollInterval: any = null;
 
+    const startFallbackPolling = (intervalMs = 5000) => {
+      if (!pollInterval) {
+        pollInterval = setInterval(() => {
+          loadTokenQueue();
+        }, intervalMs);
+      }
+    };
+
+    const stopFallbackPolling = () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    };
+
     try {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const wsHost = `${window.location.hostname}:8000`;
       ws = new WebSocket(`${protocol}//${wsHost}/api/ws/tokens`);
 
+      ws.onopen = () => {
+        stopFallbackPolling();
+      };
+
       ws.onmessage = () => {
         loadTokenQueue();
       };
+
+      ws.onerror = () => {
+        startFallbackPolling();
+      };
+
+      ws.onclose = () => {
+        startFallbackPolling();
+      };
     } catch {
-      // WS failover to polling
+      startFallbackPolling();
     }
 
-    pollInterval = setInterval(() => {
-      loadTokenQueue();
-    }, 3000);
+    startFallbackPolling();
 
     return () => {
       if (ws) ws.close();
-      if (pollInterval) clearInterval(pollInterval);
+      stopFallbackPolling();
     };
   }, [isAuthenticated, loadTokenQueue]);
 

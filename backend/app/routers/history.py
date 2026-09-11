@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import ClinicalFact, FactSource, VerificationStatus, Encounter
 from ..schemas import HistoryAnswerIn, ClinicalFactOut
+from .ayush import AYUSH_CONCEPTS
 from ..services.clinical_schema import ADAPTIVE_QUESTIONNAIRE
 from ..services.red_flag_engine import evaluate_red_flags
 from ..services.audit import log_event
@@ -33,10 +34,9 @@ def submit_answer(payload: HistoryAnswerIn, db: Session = Depends(get_db)):
         category = "medication"
     elif "allerg" in payload.question_concept:
         category = "allergy"
-    elif payload.question_concept in ("prakriti", "vikriti", "sara", "samhanana", "pramana",
-                                       "satmya", "sattva", "ahara_shakti", "vyayama_shakti",
-                                       "vaya", "ahara", "vihara", "nidana", "agni", "koshtha", "samprapti"):
+    elif payload.question_concept in AYUSH_CONCEPTS:
         category = "ayush"
+
 
     fact = ClinicalFact(
         encounter_id=payload.encounter_id,

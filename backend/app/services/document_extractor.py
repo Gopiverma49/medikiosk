@@ -26,19 +26,11 @@ Strict clinical rules:
 """
 import re
 from typing import List, Optional
-try:
-    from ..schemas import (
-        ClinicalDocumentExtraction, MedicineExtractionItem, TestExtractionItem,
-        SymptomExtractionItem, VitalsExamination, FollowUpInfo, TimelineEventItem
-    )
-except (ImportError, ValueError):
-    import sys
-    from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-    from app.schemas import (
-        ClinicalDocumentExtraction, MedicineExtractionItem, TestExtractionItem,
-        SymptomExtractionItem, VitalsExamination, FollowUpInfo, TimelineEventItem
-    )
+
+from ..schemas import (
+    ClinicalDocumentExtraction, MedicineExtractionItem, TestExtractionItem,
+    SymptomExtractionItem, VitalsExamination, FollowUpInfo, TimelineEventItem
+)
 
 # Common Indian numeric dosage triplets/quads to clear clinical expansions
 NUMERIC_DOSE_DESCRIPTIONS = {
@@ -155,6 +147,17 @@ TIMING_MAP = {
     "with each meal": "With meals",
     "with every meal": "With meals",
 }
+
+# Pre-compiled regex patterns for optimal performance (O(1) compiled pass vs repeated sorting)
+_PRECOMPILED_FREQUENCIES = [
+    (re.compile(rf"(?<![A-Za-z]){re.escape(k)}(?![A-Za-z])", re.I), v)
+    for k, v in sorted(FREQUENCY_MAP.items(), key=lambda kv: len(kv[0]), reverse=True)
+]
+
+_PRECOMPILED_TIMINGS = [
+    (re.compile(rf"(?<![A-Za-z]){re.escape(k)}(?![A-Za-z])", re.I), v)
+    for k, v in sorted(TIMING_MAP.items(), key=lambda kv: len(kv[0]), reverse=True)
+]
 
 # Master Indian medicine brand, formulation variant, oncology/critical-care, and generic stems
 # (sorted by length descending for greedy longest match first)
@@ -505,20 +508,18 @@ def parse_frequency(text: str) -> Optional[str]:
         return f"Every {h} hours"
 
     # 3. Frequency abbreviations and terms (ordered by length descending to prioritize phrases)
-    freq_keys = sorted(FREQUENCY_MAP.keys(), key=lambda k: len(k), reverse=True)
-    for k in freq_keys:
-        if re.search(rf"(?<![A-Za-z]){re.escape(k)}(?![A-Za-z])", text, re.I):
-            return FREQUENCY_MAP[k]
+    for pattern, val in _PRECOMPILED_FREQUENCIES:
+        if pattern.search(text):
+            return val
 
     return None
 
 
 def parse_timing(text: str) -> Optional[str]:
     """Parse meal timing associations (AC, PC, before meals, after meals, empty stomach)."""
-    timing_keys = sorted(TIMING_MAP.keys(), key=lambda k: len(k), reverse=True)
-    for k in timing_keys:
-        if re.search(rf"(?<![A-Za-z]){re.escape(k)}(?![A-Za-z])", text, re.I):
-            return TIMING_MAP[k]
+    for pattern, val in _PRECOMPILED_TIMINGS:
+        if pattern.search(text):
+            return val
     return None
 
 

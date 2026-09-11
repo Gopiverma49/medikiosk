@@ -7,58 +7,38 @@ Run locally:
 Run via Docker Compose (recommended — see repository root docker-compose.yml):
     docker compose up --build
 """
+import os
+import json
+import socket
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .database import Base, engine
-from . import models  # noqa: F401 - ensures models are registered on Base.metadata
-
+from .database import engine, init_db
 from .routers import (
     auth, patients, history, clinical_facts, documents, timeline,
     contradictions, red_flags, summaries, fhir, evaluation, ayush, admin,
     tokens,
 )
-
 from .seed import seed
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
-    # Check and add any missing columns in existing SQLite database
     try:
-        with engine.connect() as conn:
-            if engine.dialect.name == "sqlite":
-                res = conn.exec_driver_sql("PRAGMA table_info(treatment_records)").fetchall()
-                cols = [r[1] for r in res] if res else []
-                if cols and "prescribed_medicines" not in cols:
-                    conn.exec_driver_sql("ALTER TABLE treatment_records ADD COLUMN prescribed_medicines JSON")
-                if cols and "doctor_notes" not in cols:
-                    conn.exec_driver_sql("ALTER TABLE treatment_records ADD COLUMN doctor_notes TEXT")
-                if cols and "doctor_name" not in cols:
-                    conn.exec_driver_sql("ALTER TABLE treatment_records ADD COLUMN doctor_name VARCHAR")
-
-                doc_res = conn.exec_driver_sql("PRAGMA table_info(documents)").fetchall()
-                doc_cols = [r[1] for r in doc_res] if doc_res else []
-                if doc_cols and "extracted_data" not in doc_cols:
-                    conn.exec_driver_sql("ALTER TABLE documents ADD COLUMN extracted_data JSON")
-                if doc_cols and "pages" not in doc_cols:
-                    conn.exec_driver_sql("ALTER TABLE documents ADD COLUMN pages JSON")
-                if doc_cols and "patient_id" not in doc_cols:
-                    conn.exec_driver_sql("ALTER TABLE documents ADD COLUMN patient_id VARCHAR")
-
-                conn.commit()
+        init_db(engine)
     except Exception as e:
-        print("Schema migration notice:", e)
+        logger.warning("Database initialization notice: %s", e)
 
     try:
         seed()
     except Exception as e:
-        print("Seed warning on startup:", e)
+        logger.warning("Database seed notice: %s", e)
     yield
 
 
@@ -87,10 +67,6 @@ app.add_middleware(
 )
 
 
-import socket
-import os
-import json
-
 @app.get("/api/health")
 def health():
     return {"status": "ok", "env": settings.ENV}
@@ -108,7 +84,7 @@ def get_network_info():
         pass
 
     tunnel_url = None
-    tunnel_file = os.path.join(os.path.dirname(__file__), "..", "..", "scripts", ".tunnel-info.json")
+    tunnel_file = os.path.join(settings.BASE_DIR, "..", "scripts", ".tunnel-info.json")
     if os.path.exists(tunnel_file):
         try:
             with open(tunnel_file, "r") as f:
@@ -124,6 +100,7 @@ def get_network_info():
         "frontend_port": 3000,
         "backend_port": 8000,
     }
+
 
 
 app.include_router(auth.router)

@@ -32,8 +32,12 @@ DASHAVIDHA_PARIKSHA_FIELDS = [
     {"concept": "samprapti", "label": "Samprapti (disease process) — practitioner assessment only"},
 ]
 
+AYUSH_CONCEPTS = {f["concept"] for f in DASHAVIDHA_PARIKSHA_FIELDS}
+
+
 
 @router.get("/fields")
+
 def get_fields():
     return DASHAVIDHA_PARIKSHA_FIELDS
 

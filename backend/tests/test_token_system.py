@@ -1,5 +1,4 @@
 from app.models import Patient
-from app.routers.tokens import _get_current_cycle_start, _generate_next_token_number
 
 
 def test_token_sequential_generation(client, db_session):

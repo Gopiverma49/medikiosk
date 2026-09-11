@@ -1,22 +1,27 @@
-from typing import Optional
+import ast
+import json
 import time
+from typing import Optional, List
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Patient, Encounter, Consent, TreatmentRecord, ClinicalFact, ClinicalSummary
+from ..models import (
+    Patient, Encounter, Consent, TreatmentRecord, ClinicalFact, ClinicalSummary,
+    TokenQueue, TokenStatus
+)
 from ..schemas import (
     PatientCreate, PatientOut, EncounterCreate, EncounterOut, ConsentCreate,
     PatientLookupIn, TreatmentRecordOut, PrescriptionSaveIn,
 )
 from ..services.audit import log_event
 from ..services.crypto import blind_index
-from datetime import datetime, timezone
 
 router = APIRouter(prefix="/api", tags=["patients"])
 
 
-def _get_patient(db: Session, identifier: str) -> Optional[Patient]:
+def resolve_patient(db: Session, identifier: str) -> Optional[Patient]:
     """Helper to find patient by UUID id, 10-digit patient_id, or blind-indexed phone."""
     clean_id = identifier.strip()
     patient = db.query(Patient).filter((Patient.id == clean_id) | (Patient.patient_id == clean_id)).first()
@@ -34,7 +39,9 @@ def _get_patient(db: Session, identifier: str) -> Optional[Patient]:
     return db.query(Patient).filter(Patient.phone == clean_id).first()
 
 
-from ..models import Patient, Encounter, Consent, TreatmentRecord, ClinicalFact, ClinicalSummary, TokenQueue, TokenStatus
+# Backwards compatibility alias
+_get_patient = resolve_patient
+
 
 def _clean_str_value(val) -> str:
     if val is None or val is True or val is False:
@@ -48,7 +55,6 @@ def _clean_str_value(val) -> str:
     if s.lower() in ("true", "false", "none", "null", "undefined"):
         return ""
     if s.startswith("{") and s.endswith("}"):
-        import ast, json
         try:
             d = json.loads(s.replace("'", '"'))
             if isinstance(d, dict):
@@ -61,7 +67,6 @@ def _clean_str_value(val) -> str:
             except Exception:
                 pass
     if (s.startswith("[") and s.endswith("]")) or (s.startswith("(") and s.endswith(")")):
-        import ast
         try:
             parsed = ast.literal_eval(s)
             if isinstance(parsed, (list, tuple)):
@@ -107,15 +112,27 @@ def _get_combined_patient_treatments(db: Session, patient: Patient, exclude_enco
         f"VISIT_{str(r.id)[:8].upper()}" for r in out if r.id
     }
 
+    # Batch-load all clinical summaries and clinical facts for non-active encounters (resolves N+1 query bottleneck)
+    candidate_enc_ids = [enc.id for enc in encounters if enc.id not in active_encounter_ids]
+    summary_map = {}
+    facts_by_enc = {}
+    if candidate_enc_ids:
+        all_summaries = db.query(ClinicalSummary).filter(ClinicalSummary.encounter_id.in_(candidate_enc_ids)).all()
+        summary_map = {s.encounter_id: s for s in all_summaries}
+
+        all_facts = db.query(ClinicalFact).filter(ClinicalFact.encounter_id.in_(candidate_enc_ids)).all()
+        for f in all_facts:
+            facts_by_enc.setdefault(f.encounter_id, []).append(f)
+
     for enc in encounters:
-        # Strictly skip active ongoing encounters!
+        # Strictly skip active ongoing encounters
         if enc.id in active_encounter_ids:
             continue
 
-        summary = db.query(ClinicalSummary).filter(ClinicalSummary.encounter_id == enc.id).first()
+        summary = summary_map.get(enc.id)
         if summary and summary.status == "REJECTED":
             continue
-        facts = db.query(ClinicalFact).filter(ClinicalFact.encounter_id == enc.id).all()
+        facts = facts_by_enc.get(enc.id, [])
         
         if not summary and not facts:
             continue
@@ -128,6 +145,7 @@ def _get_combined_patient_treatments(db: Session, patient: Patient, exclude_enco
         # Extract duration
         onset_fact = next((f for f in facts if f.concept == "symptom_onset" and f.label), None)
         duration_str = _clean_str_value(onset_fact.label if onset_fact else "")
+
         if not duration_str:
             duration_str = "1–3 days"
 

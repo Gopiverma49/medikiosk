@@ -1,5 +1,6 @@
 import asyncio
-from typing import List
+import logging
+from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -17,6 +18,7 @@ from ..services.audit import log_event
 from .tokens import _build_display_state, broadcast_token_event, ACTIVE_DOCTOR_ROOMS
 from ai.providers.factory import set_force_fail, _FORCE_FAIL
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
@@ -26,6 +28,107 @@ def _safe_broadcast(event_type: str, payload: dict):
         loop.create_task(broadcast_token_event(event_type, payload))
     except RuntimeError:
         pass
+
+
+def _create_staff_user(
+    db: Session,
+    role: Role,
+    username: str,
+    password: str,
+    full_name: Optional[str],
+    role_prefix: str,
+) -> User:
+    clean_username = username.strip()
+    if not clean_username:
+        raise HTTPException(status_code=400, detail="Username is required")
+
+    existing = db.query(User).filter(User.username == clean_username).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="A user with this username already exists")
+
+    default_name = f"{role_prefix} {clean_username}".strip()
+    user = User(
+        username=clean_username,
+        hashed_password=hash_password(password),
+        role=role,
+        full_name=full_name.strip() if full_name and full_name.strip() else default_name,
+    )
+    db.add(user)
+    db.flush()
+    role_name = role.value.capitalize()
+    log_event(db, f"{role_name} Created", f"Admin created {role.value} account '{user.username}' ({user.full_name})")
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def _update_staff_user(
+    db: Session,
+    user_id: str,
+    role: Role,
+    username: Optional[str],
+    password: Optional[str],
+    full_name: Optional[str],
+) -> User:
+    role_name = role.value.capitalize()
+    user = db.query(User).filter(User.id == user_id, User.role == role).first()
+    if not user:
+        raise HTTPException(status_code=404, detail=f"{role_name} not found")
+
+    if username and username.strip() != user.username:
+        clean_user = username.strip()
+        existing = db.query(User).filter(User.username == clean_user).first()
+        if existing and existing.id != user.id:
+            raise HTTPException(status_code=400, detail="Username already in use")
+        user.username = clean_user
+
+    if full_name:
+        user.full_name = full_name.strip()
+
+    if password and password.strip():
+        user.hashed_password = hash_password(password.strip())
+
+    user.updated_at = datetime.now(timezone.utc)
+    log_event(db, f"{role_name} Modified", f"Admin updated {role.value} '{user.username}' ({user.full_name})")
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def _delete_staff_user(
+    db: Session,
+    user_id: str,
+    role: Role,
+    cleanup_doctor_rooms: bool = False,
+) -> dict:
+    role_name = role.value.capitalize()
+    user = db.query(User).filter(User.id == user_id, User.role == role).first()
+    if not user:
+        raise HTTPException(status_code=404, detail=f"{role_name} not found")
+
+    user_name = user.full_name or user.username
+    user_username = user.username
+
+    if cleanup_doctor_rooms:
+        for d_key in list(ACTIVE_DOCTOR_ROOMS.keys()):
+            if d_key == user_username or d_key == user_name or d_key == f"Dr. {user_username}":
+                del ACTIVE_DOCTOR_ROOMS[d_key]
+
+    db.delete(user)
+    log_event(db, f"{role_name} Deleted", f"Admin deleted {role.value} account '{user_username}' ({user_name})")
+    db.commit()
+
+    if cleanup_doctor_rooms:
+        try:
+            display_state = _build_display_state(db)
+            _safe_broadcast("ROOMS_UPDATED", {
+                "message": f"Doctor '{user_name}' account deleted.",
+                "display_state": display_state.model_dump(),
+            })
+        except Exception:
+            pass
+
+    return {"ok": True, "message": f"{role_name} '{user_name}' deleted successfully"}
 
 
 # --- Doctor Management (Admin Only) ---
@@ -38,84 +141,19 @@ def list_doctors(db: Session = Depends(get_db)):
 @router.post("/doctors", response_model=DoctorOut)
 def create_doctor(payload: DoctorCreate, db: Session = Depends(get_db)):
     """Create a new doctor credential account."""
-    clean_username = payload.username.strip()
-    if not clean_username:
-        raise HTTPException(status_code=400, detail="Username is required")
-    
-    existing = db.query(User).filter(User.username == clean_username).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="A user with this username already exists")
-    
-    doc = User(
-        username=clean_username,
-        hashed_password=hash_password(payload.password),
-        role=Role.DOCTOR,
-        full_name=payload.full_name.strip() if payload.full_name else f"Dr. {clean_username}",
-    )
-    db.add(doc)
-    db.flush()
-    log_event(db, "Doctor Created", f"Admin created doctor account '{doc.username}' ({doc.full_name})")
-    db.commit()
-    db.refresh(doc)
-    return doc
+    return _create_staff_user(db, Role.DOCTOR, payload.username, payload.password, payload.full_name, "Dr.")
 
 
 @router.put("/doctors/{doctor_id}", response_model=DoctorOut)
 def update_doctor(doctor_id: str, payload: DoctorUpdate, db: Session = Depends(get_db)):
     """Modify a doctor account (name, username, or password)."""
-    doc = db.query(User).filter(User.id == doctor_id, User.role == Role.DOCTOR).first()
-    if not doc:
-        raise HTTPException(status_code=404, detail="Doctor not found")
-    
-    if payload.username and payload.username.strip() != doc.username:
-        clean_user = payload.username.strip()
-        existing = db.query(User).filter(User.username == clean_user).first()
-        if existing and existing.id != doc.id:
-            raise HTTPException(status_code=400, detail="Username already in use")
-        doc.username = clean_user
-    
-    if payload.full_name:
-        doc.full_name = payload.full_name.strip()
-        
-    if payload.password and payload.password.strip():
-        doc.hashed_password = hash_password(payload.password.strip())
-        
-    doc.updated_at = datetime.now(timezone.utc)
-    log_event(db, "Doctor Modified", f"Admin updated doctor '{doc.username}' ({doc.full_name})")
-    db.commit()
-    db.refresh(doc)
-    return doc
+    return _update_staff_user(db, doctor_id, Role.DOCTOR, payload.username, payload.password, payload.full_name)
 
 
 @router.delete("/doctors/{doctor_id}")
 def delete_doctor(doctor_id: str, db: Session = Depends(get_db)):
     """Delete a doctor credential account."""
-    doc = db.query(User).filter(User.id == doctor_id, User.role == Role.DOCTOR).first()
-    if not doc:
-        raise HTTPException(status_code=404, detail="Doctor not found")
-    
-    doc_name = doc.full_name or doc.username
-    doc_username = doc.username
-
-    # Remove active room assignment if logged in
-    for d_key in list(ACTIVE_DOCTOR_ROOMS.keys()):
-        if d_key == doc_username or d_key == doc_name or d_key == f"Dr. {doc_username}":
-            del ACTIVE_DOCTOR_ROOMS[d_key]
-
-    db.delete(doc)
-    log_event(db, "Doctor Deleted", f"Admin deleted doctor account '{doc.username}' ({doc_name})")
-    db.commit()
-
-    try:
-        display_state = _build_display_state(db)
-        _safe_broadcast("ROOMS_UPDATED", {
-            "message": f"Doctor '{doc_name}' account deleted.",
-            "display_state": display_state.model_dump(),
-        })
-    except Exception:
-        pass
-
-    return {"ok": True, "message": f"Doctor '{doc_name}' deleted successfully"}
+    return _delete_staff_user(db, doctor_id, Role.DOCTOR, cleanup_doctor_rooms=True)
 
 
 # --- Nurse Management (Admin Only) ---
@@ -128,67 +166,19 @@ def list_nurses(db: Session = Depends(get_db)):
 @router.post("/nurses", response_model=NurseOut)
 def create_nurse(payload: NurseCreate, db: Session = Depends(get_db)):
     """Create a new nurse credential account."""
-    clean_username = payload.username.strip()
-    if not clean_username:
-        raise HTTPException(status_code=400, detail="Username is required")
-    
-    existing = db.query(User).filter(User.username == clean_username).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="A user with this username already exists")
-    
-    nurse = User(
-        username=clean_username,
-        hashed_password=hash_password(payload.password),
-        role=Role.NURSE,
-        full_name=payload.full_name.strip() if payload.full_name else f"Nurse {clean_username}",
-    )
-    db.add(nurse)
-    db.flush()
-    log_event(db, "Nurse Created", f"Admin created nurse account '{nurse.username}' ({nurse.full_name})")
-    db.commit()
-    db.refresh(nurse)
-    return nurse
+    return _create_staff_user(db, Role.NURSE, payload.username, payload.password, payload.full_name, "Nurse")
 
 
 @router.put("/nurses/{nurse_id}", response_model=NurseOut)
 def update_nurse(nurse_id: str, payload: NurseUpdate, db: Session = Depends(get_db)):
     """Modify a nurse account (name, username, or password)."""
-    nurse = db.query(User).filter(User.id == nurse_id, User.role == Role.NURSE).first()
-    if not nurse:
-        raise HTTPException(status_code=404, detail="Nurse not found")
-    
-    if payload.username and payload.username.strip() != nurse.username:
-        clean_user = payload.username.strip()
-        existing = db.query(User).filter(User.username == clean_user).first()
-        if existing and existing.id != nurse.id:
-            raise HTTPException(status_code=400, detail="Username already in use")
-        nurse.username = clean_user
-    
-    if payload.full_name:
-        nurse.full_name = payload.full_name.strip()
-        
-    if payload.password and payload.password.strip():
-        nurse.hashed_password = hash_password(payload.password.strip())
-        
-    nurse.updated_at = datetime.now(timezone.utc)
-    log_event(db, "Nurse Modified", f"Admin updated nurse '{nurse.username}' ({nurse.full_name})")
-    db.commit()
-    db.refresh(nurse)
-    return nurse
+    return _update_staff_user(db, nurse_id, Role.NURSE, payload.username, payload.password, payload.full_name)
 
 
 @router.delete("/nurses/{nurse_id}")
 def delete_nurse(nurse_id: str, db: Session = Depends(get_db)):
     """Delete a nurse credential account."""
-    nurse = db.query(User).filter(User.id == nurse_id, User.role == Role.NURSE).first()
-    if not nurse:
-        raise HTTPException(status_code=404, detail="Nurse not found")
-    
-    nurse_name = nurse.full_name or nurse.username
-    db.delete(nurse)
-    log_event(db, "Nurse Deleted", f"Admin deleted nurse account '{nurse.username}' ({nurse_name})")
-    db.commit()
-    return {"ok": True, "message": f"Nurse '{nurse_name}' deleted successfully"}
+    return _delete_staff_user(db, nurse_id, Role.NURSE, cleanup_doctor_rooms=False)
 
 
 # --- Patient Management for Admin ---
@@ -379,7 +369,7 @@ def update_room_admin(room_id: str, payload: RoomUpdateIn, db: Session = Depends
             "display_state": display_state.model_dump(),
         })
     except Exception as e:
-        print("Room update broadcast error:", e)
+        logger.warning("Room update broadcast error: %s", e)
 
     return room
 
@@ -408,7 +398,7 @@ def delete_room_admin(room_id: str, db: Session = Depends(get_db)):
             "display_state": display_state.model_dump(),
         })
     except Exception as e:
-        print("Room delete broadcast error:", e)
+        logger.warning("Room delete broadcast error: %s", e)
 
     return {"ok": True, "message": f"Room '{name}' deleted successfully"}
 
@@ -538,24 +528,30 @@ def inspect_database_encryption(limit: int = 4, db: Session = Depends(get_db)):
     """
     Live Demonstration Tool for Judges.
     Compares what an attacker sees in a raw stolen database dump vs. what an authorized physician sees.
+    Demonstrates full AES-256 field-level encryption for Patient ID, Name, Phone, Age, and Staff Credentials.
     """
-    from ..services.crypto import encrypt_field
+    from ..services.crypto import encrypt_field, encrypt_deterministic
     
     patients = db.query(Patient).order_by(Patient.created_at.desc()).limit(limit).all()
     rows = []
     for p in patients:
+        raw_ciphertext_pid = encrypt_deterministic(p.patient_id) if p.patient_id else "NULL"
         raw_ciphertext_name = encrypt_field(p.name)
         raw_ciphertext_phone = encrypt_field(p.phone) if p.phone else "NULL"
+        raw_ciphertext_age = encrypt_field(str(p.age)) if p.age is not None else "NULL"
         
         rows.append({
             "patient_id": p.patient_id or str(p.id)[:8],
             "hacker_sees_raw_db": {
+                "patient_id": raw_ciphertext_pid,
                 "name": raw_ciphertext_name,
                 "phone": raw_ciphertext_phone,
+                "age": raw_ciphertext_age,
                 "phone_blind_hash": p.phone_hash or "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                 "is_readable": False,
             },
             "authorized_doctor_sees": {
+                "patient_id": p.patient_id,
                 "name": p.name,
                 "phone": p.phone,
                 "age": p.age,
@@ -563,10 +559,31 @@ def inspect_database_encryption(limit: int = 4, db: Session = Depends(get_db)):
                 "is_readable": True,
             }
         })
+
+    # Sample user credentials inspection
+    users = db.query(User).limit(3).all()
+    user_samples = []
+    for u in users:
+        user_samples.append({
+            "role": u.role.value if hasattr(u.role, "value") else str(u.role),
+            "hacker_sees_raw_db": {
+                "username": encrypt_deterministic(u.username),
+                "full_name": encrypt_field(u.full_name) if u.full_name else "NULL",
+                "hashed_password": (u.hashed_password[:20] + "...") if u.hashed_password else "NULL",
+                "is_readable": False,
+            },
+            "authorized_staff_sees": {
+                "username": u.username,
+                "full_name": u.full_name,
+                "is_readable": True,
+            }
+        })
         
     return {
         "ok": True,
         "sample_count": len(rows),
-        "explanation": "Even if the entire database file (.db / .sql) is stolen by an attacker, all sensitive fields remain military-grade AES-256 ciphertext without the KMS key.",
+        "explanation": "Even if the entire database file (.db / .sql) is stolen by an attacker, all sensitive fields (Patient ID, Name, Phone, Age, Username, Full Name) remain military-grade AES-256 ciphertext without the KMS key.",
         "samples": rows,
+        "user_samples": user_samples,
     }
+

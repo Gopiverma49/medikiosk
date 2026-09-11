@@ -10,12 +10,16 @@ router = APIRouter(prefix="/api/timeline", tags=["timeline"])
 @router.get("/{patient_id}")
 def get_timeline(patient_id: str, db: Session = Depends(get_db)):
     encounter_ids = [e.id for e in db.query(Encounter).filter(Encounter.patient_id == patient_id).all()]
+    if not encounter_ids:
+        return []
+
     facts = (
         db.query(ClinicalFact)
         .filter(ClinicalFact.encounter_id.in_(encounter_ids))
         .order_by(ClinicalFact.created_at.asc())
         .all()
     )
+
     return [
         {
             "timestamp": f.created_at, "concept": f.concept,

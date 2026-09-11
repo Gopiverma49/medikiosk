@@ -18,7 +18,7 @@ except ImportError:
 class Settings:
     # --- Base paths ---
     BASE_DIR: str = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")), "uploads", "documents"))
+    UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", os.path.join(BASE_DIR, "uploads", "documents"))
 
     # --- Database ---
     DATABASE_URL: str = os.getenv(
@@ -33,6 +33,9 @@ class Settings:
     BLIND_INDEX_SALT: str = os.getenv("BLIND_INDEX_SALT", "")
     DOCUMENT_TOKEN_SECRET: str = os.getenv("DOCUMENT_TOKEN_SECRET", os.getenv("JWT_SECRET", "doc-token-secret-2026"))
 
+    # --- Hospital OPD Token Queue Cycle ---
+    TOKEN_CYCLE_START_HOUR: int = int(os.getenv("TOKEN_CYCLE_START_HOUR", "8"))
+
     # --- CORS ---
     CORS_ORIGINS: list = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 
@@ -44,6 +47,11 @@ class Settings:
     NLP_PROVIDER: str = os.getenv("NLP_PROVIDER", "mock")
     SUMMARY_PROVIDER: str = os.getenv("SUMMARY_PROVIDER", "mock")
     TRANSLATION_PROVIDER: str = os.getenv("TRANSLATION_PROVIDER", "mock")
+
+    # --- Vision & AI Model Credentials (Optional) ---
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    OLLAMA_HOST: str = os.getenv("OLLAMA_HOST", "")
 
     # --- Integrations (mock/sandbox only in this prototype) ---
     FHIR_MODE: str = os.getenv("FHIR_MODE", "mock")

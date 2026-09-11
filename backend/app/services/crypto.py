@@ -104,6 +104,36 @@ def encrypt_field(plain_text: Optional[str]) -> Optional[str]:
         return f"{_PREFIX_AES256}{payload}"
 
 
+def encrypt_deterministic(plain_text: Optional[str]) -> Optional[str]:
+    """
+    Encrypts sensitive identifiers (like patient_id or username) using deterministic AES-256-GCM.
+    Derives nonce from HMAC-SHA256(_MASTER_KEY, raw_data) so identical plaintext produces
+    identical ciphertext. This enables exact-match equality queries in SQL without plaintext exposure.
+    Transparently decrypts with standard decrypt_field().
+    """
+    if plain_text is None or plain_text == "":
+        return plain_text
+
+    # Do not double-encrypt
+    if str(plain_text).startswith(_PREFIX_AES256):
+        return plain_text
+
+    raw_data = str(plain_text).encode("utf-8")
+
+    if _HAS_NATIVE_AESGCM and _CIPHER is not None:
+        nonce = hmac.new(_MASTER_KEY, b"deterministic-gcm-nonce:" + raw_data, hashlib.sha256).digest()[:12]
+        ciphertext = _CIPHER.encrypt(nonce, raw_data, None)
+        payload = base64.b64encode(nonce + ciphertext).decode("ascii")
+        return f"{_PREFIX_AES256}{payload}"
+    else:
+        nonce = hmac.new(_MASTER_KEY, b"deterministic-stream-nonce:" + raw_data, hashlib.sha256).digest()[:16]
+        ct = _pure_stream_cipher(_MASTER_KEY, nonce, raw_data)
+        tag = hmac.new(_MASTER_KEY, nonce + ct, hashlib.sha256).digest()[:16]
+        payload = base64.b64encode(nonce + tag + ct).decode("ascii")
+        return f"{_PREFIX_AES256}{payload}"
+
+
+
 def decrypt_field(cipher_text: Optional[str]) -> Optional[str]:
     """
     Decrypts an encrypted field.

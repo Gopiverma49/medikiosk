@@ -68,6 +68,7 @@ export default function AdminPage() {
   // --- Security & DPDP Compliance State ---
   const [securityStatus, setSecurityStatus] = useState<any>(null);
   const [securityDbSamples, setSecurityDbSamples] = useState<any[]>([]);
+  const [securityUserSamples, setSecurityUserSamples] = useState<any[]>([]);
   const [securityLoading, setSecurityLoading] = useState(false);
   const [securityError, setSecurityError] = useState<string | null>(null);
 
@@ -81,6 +82,7 @@ export default function AdminPage() {
       ]);
       setSecurityStatus(statusRes);
       setSecurityDbSamples(inspectRes.samples || []);
+      setSecurityUserSamples((inspectRes as any).user_samples || []);
     } catch (err: any) {
       setSecurityError(err.message || "Failed to load security telemetry");
     } finally {
@@ -1175,8 +1177,14 @@ export default function AdminPage() {
                         </div>
                         <div className="bg-slate-900 text-emerald-400 font-mono text-[11px] p-3 rounded-xl overflow-x-auto space-y-1">
                           <p className="text-slate-400 text-[10px] uppercase font-bold">// Raw database column contents:</p>
+                          {item.hacker_sees_raw_db.patient_id && (
+                            <p><span className="text-slate-400">enc_patient_id:</span> {item.hacker_sees_raw_db.patient_id}</p>
+                          )}
                           <p><span className="text-slate-400">enc_name:</span> {item.hacker_sees_raw_db.name}</p>
                           <p><span className="text-slate-400">enc_phone:</span> {item.hacker_sees_raw_db.phone}</p>
+                          {item.hacker_sees_raw_db.age && (
+                            <p><span className="text-slate-400">enc_age:</span> {item.hacker_sees_raw_db.age}</p>
+                          )}
                         </div>
                         <p className="text-[11px] text-red-700 font-medium">
                           ⚠ An attacker cannot decrypt this data without the isolated KMS master key.
@@ -1195,6 +1203,7 @@ export default function AdminPage() {
                         </div>
                         <div className="bg-white border border-emerald-200 p-3 rounded-xl space-y-1 text-xs text-slate-800 font-semibold shadow-xs">
                           <p className="text-slate-500 text-[10px] uppercase font-bold">// Decrypted in-memory with session key:</p>
+                          <p><span className="text-slate-500 font-normal">Patient ID:</span> {item.authorized_doctor_sees.patient_id || item.patient_id}</p>
                           <p><span className="text-slate-500 font-normal">Patient Name:</span> {item.authorized_doctor_sees.name}</p>
                           <p><span className="text-slate-500 font-normal">Phone:</span> {item.authorized_doctor_sees.phone || "Not provided"}</p>
                           <p><span className="text-slate-500 font-normal">Demographics:</span> {item.authorized_doctor_sees.age} yrs • {item.authorized_doctor_sees.gender}</p>
@@ -1206,6 +1215,46 @@ export default function AdminPage() {
                     </div>
                   </div>
                 ))}
+
+                {/* User Credentials Encryption Comparison */}
+                {securityUserSamples.length > 0 && (
+                  <div className="mt-6 space-y-3">
+                    <h5 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                      <span>🔐</span> Staff Credentials AES-256 Storage Inspection (<code className="text-xs bg-slate-200 px-1.5 py-0.5 rounded">users</code> table)
+                    </h5>
+                    {securityUserSamples.map((u, uIdx) => (
+                      <div key={uIdx} className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                        <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center justify-between text-xs font-bold text-slate-700">
+                          <span>Role: <span className="bg-teal-100 text-teal-800 px-2 py-0.5 rounded font-mono text-[11px]">{u.role}</span></span>
+                          <span className="text-[11px] text-slate-500 font-semibold">Decrypted Staff Login</span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200">
+                          <div className="p-3.5 bg-red-50/40 space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-red-800">🔴 Stolen Database Dump</span>
+                              <span className="text-[10px] font-bold bg-red-100 text-red-800 px-2 py-0.5 rounded-full">ENCRYPTED</span>
+                            </div>
+                            <div className="bg-slate-900 text-emerald-400 font-mono text-[11px] p-2.5 rounded-xl overflow-x-auto space-y-1">
+                              <p><span className="text-slate-400">enc_username:</span> {u.hacker_sees_raw_db.username}</p>
+                              <p><span className="text-slate-400">enc_full_name:</span> {u.hacker_sees_raw_db.full_name}</p>
+                              <p><span className="text-slate-400">bcrypt_hash:</span> {u.hacker_sees_raw_db.hashed_password}</p>
+                            </div>
+                          </div>
+                          <div className="p-3.5 bg-emerald-50/40 space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-emerald-800">🟢 Authorized Session</span>
+                              <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">DECRYPTED</span>
+                            </div>
+                            <div className="bg-white border border-emerald-200 p-2.5 rounded-xl space-y-1 text-xs text-slate-800 font-semibold shadow-xs">
+                              <p><span className="text-slate-500 font-normal">Username:</span> {u.authorized_staff_sees.username}</p>
+                              <p><span className="text-slate-500 font-normal">Full Name:</span> {u.authorized_staff_sees.full_name || "—"}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
