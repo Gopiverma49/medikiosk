@@ -88,3 +88,20 @@ export function formatIndiaDateTime(dateStr?: string | null): string {
     hour12: true,
   });
 }
+
+/**
+ * Mask a patient ID so that only the last three digits are shown,
+ * with all preceding digits replaced by asterisks (*).
+ * Examples:
+ *   '1000000002' -> '*******002'
+ *   '1000000001' -> '*******001'
+ *   '444'        -> '444'
+ */
+export function maskPatientId(id?: string | null): string {
+  if (!id) return "—";
+  const str = String(id).trim();
+  if (str.length <= 3) {
+    return str;
+  }
+  return "*".repeat(str.length - 3) + str.slice(-3);
+}

@@ -12,7 +12,7 @@ import type {
   TreatmentRecord,
   PrescribedMedicine,
 } from "../../lib/types";
-import { cleanSymptomText, formatShortIllnessName, getPastAssociatedSymptoms } from "../../lib/clinicalUtils";
+import { cleanSymptomText, formatShortIllnessName, getPastAssociatedSymptoms, maskPatientId } from "../../lib/clinicalUtils";
 
 type NurseTab = "queue" | "history";
 
@@ -676,8 +676,8 @@ export default function NursePage() {
                         {selectedPatient.name}
                       </h3>
                       <div className="flex items-center gap-3 text-xs text-teal-100/90 font-medium mt-1 flex-wrap">
-                        <span className="font-mono bg-teal-800/60 px-2 py-0.5 rounded border border-teal-600/40">
-                          ID: {selectedPatient.patient_id || selectedPatient.id}
+                        <span className="font-mono bg-teal-800/60 px-2 py-0.5 rounded border border-teal-600/40" title={selectedPatient.patient_id || selectedPatient.id}>
+                          ID: {maskPatientId(selectedPatient.patient_id || selectedPatient.id)}
                         </span>
                         {selectedPatient.age && <span>Age: {selectedPatient.age} yrs</span>}
                         {selectedPatient.gender && <span>Gender: {selectedPatient.gender}</span>}

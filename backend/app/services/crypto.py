@@ -211,6 +211,22 @@ def mask_aadhaar_and_pii(text: Optional[str]) -> Optional[str]:
     return masked
 
 
+def mask_patient_id(patient_id: Optional[str]) -> Optional[str]:
+    """
+    Masks all but the last 3 digits of a patient ID with asterisks (*).
+    Examples:
+      '1000000002' -> '*******002'
+      '1000000001' -> '*******001'
+      '444'        -> '444'
+    """
+    if not patient_id:
+        return patient_id
+    clean = str(patient_id).strip()
+    if len(clean) <= 3:
+        return clean
+    return "*" * (len(clean) - 3) + clean[-3:]
+
+
 def compute_file_sha256(target: Union[str, bytes]) -> str:
     """Computes an immutable SHA-256 cryptographic digest of file bytes or a file path."""
     hasher = hashlib.sha256()

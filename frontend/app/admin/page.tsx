@@ -4,7 +4,7 @@ import { api } from "../../lib/api";
 import { useKioskLanguage } from "../../lib/kioskLanguage";
 import { t } from "../../lib/translations";
 import { PasswordInput } from "../../components/PasswordInput";
-import { formatIndiaDateTime } from "../../lib/clinicalUtils";
+import { formatIndiaDateTime, maskPatientId } from "../../lib/clinicalUtils";
 import type { DoctorAccount, NurseAccount, AdminPatientRecord, ConsultationRoomItem } from "../../lib/types";
 
 type AdminSection = "doctors" | "nurses" | "patients" | "rooms" | "security";
@@ -293,7 +293,7 @@ export default function AdminPage() {
   }
 
   async function handleDeletePatient(pt: AdminPatientRecord) {
-    if (!confirm(`Are you sure you want to delete patient "${pt.name}" (ID: ${pt.patient_id}) and all associated records?`)) {
+    if (!confirm(`Are you sure you want to delete patient "${pt.name}" (ID: ${maskPatientId(pt.patient_id)}) and all associated records?`)) {
       return;
     }
     try {
@@ -414,6 +414,7 @@ export default function AdminPage() {
     (p) =>
       p.name.toLowerCase().includes(patientSearch.toLowerCase()) ||
       (p.patient_id && p.patient_id.toLowerCase().includes(patientSearch.toLowerCase())) ||
+      (p.patient_id && maskPatientId(p.patient_id).toLowerCase().includes(patientSearch.toLowerCase())) ||
       (p.phone && p.phone.includes(patientSearch))
   );
 
@@ -795,8 +796,8 @@ export default function AdminPage() {
               <tbody className="divide-y divide-slate-100">
                 {filteredPatients.map((pt) => (
                   <tr key={pt.id} className="hover:bg-slate-50/80 transition">
-                    <td className="py-4 px-4 font-mono font-bold text-teal-800 text-sm">
-                      {pt.patient_id}
+                    <td className="py-4 px-4 font-mono font-bold text-teal-800 text-sm" title={pt.patient_id}>
+                      {maskPatientId(pt.patient_id)}
                     </td>
                     <td className="py-4 px-4 font-bold text-slate-900">
                       {pt.name}
@@ -1157,7 +1158,7 @@ export default function AdminPage() {
                   <div key={idx} className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                     {/* Header */}
                     <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between text-xs font-bold text-slate-700">
-                      <span>Patient ID: {item.patient_id}</span>
+                      <span>Patient ID: {maskPatientId(item.patient_id)}</span>
                       <span className="font-mono text-[11px] bg-slate-200 px-2 py-0.5 rounded text-slate-600">
                         Blind Hash: {item.hacker_sees_raw_db.phone_blind_hash?.slice(0, 16)}...
                       </span>

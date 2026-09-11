@@ -11,7 +11,7 @@ import { KioskVoiceIndicator } from "../../components/KioskVoiceIndicator";
 import AdaptiveSymptomEngine, { SymptomAnswerRecord } from "../../components/symptoms/AdaptiveSymptomEngine";
 import { MedicalReportScanner } from "../../components/MedicalReportScanner";
 import type { Patient, TreatmentRecord, TokenItem, DocumentOutDetailed } from "../../lib/types";
-import { cleanSymptomText } from "../../lib/clinicalUtils";
+import { cleanSymptomText, maskPatientId } from "../../lib/clinicalUtils";
 
 // Configuration constants
 const INACTIVITY_TIMEOUT_MS = 30000;
@@ -707,7 +707,7 @@ export default function PatientPage() {
                   {t("patient_id_label", lang)}
                 </span>
                 <span className="font-mono font-black text-teal-800 text-base">
-                  {patient.patient_id || patient.id}
+                  {maskPatientId(patient.patient_id || patient.id)}
                 </span>
               </div>
               <div className="flex justify-between border-b pb-2">

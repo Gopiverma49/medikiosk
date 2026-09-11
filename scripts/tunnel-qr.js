@@ -172,13 +172,6 @@ function scheduleReconnect() {
   }, 3000);
 }
 
-// Fallback: If tunnel takes > 6s (e.g. offline machine without internet), display local URL QR
-const initialFallback = setTimeout(() => {
-  if (!currentPublicUrl && !qrRenderedUrl) {
-    renderUnifiedQr(localUrl, 'Local Wi-Fi');
-  }
-}, 6000);
-
 // Active Health Check: Pings the public URL every 35 seconds to ensure traffic forwards properly
 clearInterval(healthCheckTimer);
 healthCheckTimer = setInterval(() => {
@@ -215,7 +208,6 @@ startTunnel();
 // Clean up child process on exit
 const cleanExit = () => {
   isShuttingDown = true;
-  clearTimeout(initialFallback);
   if (reconnectTimer) clearTimeout(reconnectTimer);
   if (healthCheckTimer) clearInterval(healthCheckTimer);
   if (tunnelProcess && !tunnelProcess.killed) {

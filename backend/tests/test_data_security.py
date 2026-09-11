@@ -1,6 +1,6 @@
 from app.services.crypto import (
     encrypt_field, decrypt_field, blind_index, mask_aadhaar_and_pii,
-    compute_file_sha256, verify_file_sha256
+    compute_file_sha256, verify_file_sha256, mask_patient_id
 )
 
 
@@ -197,4 +197,14 @@ def test_obsolete_tables_not_in_orm_metadata():
     obsolete = ["ai_evaluations", "ai_provenance", "allergies", "clinical_concepts", "lab_results", "medications"]
     for dead in obsolete:
         assert dead not in table_names
+
+
+def test_patient_id_masking():
+    """Verify patient ID masks all but the last 3 digits with asterisks."""
+    assert mask_patient_id("1000000002") == "*******002"
+    assert mask_patient_id("1000000001") == "*******001"
+    assert mask_patient_id("12345") == "**345"
+    assert mask_patient_id("444") == "444"
+    assert mask_patient_id("22") == "22"
+    assert mask_patient_id(None) is None
 
