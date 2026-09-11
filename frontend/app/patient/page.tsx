@@ -1415,7 +1415,7 @@ export default function PatientPage() {
       </main>
 
       <footer className="text-center text-xs text-slate-400 py-2">
-        MediKiosk • Hospital Outpatient Department Intake System
+        MediKiosk • {t("header_suite", lang)}
       </footer>
     </div>
   );

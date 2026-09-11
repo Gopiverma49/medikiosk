@@ -27,6 +27,7 @@ Here is a quick look at every main folder in this project and what it does:
 | **`docs/`** | Explanations, drawings, database tables, and instruction manuals explaining how the project was designed. | [Read Docs Guide](README_docs.md) |
 | **`evaluation/`** | Automatic test quizzes that check if the AI understands medical symptoms and medications correctly. | [Read Evaluation Guide](README_evaluation.md) |
 | **`sample_data/`** | Practice files (sample patients, fake prescription photos, and test lab reports) so you can test without real patient data. | [Read Sample Data Guide](README_sample_data.md) |
+| **`SIH_DOCS/`** | **Smart India Hackathon (SIH) Dossier:** Technical approach, feasibility & viability, clinical impact metrics, and system architecture. | [Read SIH Dossier](../SIH_DOCS/README.md) |
 | **`scripts/`** | Helper tools — like the one-click launcher and the mobile QR code generator that lets you open the kiosk on your phone. | [Read Scripts Guide](README_scripts.md) |
 
 ---
@@ -77,6 +78,7 @@ This automatically starts both the backend and frontend, and opens the website i
    - **Main Launchpad:** `http://localhost:3000`
    - **Patient Check-in Kiosk:** `http://localhost:3000/patient`
    - **Waiting Room TV Board:** `http://localhost:3000/tokens`
+   - **Nurse Triage Desk:** `http://localhost:3000/nurse`
    - **Doctor Station:** `http://localhost:3000/doctor`
    - **Hospital Admin Desk:** `http://localhost:3000/admin`
 
@@ -86,6 +88,7 @@ This automatically starts both the backend and frontend, and opens the website i
 
 Click any of the links below to read the simple, plain-English breakdown for that specific part:
 
+- [**Smart India Hackathon (SIH) Dossier (`SIH_DOCS/README.md`)**](../SIH_DOCS/README.md) — Technical approach, feasibility & viability, impact metrics, and system architecture.
 - [**Backend Guide (`README_backend.md`)**](README_backend.md) — How the server, database, and safety rules work.
 - [**Frontend Guide (`README_frontend.md`)**](README_frontend.md) — How the screens, buttons, audio chimes, and languages work.
 - [**Docs Guide (`README_docs.md`)**](README_docs.md) — All about the project specifications and database tables.

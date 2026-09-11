@@ -1,6 +1,9 @@
 # 🏥 MediKiosk — Smart Multilingual Hospital Intake & Physician Workflow Platform
 
-> Supports **English** and **हिंदी (Hindi)** with large touch controls, voice guidance, live barcode scanning, and multi-room TV token broadcast.
+> Supports **7 Regional Languages** (Kannada, Hindi, Marathi, Tamil, Odia, Nepali, English) with large touch controls, voice guidance, live barcode scanning, and multi-room TV token broadcast.
+
+> 🏆 **Smart India Hackathon (SIH) Evaluation Dossier:**  
+> Detailed SIH submission documentation covering **Technical Approach**, **Feasibility & Viability**, **Impact & Benefits**, and **System Architecture** is available in [**`SIH_DOCS/`**](SIH_DOCS/README.md).
 
 > 📖 **Comprehensive Folder-by-Folder Documentation:**  
 > Detailed architecture, file-by-file breakdowns, and data flow guides for every module are located in the [**`MASTER README/`**](MASTER%20README/README.md) directory.
@@ -12,7 +15,7 @@
 ```mermaid
 flowchart TD
     subgraph KIOSK ["🏥 Patient Intake Kiosk (Mobile / Tablet / Kiosk)"]
-        A1["1. Language & Mode\n(English / Hindi • Touch / Voice)"]
+        A1["1. Language & Mode\n(Kannada / Hindi / English etc. • Touch / Voice)"]
         A2["2. Patient Identification\n(Barcode Scan / 10-Digit UHID / Quick Register)"]
         A3["3. Past History Confirmation\n(Same Illness vs New Problem)"]
         A4["4. Dynamic Clinical Intake\n(Speech / Touch Symptom Flow)"]
@@ -31,7 +34,8 @@ flowchart TD
     subgraph STATIONS ["👨‍⚕️ Clinical Workstations & TV Displays"]
         C1["📺 Live Token Display TV\n(Multi-Room Broadcast + Audio Chimes)"]
         C2["👨‍⚕️ Doctor Consultation Workspace\n(Queue Call, Structured Summary, Fact Verification)"]
-        C3["⚙️ Hospital Admin & Audit\n(Doctor Accounts, Triage Rules, Accuracy Metrics)"]
+        C3["👩‍⚕️ Nurse Triage Desk\n(Queue Monitoring, Patient Search, Vitals)"]
+        C4["⚙️ Hospital Admin & Audit\n(Doctor Accounts, Triage Rules, Accuracy Metrics)"]
     end
 
     A4 --> B1
@@ -39,6 +43,7 @@ flowchart TD
     A5 --> B5
     B5 <== "Live WebSocket Sync" ==> C1
     B5 <== "Live WebSocket Sync" ==> C2
+    B5 <== "Live WebSocket Sync" ==> C3
     B4 --> C2
 ```
 
@@ -51,7 +56,7 @@ Double-click:
 ```cmd
 start_medikiosk.bat
 ```
-*Automatically starts the Backend, Frontend, and Cloudflare Mobile HTTPS Tunnel, opening `http://localhost:3000` in your browser.*
+*Automatically starts the Backend, Frontend, and Mobile HTTPS Tunnel with keep-alive, opening `http://localhost:3000` in your browser.*
 
 ### Option 2: Command Line (Any OS)
 ```bash
@@ -73,10 +78,11 @@ npm run dev
 
 | Portal | URL | Description |
 | :--- | :--- | :--- |
-| **🏠 Portal Launchpad** | [http://localhost:3000](http://localhost:3000) | Hub to launch all patient, doctor, display, and admin portals |
-| **🏥 Patient Kiosk** | [http://localhost:3000/patient](http://localhost:3000/patient) | Touch & voice self check-in station for patients |
-| **👨‍⚕️ Doctor Station** | [http://localhost:3000/doctor](http://localhost:3000/doctor) | Doctor consultation queue, structured AI summary & verification |
-| **📺 Token Display** | [http://localhost:3000/tokens](http://localhost:3000/tokens) | Multi-room live waiting-room TV display with simultaneous doctor calling |
+| **🏠 Portal Launchpad** | [http://localhost:3000](http://localhost:3000) | Hub to launch all patient, doctor, display, nurse, and admin portals |
+| **🏥 Patient Kiosk** | [http://localhost:3000/patient](http://localhost:3000/patient) | Touch & voice self check-in station with 7 regional languages |
+| **👨‍⚕️ Doctor Station** | [http://localhost:3000/doctor](http://localhost:3000/doctor) | Doctor consultation queue, structured AI summary & prescription builder |
+| **👩‍⚕️ Nurse Station** | [http://localhost:3000/nurse](http://localhost:3000/nurse) | Nurse triage queue monitoring, patient history lookup & vitals |
+| **📺 Token Display** | [http://localhost:3000/tokens](http://localhost:3000/tokens) | Multi-room live waiting-room TV display with simultaneous calling & audio chime |
 | **⚙️ Admin Station** | [http://localhost:3000/admin](http://localhost:3000/admin) | Physician accounts, triage safety rules & AI accuracy benchmarks |
 | **📖 API Documentation** | [http://localhost:8000/docs](http://localhost:8000/docs) | Interactive FastAPI Swagger documentation & test sandbox |
 | **🗄️ Database Schema** | [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md) | Complete reference for all 20 active database tables & relationships |
@@ -85,16 +91,12 @@ npm run dev
 
 ## 📱 Running on Mobile Phones & Tablets
 
-MediKiosk is fully responsive and supports running directly on smartphones and tablets:
+MediKiosk features a **Single Universal QR Code** that works seamlessly across all devices:
 
-1. **Option A (Instant Local Wi-Fi Access — Fastest & Most Reliable):**
-   - Connect your phone to the same Wi-Fi / Hotspot.
-   - Scan the **Local Wi-Fi QR Code** printed in your terminal or navigate to `http://YOUR_LOCAL_IP:3000`.
-
-2. **Option B (Secure HTTPS Cloud Tunnel — Works Anywhere over 4G/5G):**
-   - Run `npm run dev:all` (or `npm run dev:tunnel`).
-   - Scan the **Public HTTPS Tunnel QR Code** printed in your terminal.
-   - Enables full camera barcode scanning and microphone voice input out of the box with zero external configuration.
+- When you run `npm run dev:all`, a **single scannable QR code** is printed right in your terminal.
+- **Universal Accessibility:** Works whether your phone is on the **same Wi-Fi** or using **4G/5G mobile data**.
+- **Auto-Reconnect Keep-Alive:** The tunnel daemon runs in the background with 10-second heartbeats and automatic reconnection so the link never drops or times out.
+- Enables camera barcode scanning and microphone voice guidance with HTTPS permissions out of the box.
 
 ---
 
@@ -102,7 +104,7 @@ MediKiosk is fully responsive and supports running directly on smartphones and t
 
 ```mermaid
 flowchart TD
-    Step1["Step 1: Language & Mode\n(English / Hindi • Touch or Voice)"] --> Step2["Step 2: Enter Patient ID\n(Scan Card Barcode OR Type 10-Digit ID)"]
+    Step1["Step 1: Language & Mode\n(7 Languages • Touch or Voice)"] --> Step2["Step 2: Enter Patient ID\n(Scan Card Barcode OR Type 10-Digit ID)"]
     
     Step2 --> Lookup{"Found in\nDatabase?"}
     

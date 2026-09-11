@@ -17,3 +17,4 @@ uploads/
 *.traineddata
 .tesseract-cache/
 medikiosk-ocr/
+scripts/.tunnel-info.json

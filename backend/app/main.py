@@ -87,9 +87,43 @@ app.add_middleware(
 )
 
 
+import socket
+import os
+import json
+
 @app.get("/api/health")
 def health():
     return {"status": "ok", "env": settings.ENV}
+
+
+@app.get("/api/system/network-info")
+def get_network_info():
+    ip = "localhost"
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        pass
+
+    tunnel_url = None
+    tunnel_file = os.path.join(os.path.dirname(__file__), "..", "..", "scripts", ".tunnel-info.json")
+    if os.path.exists(tunnel_file):
+        try:
+            with open(tunnel_file, "r") as f:
+                data = json.load(f)
+                tunnel_url = data.get("publicUrl")
+        except Exception:
+            pass
+
+    return {
+        "local_ip": ip,
+        "local_url": f"http://{ip}:3000",
+        "tunnel_url": tunnel_url,
+        "frontend_port": 3000,
+        "backend_port": 8000,
+    }
 
 
 app.include_router(auth.router)

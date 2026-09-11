@@ -60,13 +60,16 @@ npm run dev:all
 This automatically starts:
 1. **FastAPI Backend** (listening on `0.0.0.0:8000`)
 2. **Next.js Frontend** (listening on `0.0.0.0:3000`)
-3. **Connectivity Suite** (prints both Local Wi-Fi & Public HTTPS Tunnel QR codes)
+3. **Universal Mobile Gateway** (prints a single scannable QR code that works universally on both local Wi-Fi and 4G/5G mobile data, backed by persistent SSH keep-alive heartbeats and automated Serveo ↔ Localhost.run failover).
 
 ---
 
-### Step 4: Open the App on Your Phone
-1. **Option 1 (Fastest):** Scan the **Local Wi-Fi QR Code** in your terminal using your phone camera (when connected to the same Wi-Fi / Hotspot).
-2. **Option 2 (Anywhere):** Scan the **Public HTTPS Tunnel QR Code** in your terminal to open MediKiosk over 4G/5G or external networks with valid SSL.
+### Step 4: Scan and Open on Your Phone
+Simply point your smartphone camera at the single QR code displayed in the terminal:
+- **Universal Mobile Access:** Opens MediKiosk directly on your phone, whether you are on the same Wi-Fi or on mobile cellular data.
+- **SSL / HTTPS Enabled:** Provides camera permissions for prescription scanning and microphone permissions for multilingual speech intake right out of the box.
+- **Persistent Keep-Alive:** The gateway sends heartbeats every 10 seconds and automatically reconnects if your device switches networks.
+- *(Alternative for Local-Only Intranet)*: You can also manually visit `http://<laptop-ip>:3000` from any browser on the same Wi-Fi network.
 
 ---
 

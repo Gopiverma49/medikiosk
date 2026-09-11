@@ -54,9 +54,9 @@ docs/
 ---
 
 ### 4. [`MOBILE_SETUP_GUIDE.md`](file:///d:/medikiosk/docs/MOBILE_SETUP_GUIDE.md) — Phone Setup
-- Shows you the two easiest ways to open the patient kiosk on your phone:
-  - **Option 1 (Local Wi-Fi):** Connect your laptop and phone to the same Wi-Fi, and open `http://<your-laptop-ip>:3000`. Fast, private, and works with no internet!
-  - **Option 2 (Public Web Link):** Run `npm run dev:all`, scan the QR code in your terminal, and open it on your phone over 4G/5G mobile internet.
+- Shows how to open the patient kiosk on any smartphone:
+  - **Universal Mobile QR Code (Option A):** Run `npm run dev:all` (or `start_medikiosk.bat`), scan the single unified terminal QR code, and MediKiosk opens immediately on your phone—working seamlessly on both the local clinic Wi-Fi and external 4G/5G mobile data with automated SSH keepalive.
+  - **Local LAN IP:** Access via `http://<laptop-ip>:3000` for pure offline intranet hospital deployments.
 
 ---
 
@@ -71,3 +71,17 @@ docs/
 ### 6. [`API.md`](file:///d:/medikiosk/docs/API.md) & [`EVALUATION.md`](file:///d:/medikiosk/docs/EVALUATION.md)
 - **`API.md`:** Technical list of web addresses for developers who want to connect other hospital software to MediKiosk.
 - **`EVALUATION.md`:** Details our testing method to ensure the medical AI scores above 99% on catching emergency danger signs.
+
+---
+
+## 🏆 Smart India Hackathon (SIH) Master Dossiers (`SIH_DOCS/`)
+
+For grand evaluations, technical juries, and hackathon reviewers, the repository includes a complete, high-impact documentation suite in the [`SIH_DOCS/`](file:///d:/medikiosk/SIH_DOCS/README.md) directory:
+
+| Document | Focus & Highlights |
+| :--- | :--- |
+| **[`SIH_DOCS/README.md`](file:///d:/medikiosk/SIH_DOCS/README.md)** | **Master Pitch & Jury Map:** Executive problem statement, innovation matrix, live demo checklist, and rapid judge Q&A defense. |
+| **[`01_TECHNICAL_APPROACH.md`](file:///d:/medikiosk/SIH_DOCS/01_TECHNICAL_APPROACH.md)** | **Technical Approach:** 7-language concept normalization, hybrid offline/cloud NLP, clinical extraction, and red-flag rules. |
+| **[`02_FEASIBILITY_AND_VIABILITY.md`](file:///d:/medikiosk/SIH_DOCS/02_FEASIBILITY_AND_VIABILITY.md)** | **Feasibility & Viability:** Deployment topologies (from ₹25,000 PHC kiosk to Tertiary hospital), ₹0.00 zero-marginal inference cost, ABDM M1/M2/M3 & DPDP Act 2023 compliance. |
+| **[`03_IMPACT_AND_BENEFITS.md`](file:///d:/medikiosk/SIH_DOCS/03_IMPACT_AND_BENEFITS.md)** | **Impact & Benefits:** 72% intake duration reduction (18m down to 5m), 100% emergency red-flag sensitivity, 68% clinician burnout relief, and economic ROI models. |
+| **[`04_SYSTEM_ARCHITECTURE.md`](file:///d:/medikiosk/SIH_DOCS/04_SYSTEM_ARCHITECTURE.md)** | **System Architecture:** 5 Mermaid architectural diagrams (component topology, clinical sequence, DB schema, triage state machine, network tunnel). |

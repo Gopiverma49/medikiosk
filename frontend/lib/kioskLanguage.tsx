@@ -6,8 +6,10 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useMemo,
   ReactNode,
 } from "react";
+import { usePathname } from "next/navigation";
 import { t, Language, TranslationKey } from "./translations";
 
 export type SupportedLanguage = Language;
@@ -30,13 +32,25 @@ export const BASE_LANGUAGE_OPTIONS: BaseLanguageOption[] = [
   { code: "ne", nativeName: "नेपाली", enName: "Nepali", region: "Nepal & Hill States" },
 ];
 
-const STORAGE_KEY = "medikiosk_base_language";
-const DEFAULT_BASE_LANG: SupportedLanguage = "mr";
+export type PortalType = "home" | "patient" | "doctor" | "nurse" | "tokens" | "admin";
+
+export function getPortalFromPathname(pathname: string | null): PortalType {
+  if (!pathname) return "home";
+  if (pathname.startsWith("/patient")) return "patient";
+  if (pathname.startsWith("/doctor")) return "doctor";
+  if (pathname.startsWith("/nurse")) return "nurse";
+  if (pathname.startsWith("/tokens")) return "tokens";
+  if (pathname.startsWith("/admin")) return "admin";
+  return "home";
+}
+
+const BASE_STORAGE_KEY = "medikiosk_base_language";
+const DEFAULT_BASE_LANG: SupportedLanguage = "kn";
 
 export function getStoredBaseLanguage(): SupportedLanguage {
   if (typeof window === "undefined") return DEFAULT_BASE_LANG;
   try {
-    const saved = localStorage.getItem(STORAGE_KEY) as SupportedLanguage | null;
+    const saved = localStorage.getItem(BASE_STORAGE_KEY) as SupportedLanguage | null;
     if (saved && ["en", "hi", "mr", "or", "ne", "kn", "ta"].includes(saved)) {
       return saved;
     }
@@ -47,14 +61,52 @@ export function getStoredBaseLanguage(): SupportedLanguage {
 export function setStoredBaseLanguage(lang: SupportedLanguage): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(STORAGE_KEY, lang);
-    window.dispatchEvent(new CustomEvent("kiosk_base_language_changed", { detail: lang }));
+    localStorage.setItem(BASE_STORAGE_KEY, lang);
+  } catch (_) {}
+}
+
+export function getStoredPortalLanguage(portal: PortalType, fallbackBase: SupportedLanguage): SupportedLanguage {
+  if (typeof window === "undefined") {
+    return portal === "doctor" || portal === "admin" || portal === "nurse" ? "en" : fallbackBase;
+  }
+  try {
+    if (portal === "home") {
+      return fallbackBase;
+    }
+    const key = `medikiosk_lang_${portal}`;
+    const saved = localStorage.getItem(key) as SupportedLanguage | null;
+    if (saved && ["en", "hi", "mr", "or", "ne", "kn", "ta"].includes(saved)) {
+      return saved;
+    }
+  } catch (_) {}
+  // Default doctor, nurse, and admin to English unless user explicitly chose otherwise
+  if (portal === "doctor" || portal === "admin" || portal === "nurse") {
+    return "en";
+  }
+  return fallbackBase;
+}
+
+export function setStoredPortalLanguage(portal: PortalType, lang: SupportedLanguage): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (portal === "home") {
+      localStorage.setItem(BASE_STORAGE_KEY, lang);
+    } else {
+      localStorage.setItem(`medikiosk_lang_${portal}`, lang);
+    }
   } catch (_) {}
 }
 
 interface KioskLanguageContextType {
+  // Current active language for the page being viewed
+  currentLanguage: SupportedLanguage;
+  // Regional base language of the hospital kiosk system
+  kioskBaseLanguage: SupportedLanguage;
+  // For backwards compatibility: returns active portal language (or regional base on patient screen)
   baseLanguage: SupportedLanguage;
+  // Patient session language
   sessionLanguage: SupportedLanguage;
+  setLanguage: (lang: SupportedLanguage, targetPortal?: PortalType) => void;
   setBaseLanguage: (lang: SupportedLanguage) => void;
   setSessionLanguage: (lang: SupportedLanguage) => void;
   resetSessionLanguage: () => void;
@@ -62,8 +114,11 @@ interface KioskLanguageContextType {
 }
 
 const KioskLanguageContext = createContext<KioskLanguageContextType>({
+  currentLanguage: DEFAULT_BASE_LANG,
+  kioskBaseLanguage: DEFAULT_BASE_LANG,
   baseLanguage: DEFAULT_BASE_LANG,
   sessionLanguage: DEFAULT_BASE_LANG,
+  setLanguage: () => {},
   setBaseLanguage: () => {},
   setSessionLanguage: () => {},
   resetSessionLanguage: () => {},
@@ -71,34 +126,77 @@ const KioskLanguageContext = createContext<KioskLanguageContextType>({
 });
 
 export function KioskLanguageProvider({ children }: { children: ReactNode }) {
-  const [baseLanguage, setBaseLangState] = useState<SupportedLanguage>(DEFAULT_BASE_LANG);
+  const pathname = usePathname();
+  const portal = getPortalFromPathname(pathname);
+
+  // Hospital-wide regional base language (set on Home / Reception)
+  const [kioskBaseLanguage, setKioskBaseLanguageState] = useState<SupportedLanguage>(DEFAULT_BASE_LANG);
+
+  // Per-portal independent languages
+  const [portalLanguages, setPortalLanguages] = useState<Record<PortalType, SupportedLanguage>>({
+    home: DEFAULT_BASE_LANG,
+    patient: DEFAULT_BASE_LANG,
+    doctor: "en",
+    nurse: "en",
+    tokens: DEFAULT_BASE_LANG,
+    admin: "en",
+  });
+
+  // Patient active session language (in-memory per session, does not overwrite other systems)
   const [sessionLanguage, setSessionLangState] = useState<SupportedLanguage>(DEFAULT_BASE_LANG);
 
-  // Initialize from localStorage on mount
+  // Initialize from localStorage on initial render
   useEffect(() => {
-    const stored = getStoredBaseLanguage();
-    setBaseLangState(stored);
-    setSessionLangState(stored);
+    const base = getStoredBaseLanguage();
+    setKioskBaseLanguageState(base);
 
-    const handleStorage = () => {
-      const newLang = getStoredBaseLanguage();
-      setBaseLangState(newLang);
-    };
+    setPortalLanguages({
+      home: base,
+      patient: base,
+      doctor: getStoredPortalLanguage("doctor", base),
+      nurse: getStoredPortalLanguage("nurse", base),
+      tokens: getStoredPortalLanguage("tokens", base),
+      admin: getStoredPortalLanguage("admin", base),
+    });
 
-    window.addEventListener("kiosk_base_language_changed" as any, handleStorage);
-    window.addEventListener("storage", handleStorage);
-    return () => {
-      window.removeEventListener("kiosk_base_language_changed" as any, handleStorage);
-      window.removeEventListener("storage", handleStorage);
-    };
+    setSessionLangState(base);
+    // Note: Do NOT add a cross-tab 'storage' event listener here.
+    // Each tab / portal operates independently so a doctor's language change
+    // or home base language adjustment does not interrupt an ongoing patient intake session.
   }, []);
 
-  const setBaseLanguage = useCallback((lang: SupportedLanguage) => {
-    setBaseLangState(lang);
-    setStoredBaseLanguage(lang);
-    // When base language is changed at kiosk admin/home level, also sync session
-    setSessionLangState(lang);
-  }, []);
+  const setLanguage = useCallback(
+    (lang: SupportedLanguage, targetPortal?: PortalType) => {
+      const p = targetPortal || portal;
+      if (p === "home") {
+        setKioskBaseLanguageState(lang);
+        setStoredBaseLanguage(lang);
+        setPortalLanguages((prev) => ({ ...prev, home: lang }));
+      } else if (p === "patient") {
+        setSessionLangState(lang);
+      } else {
+        setPortalLanguages((prev) => ({ ...prev, [p]: lang }));
+        setStoredPortalLanguage(p, lang);
+      }
+    },
+    [portal]
+  );
+
+  const setBaseLanguage = useCallback(
+    (lang: SupportedLanguage) => {
+      if (portal === "home") {
+        setKioskBaseLanguageState(lang);
+        setStoredBaseLanguage(lang);
+        setPortalLanguages((prev) => ({ ...prev, home: lang }));
+      } else if (portal === "patient") {
+        setSessionLangState(lang);
+      } else {
+        setPortalLanguages((prev) => ({ ...prev, [portal]: lang }));
+        setStoredPortalLanguage(portal, lang);
+      }
+    },
+    [portal]
+  );
 
   const setSessionLanguage = useCallback((lang: SupportedLanguage) => {
     setSessionLangState(lang);
@@ -109,18 +207,32 @@ export function KioskLanguageProvider({ children }: { children: ReactNode }) {
     setSessionLangState(currentBase);
   }, []);
 
+  // Compute active language for the currently rendered portal
+  const currentLanguage = useMemo<SupportedLanguage>(() => {
+    if (portal === "patient") return sessionLanguage;
+    if (portal === "home") return kioskBaseLanguage;
+    return portalLanguages[portal] || kioskBaseLanguage;
+  }, [portal, sessionLanguage, kioskBaseLanguage, portalLanguages]);
+
+  // Backward compatibility: on patient page, baseLanguage gives kiosk regional base;
+  // on other pages, baseLanguage gives that portal's selected language.
+  const baseLanguage = portal === "patient" ? kioskBaseLanguage : currentLanguage;
+
   const translate = useCallback(
     (key: TranslationKey) => {
-      return t(key, sessionLanguage);
+      return t(key, currentLanguage);
     },
-    [sessionLanguage]
+    [currentLanguage]
   );
 
   return (
     <KioskLanguageContext.Provider
       value={{
+        currentLanguage,
+        kioskBaseLanguage,
         baseLanguage,
         sessionLanguage,
+        setLanguage,
         setBaseLanguage,
         setSessionLanguage,
         resetSessionLanguage,

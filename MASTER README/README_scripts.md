@@ -37,30 +37,39 @@ You can also run commands from your terminal:
 
 ---
 
-## 📱 How the Mobile QR Code Works (`scripts/tunnel-qr.js`)
+## 📱 How the Universal Mobile QR Code Works (`scripts/tunnel-qr.js`)
 
-When you run `npm run dev:all`, you will see a big QR code printed right inside your terminal:
+When you run `npm run dev:all` (or `start_medikiosk.bat`), MediKiosk prints **one unified, universal QR code** right inside your terminal:
 
+```text
+====================================================================
+  📱 SCAN TO OPEN MEDIKIOSK ON YOUR PHONE
+====================================================================
+Works on any mobile phone (same Wi-Fi or 4G/5G Mobile Data):
+
+[ █████████████████████████████████ ]
+[ █ ▄▄▄▄▄ █  █ █▄ █ ▄▄▄ █ ▄▄▄▄▄ █ ]
+[ █ █   █ █ ▄█▄ ▀▄█ █   █ █   █ █ ]
+[ █ █▄▄▄█ █ ▄▄█▄▄ █ █▄▄ █ █▄▄▄█ █ ]
+[ █▄▄▄▄▄▄▄█▄█ ▀ █ █ ▄ █▄█▄▄▄▄▄▄▄█ ]
+
+🌐 Universal Mobile Link: https://xxxx.serveousercontent.com
+📶 Network: Works on both Wi-Fi and Mobile Data (4G/5G)
+⚡ Keep-Alive: ACTIVE (Auto-reconnecting via Serveo.net)
+💻 Local LAN URL: http://192.168.1.15:3000
+====================================================================
 ```
-============================================================
-✅ MOBILE ACCESS ONLINE (Secure HTTPS)
-============================================================
 
-📱 SCAN WITH YOUR PHONE CAMERA:
-(Opens MediKiosk directly on your phone)
-
-[  QR CODE APPEARS HERE  ]
-
-🌐 Public URL: https://xxxx.serveousercontent.com
-============================================================
-```
-
-### Why Do We Need a Tunnel & QR Code?
-1. **Easy Phone Testing:** Instead of typing long IP addresses, you can simply point your phone's camera at the terminal screen to open the patient kiosk.
-2. **Camera & Microphone Permissions:** Mobile web browsers (like Chrome on Android or Safari on iPhone) block camera access for barcode scanning and microphone access for voice input unless the website is on a **secure HTTPS connection**. The tunnel provides HTTPS so everything works out of the box!
+### 🌟 Key Resilience Features Built-In:
+1. **One Global QR Code for Everything:** No confusing choices. A single QR code opens MediKiosk on your smartphone whether you are on the clinic Wi-Fi, hotspot, or 4G/5G mobile internet.
+2. **Persistent SSH Keep-Alive:** Uses `ServerAliveInterval=10`, `ServerAliveCountMax=3`, and `TCPKeepAlive=yes` heartbeats so the connection stays open indefinitely even when your phone sleeps.
+3. **Automated Dual-Provider Failover:** Automatically routes through **Serveo.net** with instant fallback to **Localhost.run (`nokey@localhost.run`)** if either network drops.
+4. **Self-Healing Auto-Reconnect & Health Checks:** Checks tunnel health every 35 seconds via HTTPS GET and automatically revives the tunnel with fresh credentials if a drop is detected.
+5. **Secure HTTPS for Mobile Camera & Mic:** Mobile browsers require secure HTTPS to allow barcode scanning and voice input. The universal gateway handles SSL automatically.
+6. **Local Cache File (`scripts/.tunnel-info.json`):** Caches active IP and tunnel URLs so internal system endpoints like `/api/system/network-info` can broadcast status across the hospital.
 
 ### 💡 Good to Know:
-If you see a blue **"Serveo Browser Warning"** on your phone when opening the link for the first time, simply tap the **"Continue to Site"** button. This is just a standard one-time safety confirmation from the free tunnel service.
+If you see a blue **"Serveo Browser Warning"** on your phone when opening the link for the first time, simply tap the **"Continue to Site"** button. This is a standard one-time safety confirmation from the public tunnel provider.
 
 ---
 

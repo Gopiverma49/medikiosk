@@ -46,6 +46,7 @@ Think of "routers" as different counter desks in a hospital. When the frontend n
 
 - **[`tokens.py`](file:///d:/medikiosk/backend/app/routers/tokens.py) (Token & Queue Counter):**
   - Gives out token numbers like `OPD-001`.
+  - Manages nurse triage status transitions (`WAITING`, `TRIAGED`, `CALLED`, `COMPLETED`).
   - Keeps a live connection (WebSocket) open with the waiting room TV so when a doctor presses "Call Patient", the TV screen updates instantly with no delay.
 - **[`patients.py`](file:///d:/medikiosk/backend/app/routers/patients.py) (Reception Desk):**
   - Searches for patients by hospital ID (UHID), phone number, or barcode scan.
@@ -60,12 +61,20 @@ Think of "routers" as different counter desks in a hospital. When the frontend n
   - Looks for danger signs (like severe chest pain or extreme breathing trouble) and alerts hospital staff immediately.
 - **[`contradictions.py`](file:///d:/medikiosk/backend/app/routers/contradictions.py) (Discrepancy Checker):**
   - Warns the doctor if the patient says one thing (e.g. "I have no diabetes") but their uploaded prescription lists diabetes medicine.
+- **[`ayush.py`](file:///d:/medikiosk/backend/app/routers/ayush.py) (AYUSH Integrative Care Counter):**
+  - Provides traditional Indian medicine context (Ayurveda, Yoga, Unani, Siddha, Homeopathy) alongside allopathic clinical records.
+- **[`timeline.py`](file:///d:/medikiosk/backend/app/routers/timeline.py) & [`history.py`](file:///d:/medikiosk/backend/app/routers/history.py) (Patient Chronology):**
+  - Constructs longitudinal chronological timelines of patient visits, symptom evolutions, and prior interventions.
 - **[`admin.py`](file:///d:/medikiosk/backend/app/routers/admin.py) (Hospital Manager Desk):**
   - Lets hospital managers add new doctor rooms, create staff accounts, reset queues, and see history logs.
 - **[`auth.py`](file:///d:/medikiosk/backend/app/routers/auth.py) (Staff Login):**
   - Verifies doctor and nurse usernames and passwords.
 - **[`fhir.py`](file:///d:/medikiosk/backend/app/routers/fhir.py) (Government Health Record Exporter):**
   - Turns patient records into standard digital health cards (HL7 FHIR / ABDM) used by hospitals across India.
+- **[`evaluation.py`](file:///d:/medikiosk/backend/app/routers/evaluation.py) (AI Quality Assurance Desk):**
+  - Runs in-memory evaluation runs against canonical benchmarks for live regression testing.
+- **`/api/system/network-info` (System Gateway Telemetry):**
+  - Directly served by [`main.py`](file:///d:/medikiosk/backend/app/main.py) to read `scripts/.tunnel-info.json` and broadcast LAN IP and public tunnel URLs.
 
 ---
 
@@ -74,7 +83,8 @@ Think of "routers" as different counter desks in a hospital. When the frontend n
 These are background helpers that do heavy thinking:
 
 - **[`ocr_service.py`](file:///d:/medikiosk/backend/app/services/ocr_service.py) (Picture Reader):** Reads the words inside uploaded images of paper prescriptions or lab tests using Tesseract OCR.
-- **[`document_extractor.py`](file:///d:/medikiosk/backend/app/services/document_extractor.py) (Medical Information Finder):** Finds medicine names (like Paracetamol), doses (like 500mg), and lab values (like Blood Sugar) from the messy text read by the OCR.
+- **[`document_extractor.py`](file:///d:/medikiosk/backend/app/services/document_extractor.py) (Medical Information Finder):** Finds medicine names (like Paracetamol), doses (like 500mg), and lab values (like Blood Sugar) from messy text.
+- **Multilingual Concept Normalizer:** Automatically maps user inputs across **7 regional languages** (Kannada, Hindi, Marathi, Tamil, Odia, Nepali, English) into language-neutral canonical concept keys (e.g. `chest_pain`, `fever`, `shortness_of_breath`, `vomiting`). Downstream triage and red-flag rules evaluate deterministic keys without translation loss.
 - **[`red_flag_engine.py`](file:///d:/medikiosk/backend/app/services/red_flag_engine.py) (Emergency Watchdog):** A strict list of rules that flags patients needing urgent care before their condition worsens.
 - **[`contradiction_engine.py`](file:///d:/medikiosk/backend/app/services/contradiction_engine.py) (Fact Cross-Examiner):** Compares patient answers with past medical records to catch mistakes.
 - **[`summary_service.py`](file:///d:/medikiosk/backend/app/services/summary_service.py) (Clinical Drafter):** Organizes patient complaints, symptoms, and duration into a tidy note for the doctor.
@@ -88,4 +98,5 @@ We have **47 automated tests** covering every part of the backend. You can run t
 ```bash
 pytest backend/tests
 ```
+
 If anything ever breaks, these tests will tell you immediately before real patients use the system.
