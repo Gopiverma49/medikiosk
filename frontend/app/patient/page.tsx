@@ -451,17 +451,22 @@ export default function PatientPage() {
     }
     setIsLoading(true);
     try {
-      for (const ans of answers) {
-        await api.submitAnswer({
-          encounter_id: encounterId,
-          question_concept: ans.concept,
-          raw_answer: ans.certainty === "unknown" ? null : ans.value,
-          certainty: ans.certainty,
-          source_language: lang,
-        });
-      }
-      await api.evaluateTriage(encounterId);
-      await api.detectContradictions(encounterId);
+      // Parallelize answer persistence to eliminate multi-second network roundtrip delays on mobile
+      await Promise.all(
+        answers.map((ans) =>
+          api.submitAnswer({
+            encounter_id: encounterId,
+            question_concept: ans.concept,
+            raw_answer: ans.certainty === "unknown" ? null : ans.value,
+            certainty: ans.certainty,
+            source_language: lang,
+          })
+        )
+      );
+      await Promise.all([
+        api.evaluateTriage(encounterId).catch((e) => console.warn("Triage eval notice:", e)),
+        api.detectContradictions(encounterId).catch((e) => console.warn("Contradictions notice:", e)),
+      ]);
     } catch (e) {
       console.warn("Failed saving symptom facts:", e);
     } finally {
@@ -472,17 +477,21 @@ export default function PatientPage() {
 
   const finishKioskIntake = async () => {
     setIsLoading(true);
-    if (encounterId) {
-      try {
-        await api.generateSummary(encounterId);
-      } catch (e) {
-        console.warn("Summary generation error:", e);
-      }
-    }
 
-    if (patient) {
-      try {
-        const tok = await api.generateToken(patient.id, encounterId || undefined, patient.department || "General Medicine");
+    try {
+      // Run token generation and clinical summary concurrently for instantaneous mobile response
+      const summaryPromise = encounterId
+        ? api.generateSummary(encounterId).catch((e) => console.warn("Summary generation error:", e))
+        : Promise.resolve(null);
+
+      let tokPromise = Promise.resolve<TokenItem | null>(null);
+      if (patient) {
+        tokPromise = api.generateToken(patient.id, encounterId || undefined, patient.department || "General Medicine");
+      }
+
+      const [_, tok] = await Promise.all([summaryPromise, tokPromise]);
+
+      if (tok) {
         setGeneratedToken(tok);
         if (interactionMode === "voice") {
           const tokenDigits = tok.token_number.split("").join(" ");
@@ -491,12 +500,13 @@ export default function PatientPage() {
             : `Your consultation token number is ${tokenDigits}. Please proceed to the waiting area.`;
           VoiceService.speak(prompt, lang);
         }
-      } catch (err) {
-        console.error("Error generating token:", err);
       }
+    } catch (err) {
+      console.error("Error generating token:", err);
+    } finally {
+      setIsLoading(false);
+      goTo("completed");
     }
-    setIsLoading(false);
-    goTo("completed");
   };
 
   return (

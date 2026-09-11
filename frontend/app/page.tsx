@@ -55,8 +55,6 @@ export default function Home() {
           {/* Portal 1: Patient Kiosk */}
           <Link
             href="/patient"
-            target="_blank"
-            rel="noopener noreferrer"
             className="group bg-white border-2 border-slate-200 hover:border-emerald-500 rounded-3xl p-6 transition-all duration-200 transform hover:-translate-y-1.5 shadow-xs hover:shadow-xl flex flex-col text-center items-center justify-between ring-2 ring-emerald-500/20"
           >
             <div>
@@ -79,8 +77,6 @@ export default function Home() {
           {/* Portal 2: Doctor Station */}
           <Link
             href="/doctor"
-            target="_blank"
-            rel="noopener noreferrer"
             className="group bg-white border-2 border-slate-200 hover:border-blue-500 rounded-3xl p-6 transition-all duration-200 transform hover:-translate-y-1.5 shadow-xs hover:shadow-xl flex flex-col text-center items-center justify-between"
           >
             <div>
@@ -103,8 +99,6 @@ export default function Home() {
           {/* Portal 3: Nurse Station */}
           <Link
             href="/nurse"
-            target="_blank"
-            rel="noopener noreferrer"
             className="group bg-white border-2 border-slate-200 hover:border-teal-500 rounded-3xl p-6 transition-all duration-200 transform hover:-translate-y-1.5 shadow-xs hover:shadow-xl flex flex-col text-center items-center justify-between"
           >
             <div>
@@ -127,8 +121,6 @@ export default function Home() {
           {/* Portal 4: Token Display */}
           <Link
             href="/tokens"
-            target="_blank"
-            rel="noopener noreferrer"
             className="group bg-white border-2 border-slate-200 hover:border-purple-500 rounded-3xl p-6 transition-all duration-200 transform hover:-translate-y-1.5 shadow-xs hover:shadow-xl flex flex-col text-center items-center justify-between"
           >
             <div>
@@ -151,8 +143,6 @@ export default function Home() {
           {/* Portal 5: Hospital Admin */}
           <Link
             href="/admin"
-            target="_blank"
-            rel="noopener noreferrer"
             className="group bg-white border-2 border-slate-200 hover:border-slate-800 rounded-3xl p-6 transition-all duration-200 transform hover:-translate-y-1.5 shadow-xs hover:shadow-xl flex flex-col text-center items-center justify-between"
           >
             <div>

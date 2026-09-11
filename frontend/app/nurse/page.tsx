@@ -93,25 +93,38 @@ export default function NursePage() {
     };
 
     try {
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsHost = `${window.location.hostname}:8000`;
-      ws = new WebSocket(`${protocol}//${wsHost}/api/ws/tokens`);
+      // Direct WebSocket port 8000 is only reachable on localhost / LAN
+      // Over remote tunnels, attempting port 8000 causes mobile browsers to hang for 30s
+      const isLocalHost =
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1" ||
+        /^192\.168\./.test(window.location.hostname) ||
+        /^10\./.test(window.location.hostname) ||
+        /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(window.location.hostname);
 
-      ws.onopen = () => {
-        stopFallbackPolling();
-      };
+      if (isLocalHost) {
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const wsHost = `${window.location.hostname}:8000`;
+        ws = new WebSocket(`${protocol}//${wsHost}/api/ws/tokens`);
 
-      ws.onmessage = () => {
-        loadTokenQueue();
-      };
+        ws.onopen = () => {
+          stopFallbackPolling();
+        };
 
-      ws.onerror = () => {
-        startFallbackPolling();
-      };
+        ws.onmessage = () => {
+          loadTokenQueue();
+        };
 
-      ws.onclose = () => {
-        startFallbackPolling();
-      };
+        ws.onerror = () => {
+          startFallbackPolling();
+        };
+
+        ws.onclose = () => {
+          startFallbackPolling();
+        };
+      } else {
+        startFallbackPolling(5000);
+      }
     } catch {
       startFallbackPolling();
     }
