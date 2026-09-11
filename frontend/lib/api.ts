@@ -330,4 +330,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ doctor_name }),
     }),
+  getSecurityStatus: () => request<any>("/admin/security/status"),
+  getSecurityDbInspection: (limit: number = 4) => request<any>(`/admin/security/inspect-db?limit=${limit}`),
 };

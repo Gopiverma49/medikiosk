@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     Column, String, Integer, Float, Boolean, DateTime, ForeignKey, JSON, Text, Enum
 )
-from .db_types import GUID
+from .db_types import GUID, EncryptedString, EncryptedText
 from sqlalchemy.orm import relationship
 
 from .database import Base
@@ -78,8 +78,9 @@ class Patient(Base, TimestampMixin):
     __tablename__ = "patients"
     id = Column(GUID(), primary_key=True, default=gen_uuid)
     patient_id = Column(String, unique=True, nullable=True, index=True)  # 10-digit ID e.g. 1000000001
-    name = Column(String, nullable=False)
-    phone = Column(String, nullable=True)
+    name = Column(EncryptedString, nullable=False)
+    phone = Column(EncryptedString, nullable=True)
+    phone_hash = Column(String, unique=False, nullable=True, index=True)  # HMAC-SHA256 blind index for secure lookup
     age = Column(Integer, nullable=True)
     gender = Column(String, nullable=True)
     preferred_language = Column(String, nullable=True)  # en | hi | kn
@@ -98,11 +99,11 @@ class TreatmentRecord(Base, TimestampMixin):
     patient_id = Column(GUID(), ForeignKey("patients.id"), nullable=False, index=True)
     illness_id = Column(String, nullable=False)
     illness_name = Column(String, nullable=False)
-    symptoms = Column(Text, nullable=True)
-    diagnosis = Column(String, nullable=True)
-    treatment = Column(Text, nullable=True)
+    symptoms = Column(EncryptedText, nullable=True)
+    diagnosis = Column(EncryptedString, nullable=True)
+    treatment = Column(EncryptedText, nullable=True)
     prescribed_medicines = Column(JSON, nullable=True)  # List of {name, dosage, frequency, duration, instructions}
-    doctor_notes = Column(Text, nullable=True)
+    doctor_notes = Column(EncryptedText, nullable=True)
     doctor_name = Column(String, nullable=True)
     visit_date = Column(String, nullable=True)  # Human readable e.g. "12 Aug 2026"
 
@@ -164,7 +165,7 @@ class ClinicalFact(Base, TimestampMixin):
     certainty = Column(String, default="confirmed")  # confirmed | unknown
     source = Column(Enum(FactSource), nullable=False)
     source_language = Column(String, nullable=True)
-    original_text = Column(Text, nullable=True)
+    original_text = Column(EncryptedText, nullable=True)
     source_document_id = Column(GUID(), ForeignKey("documents.id"), nullable=True)
 
     confidence = Column(Float, nullable=True)  # 0..1, extraction confidence only
@@ -189,7 +190,8 @@ class Document(Base, TimestampMixin):
     storage_path = Column(String, nullable=True)
     pages = Column(JSON, nullable=True)  # List of file paths/names for multi-page captures
     status = Column(String, default="uploaded")  # uploaded | processing | review_required | confirmed | failed
-    ocr_text = Column(Text, nullable=True)
+    sha256_hash = Column(String, nullable=True)  # Cryptographic SHA-256 seal of file content
+    ocr_text = Column(EncryptedText, nullable=True)
     ocr_confidence = Column(Float, nullable=True)
     extracted_data = Column(JSON, nullable=True)  # Validated ClinicalDocumentExtraction dictionary
 
@@ -213,7 +215,7 @@ class ClinicalSummary(Base, TimestampMixin):
     __tablename__ = "clinical_summaries"
     id = Column(GUID(), primary_key=True, default=gen_uuid)
     encounter_id = Column(GUID(), ForeignKey("encounters.id"), nullable=False)
-    text = Column(Text, nullable=False)
+    text = Column(EncryptedText, nullable=False)
     sources = Column(JSON, nullable=True)
     facts_needing_verification = Column(Integer, default=0)
     contradictions_count = Column(Integer, default=0)

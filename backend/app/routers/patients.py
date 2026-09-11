@@ -10,15 +10,28 @@ from ..schemas import (
     PatientLookupIn, TreatmentRecordOut, PrescriptionSaveIn,
 )
 from ..services.audit import log_event
+from ..services.crypto import blind_index
 from datetime import datetime, timezone
 
 router = APIRouter(prefix="/api", tags=["patients"])
 
 
 def _get_patient(db: Session, identifier: str) -> Optional[Patient]:
-    """Helper to find patient by UUID id or 10-digit patient_id."""
+    """Helper to find patient by UUID id, 10-digit patient_id, or blind-indexed phone."""
     clean_id = identifier.strip()
-    return db.query(Patient).filter((Patient.id == clean_id) | (Patient.patient_id == clean_id)).first()
+    patient = db.query(Patient).filter((Patient.id == clean_id) | (Patient.patient_id == clean_id)).first()
+    if patient:
+        return patient
+    
+    # Try blind-index phone match
+    p_hash = blind_index(clean_id)
+    if p_hash:
+        patient = db.query(Patient).filter(Patient.phone_hash == p_hash).first()
+        if patient:
+            return patient
+            
+    # Backwards-compatible legacy plain phone match
+    return db.query(Patient).filter(Patient.phone == clean_id).first()
 
 
 from ..models import Patient, Encounter, Consent, TreatmentRecord, ClinicalFact, ClinicalSummary, TokenQueue, TokenStatus
@@ -238,6 +251,7 @@ def create_patient(payload: PatientCreate, db: Session = Depends(get_db)):
         existing.name = payload.name.strip()
         if payload.phone:
             existing.phone = payload.phone.strip()
+            existing.phone_hash = blind_index(payload.phone)
         if payload.age is not None:
             existing.age = payload.age
         if payload.gender:
@@ -253,6 +267,8 @@ def create_patient(payload: PatientCreate, db: Session = Depends(get_db)):
     
     patient_data = payload.model_dump()
     patient_data["patient_id"] = clean_pid
+    if payload.phone:
+        patient_data["phone_hash"] = blind_index(payload.phone)
     patient = Patient(**patient_data)
     try:
         db.add(patient)

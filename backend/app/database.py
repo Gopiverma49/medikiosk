@@ -33,6 +33,31 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
+def _ensure_sqlite_columns():
+    """Safely adds missing columns to existing local SQLite database without data loss."""
+    if db_url.startswith("sqlite"):
+        try:
+            import sqlite3
+            db_path = db_url.replace("sqlite:///", "")
+            if os.path.isfile(db_path):
+                conn = sqlite3.connect(db_path)
+                c = conn.cursor()
+                c.execute("PRAGMA table_info(patients)")
+                p_cols = [r[1] for r in c.fetchall()]
+                if p_cols and "phone_hash" not in p_cols:
+                    c.execute("ALTER TABLE patients ADD COLUMN phone_hash VARCHAR")
+                c.execute("PRAGMA table_info(documents)")
+                d_cols = [r[1] for r in c.fetchall()]
+                if d_cols and "sha256_hash" not in d_cols:
+                    c.execute("ALTER TABLE documents ADD COLUMN sha256_hash VARCHAR")
+                conn.commit()
+                conn.close()
+        except Exception:
+            pass
+
+_ensure_sqlite_columns()
+
+
 def get_db():
     """FastAPI dependency: yields a scoped DB session per request."""
     db = SessionLocal()

@@ -25,10 +25,13 @@ class Settings:
         "DATABASE_URL", "postgresql+psycopg2://medikiosk:medikiosk@db:5432/medikiosk"
     )
 
-    # --- Auth ---
+    # --- Auth & Cryptography (DPDP Act 2023 Compliance) ---
     JWT_SECRET: str = os.getenv("JWT_SECRET", "change-me-in-.env")
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "480"))
+    FIELD_ENCRYPTION_KEY: str = os.getenv("FIELD_ENCRYPTION_KEY", "")
+    BLIND_INDEX_SALT: str = os.getenv("BLIND_INDEX_SALT", "")
+    DOCUMENT_TOKEN_SECRET: str = os.getenv("DOCUMENT_TOKEN_SECRET", os.getenv("JWT_SECRET", "doc-token-secret-2026"))
 
     # --- CORS ---
     CORS_ORIGINS: list = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")

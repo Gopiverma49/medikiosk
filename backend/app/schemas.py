@@ -211,6 +211,8 @@ class DocumentOutDetailed(DocumentUploadOut):
     extracted_data: Optional[ClinicalDocumentExtraction] = None
     file_url: Optional[str] = None
     page_urls: Optional[List[str]] = None
+    sha256_hash: Optional[str] = None
+    is_verified: Optional[bool] = True
     created_at: Optional[datetime] = None
 
 
