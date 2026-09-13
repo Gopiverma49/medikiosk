@@ -108,14 +108,13 @@ export function Header() {
 
       {/* Center/Right Controls */}
       <div className="flex items-center gap-3 md:gap-4">
-        {/* On non-patient pages: Dedicated Portal Language Selector */}
-        {!isPatient && (
+        {/* On non-patient, non-doctor pages: Dedicated Portal Language Selector */}
+        {!isPatient && !isDoctor && (
           <div className="flex items-center gap-1.5 md:gap-2 bg-slate-50 border border-slate-300 rounded-2xl px-2.5 md:px-3 py-1.5 shadow-2xs">
             <div className="hidden lg:flex items-center gap-1.5 text-xs font-bold text-slate-600">
               <span>📍</span>
               <span className="uppercase tracking-wider">
                 {isHome && t("kiosk_base_language_label", currentLanguage)}
-                {isDoctor && (currentLanguage === "kn" ? "ವೈದ್ಯರ ಭಾಷೆ:" : currentLanguage === "hi" ? "डॉक्टर भाषा:" : "Doctor Language:")}
                 {isNurse && (currentLanguage === "kn" ? "ನರ್ಸ್ ಭಾಷೆ:" : currentLanguage === "hi" ? "नर्स भाषा:" : "Nurse Language:")}
                 {isTokens && (currentLanguage === "kn" ? "ಪ್ರದರ್ಶನ ಭಾಷೆ:" : currentLanguage === "hi" ? "प्रदर्शन भाषा:" : "Display Language:")}
                 {isAdmin && (currentLanguage === "kn" ? "ನಿರ್ವಾಹಕ ಭಾಷೆ:" : currentLanguage === "hi" ? "व्यवस्थापक भाषा:" : "Admin Language:")}

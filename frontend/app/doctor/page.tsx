@@ -7,6 +7,7 @@ import { PriorityPill } from "../../components/ClinicalComponents";
 import { PasswordInput } from "../../components/PasswordInput";
 import type { Summary, Patient, TokenQueueItem, TokenItem, TreatmentRecord, PrescribedMedicine } from "../../lib/types";
 import { cleanSymptomText, formatShortIllnessName, getPastAssociatedSymptoms } from "../../lib/clinicalUtils";
+import { getDemoDocumentsForPatient } from "../../lib/demoDocuments";
 
 const TABS = ["summary", "past_records", "documents", "prescription"] as const;
 type Tab = (typeof TABS)[number];
@@ -639,14 +640,23 @@ export default function DoctorPage() {
     }
   }
 
-  async function loadEncounterData(encId: string) {
+  async function loadEncounterData(encId: string, currentPatient?: Patient | null) {
     try {
+      const pObj = currentPatient !== undefined ? currentPatient : patient;
       const [triage, docs, factsList] = await Promise.all([
-        api.getTriageStatus(encId) as Promise<any>,
-        api.listDocuments(encId) as Promise<any[]>,
+        api.getTriageStatus(encId).catch(() => null) as Promise<any>,
+        api.listDocuments(encId).catch(() => []) as Promise<any[]>,
         api.listFacts(encId).catch(() => []) as Promise<any[]>,
       ]);
-      setDocuments(docs);
+
+      let finalDocs = (docs && docs.length > 0) ? docs : [];
+      if (finalDocs.length === 0 && pObj) {
+        const demoDocs = getDemoDocumentsForPatient(pObj.patient_id || pObj.id);
+        if (demoDocs.length > 0) {
+          finalDocs = demoDocs;
+        }
+      }
+      setDocuments(finalDocs);
       setClinicalFacts(factsList || []);
 
       let s: Summary | null = null;
@@ -687,7 +697,7 @@ export default function DoctorPage() {
       }
       if (targetEncId) {
         setEncounterId(targetEncId);
-        await loadEncounterData(targetEncId);
+        await loadEncounterData(targetEncId, p);
         const existingRx = await api.getEncounterPrescription(targetEncId).catch(() => null);
         if (existingRx) {
           setPrescribedMedicines(existingRx.prescribed_medicines || []);
@@ -700,7 +710,8 @@ export default function DoctorPage() {
         }
       } else {
         setEncounterId(null);
-        setDocuments([]);
+        const demoDocs = p ? getDemoDocumentsForPatient(p.patient_id || p.id) : [];
+        setDocuments(demoDocs);
         setSummary(null);
         setPrescribedMedicines([]);
         setDoctorNotes("");
@@ -2140,12 +2151,12 @@ export default function DoctorPage() {
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
                             <div className="flex items-center gap-3">
                               <span className="w-10 h-10 rounded-2xl bg-teal-50 border border-teal-200 flex items-center justify-center text-xl">
-                                {doc.doc_type?.includes("lab") ? "🧪" : "💊"}
+                                {doc.doc_type?.includes("lab") ? "🧪" : doc.doc_type?.includes("discharge") ? "🏥" : "💊"}
                               </span>
                               <div>
                                 <div className="flex items-center gap-2">
                                   <span className="text-sm font-black text-slate-900 uppercase font-mono tracking-wide">
-                                    {doc.doc_type?.replace(/_/g, " ").toUpperCase() || "MEDICAL REPORT"}
+                                    {doc.doc_type?.includes("discharge") ? "DISCHARGE SUMMARY" : doc.doc_type?.replace(/_/g, " ").toUpperCase() || "MEDICAL REPORT"}
                                   </span>
                                   <span
                                     className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
@@ -2501,12 +2512,21 @@ export default function DoctorPage() {
                   if (fallback) fallback.style.display = "block";
                 }}
               />
-              <div id="doc-fallback-view" className="hidden text-center text-white p-8">
-                <span className="text-4xl block mb-2">📑</span>
-                <p className="text-sm font-bold">Document Preview</p>
-                <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
-                  {viewingDocModal.ocr_text || "The original scan file is securely stored on the server."}
-                </p>
+              <div id="doc-fallback-view" className="hidden text-left bg-white text-slate-900 p-8 rounded-3xl shadow-2xl max-w-2xl w-full border border-slate-200">
+                <div className="flex items-center gap-3 pb-4 border-b border-slate-200 mb-4">
+                  <span className="text-3xl">
+                    {viewingDocModal.doc_type?.includes("discharge") ? "🏥" : viewingDocModal.doc_type?.includes("lab") ? "🧪" : "📑"}
+                  </span>
+                  <div>
+                    <h4 className="font-extrabold text-sm text-slate-900 uppercase font-mono">{viewingDocModal.filename}</h4>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Clinical Document Archive • {viewingDocModal.status?.toUpperCase() || "CONFIRMED"} • {viewingDocModal.extracted_data?.report_date || "2026"}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-xs text-slate-700 whitespace-pre-wrap font-mono bg-slate-50 p-4 rounded-2xl border border-slate-200 max-h-[50vh] overflow-y-auto leading-relaxed">
+                  {viewingDocModal.ocr_text || "The original scanned record is securely verified on the hospital server."}
+                </div>
               </div>
             </div>
 

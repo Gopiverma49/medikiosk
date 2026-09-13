@@ -2,11 +2,11 @@ import os
 import shutil
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Document, ClinicalFact, DocumentExtraction, VerificationStatus, FactSource, Encounter
+from ..models import Document, ClinicalFact, DocumentExtraction, VerificationStatus, FactSource, Encounter, Patient
 from ..schemas import (
     DocumentUploadOut, DocumentOutDetailed, DocumentConfirmIn, ClinicalDocumentExtraction
 )
@@ -14,6 +14,12 @@ from ..config import get_settings
 from ..services.audit import log_event
 from ..services.contradiction_engine import detect_contradictions
 from ..services.document_extractor import extract_clinical_document
+from ..services.demo_documents import (
+    get_demo_documents_for_patient,
+    get_demo_document_by_id,
+    generate_demo_svg,
+)
+from .patients import resolve_patient
 from ai.providers.factory import get_ocr_provider, raw_nlp_mock
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
@@ -381,6 +387,10 @@ def process_document(document_id: str, db: Session = Depends(get_db)):
 @router.get("/{document_id}", response_model=DocumentOutDetailed)
 def get_document(document_id: str, db: Session = Depends(get_db)):
     """Retrieve full document details with structured extraction and page URLs."""
+    demo_doc = get_demo_document_by_id(document_id)
+    if demo_doc:
+        return DocumentOutDetailed.model_validate(demo_doc)
+
     doc = db.query(Document).filter(Document.id == document_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -393,6 +403,10 @@ def get_document_file(document_id: str, page: int = Query(0, ge=0), db: Session 
     Secure file streaming endpoint.
     Serves the permanent scanned report image or PDF for patient & doctor verification.
     """
+    demo_svg = generate_demo_svg(document_id)
+    if demo_svg:
+        return Response(content=demo_svg, media_type="image/svg+xml")
+
     doc = db.query(Document).filter(Document.id == document_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -431,14 +445,35 @@ def get_document_file(document_id: str, page: int = Query(0, ge=0), db: Session 
 def list_documents(encounter_id: str, db: Session = Depends(get_db)):
     """List all scanned documents for an encounter with structured clinical view data."""
     docs = db.query(Document).filter(Document.encounter_id == encounter_id).order_by(Document.created_at.asc()).all()
-    return [_enrich_doc_out(d) for d in docs]
+    if docs:
+        return [_enrich_doc_out(d) for d in docs]
+
+    # Preloaded demo check for target demonstration patients (24BTRSN054 and 222)
+    enc = db.query(Encounter).filter(Encounter.id == encounter_id).first()
+    if enc and enc.patient_id:
+        p = resolve_patient(db, str(enc.patient_id))
+        patient_code = p.patient_id if p and p.patient_id else enc.patient_id
+        demo_docs = get_demo_documents_for_patient(patient_code)
+        if demo_docs:
+            return [DocumentOutDetailed.model_validate(d) for d in demo_docs]
+
+    return []
 
 
 @router.get("/patient/{patient_id}/list", response_model=List[DocumentOutDetailed])
 def list_patient_documents(patient_id: str, db: Session = Depends(get_db)):
     """List all historical scanned reports associated with a patient."""
     docs = db.query(Document).filter(Document.patient_id == patient_id).order_by(Document.created_at.desc()).all()
-    return [_enrich_doc_out(d) for d in docs]
+    if docs:
+        return [_enrich_doc_out(d) for d in docs]
+
+    p = resolve_patient(db, patient_id)
+    patient_code = p.patient_id if p and p.patient_id else patient_id
+    demo_docs = get_demo_documents_for_patient(patient_code)
+    if demo_docs:
+        return [DocumentOutDetailed.model_validate(d) for d in demo_docs]
+
+    return []
 
 
 @router.get("/{document_id}/verify-integrity")
