@@ -1,20 +1,194 @@
+# ==========================================
+# MediKiosk - Production & Deployment .gitignore
+# ==========================================
+
+# ------------------------------------------
+# Environment Variables & Secrets
+# ------------------------------------------
+.env
+.env.*
+*.env
+!.env.example
+!.env.template
+
+# Private Keys, Certificates & Credentials
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+credentials.json
+client_secrets*.json
+service-account*.json
+auth.json
+
+# ------------------------------------------
+# Python & FastAPI Backend
+# ------------------------------------------
+# Bytecode and cache
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual Environments
 .venv/
 venv/
-node_modules/
-.next/
-*.log
-*.db
-*.sqlite3
-.DS_Store
-evaluation/results.json
-evaluation/report.html
-*.tsbuildinfo
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Packaging & Builds
+build/
+dist/
+*.egg-info/
+*.egg
+develop-eggs/
+eggs/
+.installed.cfg
+
+# Testing, Coverage & Linters
 .pytest_cache/
-backend/uploads/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+
+# Celery & Background Queues
+celerybeat-schedule
+celerybeat.pid
+
+# ------------------------------------------
+# Node.js & Next.js Frontend
+# ------------------------------------------
+# Dependencies
+node_modules/
+frontend/node_modules/
+.pnp
+.pnp.js
+
+# Build Outputs & Artifacts
+.next/
+frontend/.next/
+out/
+frontend/out/
+build/
+frontend/build/
+dist/
+frontend/dist/
+
+# TypeScript & Cache
+*.tsbuildinfo
+.turbo/
+.parcel-cache/
+
+# NPM / Yarn / PNPM logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ------------------------------------------
+# Databases & Local Storage
+# ------------------------------------------
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+medikiosk.db
+backend/medikiosk.db
+*.sql
+*.dump
+*.backup
+
+# ------------------------------------------
+# Uploads, Media & Clinical Intake Storage
+# ------------------------------------------
 uploads/
+backend/uploads/
+storage/
+backend/storage/
+temp_uploads/
+
+# ------------------------------------------
+# AI, OCR & Evaluation Artifacts
+# ------------------------------------------
+# Tesseract OCR & Language packs
 *.traineddata
 .tesseract-cache/
 medikiosk-ocr/
+
+# Heavy model weights & binaries
+*.pt
+*.pth
+*.onnx
+*.bin
+*.safetensors
+models/weights/
+
+# Evaluation Reports
+evaluation/results.json
+evaluation/report.html
+evaluation/reports/
+
+# Local Dev Tunnel State
 scripts/.tunnel-info.json
+.tunnel-info.json
+*.tunnel.json
+
+# ------------------------------------------
+# Logs & Process IDs
+# ------------------------------------------
+logs/
+backend/logs/
+frontend/logs/
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# ------------------------------------------
+# Docker & Deployment
+# ------------------------------------------
+docker-compose.override.yml
+.docker/
+*.tar.gz
+*.zip
+
+# ------------------------------------------
+# Operating System & IDE Files
+# ------------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# IDEs & Editors
+.idea/
+*.sublime-project
+*.sublime-workspace
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
